@@ -162,6 +162,22 @@ class StorageService {
     }
   }
 
+  async loadFileByPath(filePath: string): Promise<string | null> {
+    if (!this.isDesktopMode) {
+      throw new Error('File loading by path only available in desktop mode');
+    }
+
+    try {
+      const content = await this.invoke<string>('load_document_from_file', {
+        filePath,
+      });
+      return content;
+    } catch (error) {
+      console.error('Failed to load file:', error);
+      return null;
+    }
+  }
+
   async deleteDocument(id: string): Promise<void> {
     if (this.isDesktopMode && this.workspacePath) {
       // Desktop: Delete from file system

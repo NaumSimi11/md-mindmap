@@ -149,66 +149,7 @@ export class WorkspaceService {
           createdAt: new Date(),
         },
       ],
-      documents: [
-        // Welcome document
-        {
-          id: `doc-${Date.now()}`,
-          type: 'markdown',
-          title: 'Welcome to MD Creator',
-          content: `# Welcome to MD Creator! 🎉
-
-Thank you for using MD Creator - your AI-powered workspace for documents, mindmaps, and presentations.
-
-## What Can You Do Here?
-
-### 📝 **Write Documents**
-Create beautiful markdown documents with:
-- Live preview
-- AI assistance for writing
-- Mermaid diagrams
-- Smart templates
-
-### 🧠 **Create Mindmaps**
-Visualize your ideas with:
-- Interactive mindmap studio
-- AI-powered node expansion
-- Project management fields
-- Multiple layout options
-
-### 🎤 **Build Presentations**
-Generate professional slides:
-- AI generates slides from your content
-- Full presenter mode with speaker notes
-- Multiple slide layouts
-- Beautiful themes
-
-## Getting Started
-
-1. **Organize**: Create folders to organize your work
-2. **Templates**: Use Cmd+N to create from templates
-3. **Quick Switch**: Press Cmd+K to quickly find documents
-4. **AI Help**: Click the sparkle icon for AI assistance
-
-## Tips & Tricks
-
-- **Star documents** to quick-access your favorites
-- **Drag documents** between folders to organize
-- **Search everything** with the search bar at the top
-- **Use templates** to get started quickly
-
-Happy creating! ✨
-`,
-          folderId: null,
-          workspaceId: `workspace-${Date.now()}`,
-          starred: true,
-          tags: ['welcome', 'getting-started'],
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          metadata: {
-            wordCount: 150,
-          },
-        },
-      ],
+      documents: [],
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -452,7 +393,7 @@ Happy creating! ✨
       }
 
       this.saveToStorage();
-      console.log('✅ Document updated:', doc.title);
+      // Document updated (removed log to reduce console noise)
     }
   }
 
@@ -665,6 +606,8 @@ Happy creating! ✨
     const path = await storageService.selectWorkspaceFolder();
     if (path) {
       console.log('✅ Desktop workspace folder selected:', path);
+      // Automatically sync after selecting
+      await this.syncDesktopFolder();
     }
     return path;
   }
@@ -675,6 +618,89 @@ Happy creating! ✨
     }
 
     return await storageService.listWorkspaceFiles();
+  }
+
+  async syncDesktopFolder(): Promise<number> {
+    // Import existing .md files from the selected desktop folder
+    if (!storageService.isDesktop() || !storageService.hasWorkspace()) {
+      console.warn('Sync only available in desktop mode with workspace selected');
+      return 0;
+    }
+
+    console.log('🔄 Syncing desktop folder...');
+
+    try {
+      // Get all files from workspace folder
+      const files = await storageService.listWorkspaceFiles();
+      
+      // Filter for .md files only (not directories)
+      const mdFiles = files.filter(f => 
+        !f.is_directory && f.name.toLowerCase().endsWith('.md')
+      );
+
+      let importedCount = 0;
+
+      // Import each .md file
+      for (const file of mdFiles) {
+        // Check if already imported (by file path)
+        const existingDoc = this.currentWorkspace?.documents.find(
+          d => d.metadata.filePath === file.path
+        );
+
+        if (!existingDoc) {
+          // Load file content
+          const content = await storageService.loadFileByPath(file.path);
+          if (content !== null) {
+            // Extract title from filename (remove .md extension)
+            const title = file.name.replace(/\.md$/i, '');
+            
+            // Import the file
+            await this.importExternalFile(title, content, file.path);
+            importedCount++;
+            console.log(`✅ Imported: ${title}`);
+          }
+        }
+      }
+
+      console.log(`🎉 Sync complete! Imported ${importedCount} new files`);
+      return importedCount;
+    } catch (error) {
+      console.error('❌ Failed to sync desktop folder:', error);
+      return 0;
+    }
+  }
+
+  async importExternalFile(
+    title: string, 
+    content: string, 
+    filePath: string
+  ): Promise<Document> {
+    if (!this.currentWorkspace) {
+      throw new Error('No workspace loaded');
+    }
+
+    const document: Document = {
+      id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      type: 'markdown',
+      title,
+      content,
+      folderId: null, // Root level
+      workspaceId: this.currentWorkspace.id,
+      starred: false,
+      tags: ['imported'], // Tag as imported
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      metadata: {
+        filePath, // Store original file path
+        isExternal: true, // Mark as external file
+        wordCount: content.split(/\s+/).length,
+      },
+    };
+
+    this.currentWorkspace.documents.push(document);
+    this.saveToStorage();
+
+    return document;
   }
 
   getDesktopWorkspacePath(): string | null {

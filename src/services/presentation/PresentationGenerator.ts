@@ -119,6 +119,31 @@ export interface GenerateOptions {
 
 export class PresentationGenerator {
   /**
+   * Generate presentation from markdown only (no mindmap)
+   */
+  async generateFromMarkdown(
+    markdown: string,
+    options: Omit<GenerateOptions, 'mindmapId'> = {}
+  ): Promise<Presentation> {
+    console.log('🎤 Generating presentation from markdown...');
+    return this.generateFromContext(markdown, null, options);
+  }
+
+  /**
+   * Generate presentation from mindmap nodes only
+   */
+  async generateFromMindmap(
+    nodes: Node[],
+    edges: Edge[],
+    options: Omit<GenerateOptions, 'documentId'> = {}
+  ): Promise<Presentation> {
+    console.log('🎤 Generating presentation from mindmap...');
+    // Generate basic markdown from mindmap structure
+    const markdown = this.convertNodesToMarkdown(nodes, edges);
+    return this.generateFromContext(markdown, { nodes, edges }, options);
+  }
+
+  /**
    * Main entry point: Generate presentation from context
    */
   async generateFromContext(
@@ -686,6 +711,36 @@ Do NOT use markdown formatting. Just plain text.
       },
       spacing: 'normal',
     };
+  }
+
+  private convertNodesToMarkdown(nodes: Node[], edges: Edge[]): string {
+    // Simple conversion: build hierarchy from nodes and edges
+    const rootNodes = nodes.filter(n => 
+      !edges.some(e => e.target === n.id)
+    );
+    
+    let markdown = '';
+    
+    // Add root nodes as H1
+    for (const root of rootNodes) {
+      markdown += `# ${root.data.label}\n\n`;
+      
+      // Find children
+      const children = edges
+        .filter(e => e.source === root.id)
+        .map(e => nodes.find(n => n.id === e.target))
+        .filter(n => n !== undefined);
+      
+      // Add children as H2
+      for (const child of children) {
+        markdown += `## ${child.data.label}\n\n`;
+        if (child.data.description) {
+          markdown += `${child.data.description}\n\n`;
+        }
+      }
+    }
+    
+    return markdown || '# Untitled\n\nGenerate your presentation.';
   }
 }
 

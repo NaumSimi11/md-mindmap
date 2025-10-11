@@ -58,7 +58,11 @@ import { templateService } from "@/services/TemplateService";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
-export default function Editor() {
+interface EditorProps {
+  onContentChange?: (content: string) => void;
+}
+
+export default function Editor({ onContentChange }: EditorProps = {}) {
   const location = useLocation();
   const [documentTitle, setDocumentTitle] = useState("Untitled Document");
   const [markdownContent, setMarkdownContent] = useState(() => {
@@ -179,6 +183,13 @@ Happy writing! ✨`;
       registerBuiltInTemplates();
     });
   }, []);
+
+  // Notify parent (Workspace) whenever content changes - for live outline sync
+  useEffect(() => {
+    if (onContentChange) {
+      onContentChange(markdownContent);
+    }
+  }, [markdownContent, onContentChange]);
   
   // Check for Studio2 returning updates
   useEffect(() => {

@@ -303,6 +303,47 @@ class EditorStudioSessionService {
       console.error('Failed to clear draft:', e);
     }
   }
+  
+  /**
+   * Store generated mindmap data for auto-import
+   */
+  setMindmapData(data: any): void {
+    try {
+      localStorage.setItem('generatedMindmapData', JSON.stringify(data));
+      console.log('💾 Mindmap data stored for auto-import');
+    } catch (e) {
+      console.error('Failed to store mindmap data:', e);
+    }
+  }
+  
+  /**
+   * Get generated mindmap data
+   */
+  getMindmapData(): any | null {
+    try {
+      const data = localStorage.getItem('generatedMindmapData');
+      if (!data) return null;
+      
+      const mindmapData = JSON.parse(data);
+      console.log('📖 Mindmap data loaded');
+      return mindmapData;
+    } catch (e) {
+      console.error('Failed to load mindmap data:', e);
+      return null;
+    }
+  }
+  
+  /**
+   * Clear generated mindmap data after import
+   */
+  clearMindmapData(): void {
+    try {
+      localStorage.removeItem('generatedMindmapData');
+      console.log('🗑️ Mindmap data cleared');
+    } catch (e) {
+      console.error('Failed to clear mindmap data:', e);
+    }
+  }
 }
 
 // Singleton instance

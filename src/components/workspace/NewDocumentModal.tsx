@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -86,7 +86,7 @@ export function NewDocumentModal({
 
   const handleCreateBlank = async (type: 'markdown' | 'mindmap' | 'presentation') => {
     const title = customTitle.trim() || 'Untitled Document';
-    const content = getBlankContent(type);
+    const content = getBlankContent(type, title);
     
     const doc = await workspaceService.createDocument(type, title, content, folderId);
     
@@ -114,17 +114,17 @@ export function NewDocumentModal({
     onClose();
   };
 
-  const getBlankContent = (type: 'markdown' | 'mindmap' | 'presentation'): string => {
+  const getBlankContent = (type: 'markdown' | 'mindmap' | 'presentation', title: string): string => {
     switch (type) {
       case 'markdown':
-        return '# Untitled Document\n\nStart writing here...';
+        return `# ${title}\n\n`;
       case 'mindmap':
         return JSON.stringify({
           nodes: [
             { 
               id: '1', 
               type: 'mindNode',
-              data: { label: 'Central Idea' }, 
+              data: { label: title }, 
               position: { x: 500, y: 300 } 
             },
           ],
@@ -132,11 +132,11 @@ export function NewDocumentModal({
         });
       case 'presentation':
         return JSON.stringify({
-          title: 'Untitled Presentation',
+          title: title,
           slides: [
             { 
               layout: 'title', 
-              content: { title: 'Untitled Presentation', subtitle: '' },
+              content: { title: title, subtitle: '' },
               order: 0,
             },
           ],
@@ -189,7 +189,7 @@ export function NewDocumentModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-6xl h-[80vh] p-0 gap-0">
         <DialogHeader className="px-6 py-4 border-b border-border">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-4">
             <div>
               <DialogTitle className="text-2xl font-bold flex items-center gap-2">
                 <Sparkles className="h-6 w-6 text-purple-500" />
@@ -202,6 +202,23 @@ export function NewDocumentModal({
             <Button variant="ghost" size="sm" onClick={onClose}>
               <X className="h-4 w-4" />
             </Button>
+          </div>
+          
+          {/* Document Title Input - Always Visible */}
+          <div>
+            <label className="text-sm font-medium text-muted-foreground block mb-2">
+              Document Name (optional)
+            </label>
+            <Input
+              placeholder="Enter document name..."
+              value={customTitle}
+              onChange={(e) => setCustomTitle(e.target.value)}
+              className="w-full"
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Leave empty to use default or template name
+            </p>
           </div>
         </DialogHeader>
 
@@ -367,14 +384,6 @@ export function NewDocumentModal({
                     </div>
                   </div>
 
-                  {/* Custom Title Input */}
-                  <Input
-                    placeholder="Custom title (optional)"
-                    value={customTitle}
-                    onChange={(e) => setCustomTitle(e.target.value)}
-                    className="mb-3"
-                  />
-
                   <Button
                     className="w-full"
                     onClick={() => handleCreateFromTemplate(previewTemplate)}
@@ -426,6 +435,28 @@ export function NewDocumentModal({
             )}
           </div>
         </div>
+
+        {/* Footer with Action Buttons */}
+        <DialogFooter className="px-6 py-4 border-t border-border">
+          <div className="flex items-center justify-between w-full">
+            <p className="text-xs text-muted-foreground">
+              {previewTemplate 
+                ? `Click "Create from Template" or choose a blank option` 
+                : 'Select a template or click a blank document option'}
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              {!previewTemplate && (
+                <Button onClick={() => handleCreateBlank('markdown')}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Blank Document
+                </Button>
+              )}
+            </div>
+          </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

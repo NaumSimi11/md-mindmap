@@ -47,6 +47,9 @@ const App = () => (
             <Route path="/workspace/doc/:id/mindmap" element={<Workspace />} />
             <Route path="/workspace/doc/:id/slides" element={<Workspace />} />
             
+            {/* Standalone Mindmap Studio */}
+            <Route path="/studio2" element={<MindmapStudio2 />} />
+            
             {/* OLD: Dashboard (keeping for backward compatibility) */}
             <Route path="/dashboard" element={<AppLayout />}>
               <Route index element={<Index />} />

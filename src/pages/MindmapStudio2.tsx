@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   ReactFlow,
   Background,
@@ -23,7 +24,9 @@ import "@xyflow/react/dist/style.css";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sparkles, Plus, FileText, Upload, Layout as LayoutIcon, Folder, ArrowLeft } from "lucide-react";
+import { Sparkles, Plus, FileText, Upload, Layout as LayoutIcon, Folder, ArrowLeft, Presentation } from "lucide-react";
+import { presentationGenerator } from "@/services/presentation/PresentationGenerator";
+import { workspaceService } from "@/services/workspace/WorkspaceService";
 import Studio2MindNode from "@/components/mindmap/Studio2MindNode";
 import Studio2MilestoneNode from "@/components/mindmap/Studio2MilestoneNode";
 import Studio2Sidebar from "@/components/mindmap/Studio2Sidebar";
@@ -73,11 +76,68 @@ export default function MindmapStudio2() {
 }
 
 function MindmapStudio2Content() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Detect if we're in workspace context
+  const isInWorkspace = location.pathname.includes('/workspace/doc/');
+  const documentId = isInWorkspace ? location.pathname.split('/')[3] : null;
+  
   const [title, setTitle] = useState("Untitled Mindmap");
   const [nodes, setNodes, onNodesChange] = useNodesState(getInitialNodes());
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [currentLayout, setCurrentLayout] = useState<string>('manual');
   const [edgeType, setEdgeType] = useState<'smoothstep' | 'bezier' | 'straight' | 'step'>('bezier');
+  
+  // Store original document content for smart merge
+  const [originalContent, setOriginalContent] = useState<string>('');
+  
+  // Auto-import generated mindmap data
+  useEffect(() => {
+    const generatedData = sessionService.getMindmapData();
+    if (generatedData) {
+      console.log('🎉 Auto-importing generated mindmap:', generatedData);
+      
+      // IMPORTANT: Store original content for smart merge when going back
+      if (generatedData.metadata?.originalContent) {
+        setOriginalContent(generatedData.metadata.originalContent);
+        console.log('💾 Stored original content for merge');
+      }
+      
+      // Convert mindmap data to React Flow nodes and edges
+      const importedNodes: Node[] = generatedData.nodes.map((node: any, index: number) => ({
+        id: node.id,
+        type: 'mindNode',
+        position: { x: 100 + (index % 5) * 200, y: 100 + Math.floor(index / 5) * 150 },
+        data: { 
+          label: node.text,
+          level: node.level,
+          lineNumber: node.lineNumber, // Store original line number
+        },
+      }));
+      
+      const importedEdges: Edge[] = generatedData.connections.map((conn: any) => ({
+        id: `${conn.from}-${conn.to}`,
+        source: conn.from,
+        target: conn.to,
+        type: 'default',
+      }));
+      
+      // Set nodes and edges
+      setNodes(importedNodes);
+      setEdges(importedEdges);
+      
+      // Update title if available
+      if (generatedData.metadata?.sourceDocument) {
+        setTitle(`Generated Mindmap - ${new Date().toLocaleDateString()}`);
+      }
+      
+      // Clear the stored data after import
+      sessionService.clearMindmapData();
+      
+      console.log('✅ Mindmap auto-imported successfully!');
+    }
+  }, []); // Run only once on mount
   
   // Map UI edge type to React Flow edge type
   const getReactFlowEdgeType = (type: typeof edgeType): string => {
@@ -103,7 +163,6 @@ function MindmapStudio2Content() {
   const chatInputRef = useRef<HTMLInputElement>(null);
   const chatMessagesRef = useRef<HTMLDivElement>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const [hasEditorSession, setHasEditorSession] = useState(false);
   
   // Proactive suggestions
   const [activeSuggestion, setActiveSuggestion] = useState<Suggestion | null>(null);
@@ -582,66 +641,226 @@ function MindmapStudio2Content() {
     console.log(`✅ Updated node: ${nodeId}`, data);
   }, [setNodes]);
 
+  // Smart merge: Update headings while preserving content
+  const smartMergeNodesWithContent = useCallback((originalContent: string) => {
+    console.log('🔄 Smart merging nodes with original content...');
+    
+    if (!originalContent) {
+      // No original content, fallback to simple conversion
+      console.log('⚠️ No original content, using simple conversion');
+      return convertNodesToMarkdownSimple();
+    }
+    
+    // Parse original content to find headings
+    const lines = originalContent.split('\n');
+    const headingMap = new Map<string, { lineIndex: number; level: number; text: string }>();
+    
+    lines.forEach((line, index) => {
+      const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+      if (headingMatch) {
+        const level = headingMatch[1].length;
+        const text = headingMatch[2].trim();
+        headingMap.set(text, { lineIndex: index, level, text });
+      }
+    });
+    
+    console.log(`📋 Found ${headingMap.size} headings in original content`);
+    
+    // Build node map
+    const nodeMap = new Map(nodes.map(n => [n.data.label, n]));
+    const updatedLines = [...lines];
+    const processedNodes = new Set<string>();
+    
+    // Update existing headings
+    headingMap.forEach((heading, originalText) => {
+      const node = nodeMap.get(originalText);
+      if (node) {
+        // Heading still exists, mark as processed
+        processedNodes.add(node.data.label);
+        console.log(`✅ Preserved: ${originalText}`);
+      } else {
+        // Heading was deleted in mindmap, remove it
+        updatedLines[heading.lineIndex] = ''; // Mark for removal
+        console.log(`🗑️ Removed: ${originalText}`);
+      }
+    });
+    
+    // Add new nodes that weren't in original
+    let newNodesMarkdown = '';
+    nodes.forEach(node => {
+      if (!processedNodes.has(node.data.label)) {
+        const level = node.data.level || 1;
+        const heading = '#'.repeat(Math.min(level, 6));
+        newNodesMarkdown += `\n${heading} ${node.data.label}\n\n`;
+        console.log(`➕ Added: ${node.data.label}`);
+      }
+    });
+    
+    // Clean up empty lines (removed headings) and combine
+    const finalContent = updatedLines
+      .filter(line => line !== '') // Remove deleted headings
+      .join('\n') + newNodesMarkdown;
+    
+    console.log('✅ Smart merge complete!');
+    return finalContent.trim();
+  }, [nodes]);
+  
+  // Simple conversion (fallback when no original content)
+  const convertNodesToMarkdownSimple = useCallback(() => {
+    console.log('📝 Converting nodes to markdown (simple)...');
+    
+    // Build a map of node connections for hierarchy
+    const nodeMap = new Map(nodes.map(n => [n.id, n]));
+    const childrenMap = new Map<string, string[]>();
+    
+    // Build parent-child relationships
+    edges.forEach(edge => {
+      if (!childrenMap.has(edge.source)) {
+        childrenMap.set(edge.source, []);
+      }
+      childrenMap.get(edge.source)?.push(edge.target);
+    });
+    
+    // Find root nodes (nodes with no incoming edges)
+    const targetNodes = new Set(edges.map(e => e.target));
+    const rootNodes = nodes.filter(n => !targetNodes.has(n.id));
+    
+    // Convert to markdown with hierarchy
+    let markdown = '';
+    const visited = new Set<string>();
+    
+    const convertNode = (nodeId: string, level: number) => {
+      if (visited.has(nodeId)) return;
+      visited.add(nodeId);
+      
+      const node = nodeMap.get(nodeId);
+      if (!node) return;
+      
+      const heading = '#'.repeat(Math.min(level + 1, 6)); // Max 6 levels
+      markdown += `${heading} ${node.data.label}\n`;
+      
+      if (node.data.description) {
+        markdown += `\n${node.data.description}\n`;
+      }
+      
+      markdown += '\n';
+      
+      // Process children
+      const children = childrenMap.get(nodeId) || [];
+      children.forEach(childId => {
+        convertNode(childId, level + 1);
+      });
+    };
+    
+    // Start from root nodes
+    rootNodes.forEach((node, index) => {
+      if (index > 0) markdown += '\n---\n\n'; // Separator between trees
+      convertNode(node.id, 0);
+    });
+    
+    // If no root nodes (circular graph), just list all nodes
+    if (rootNodes.length === 0) {
+      nodes.forEach(node => {
+        markdown += `# ${node.data.label}\n`;
+        if (node.data.description) {
+          markdown += `\n${node.data.description}\n`;
+        }
+        markdown += '\n';
+      });
+    }
+    
+    console.log('✅ Markdown generated:', markdown.substring(0, 200) + '...');
+    return markdown;
+  }, [nodes, edges]);
+  
   // Back to Editor handler
   const handleBackToEditor = useCallback(() => {
-    const session = sessionService.getSession();
-    if (!session) {
-      console.warn('No session found, navigating to editor anyway');
+    console.log('⬅️ Returning to Editor with updates');
+    
+    if (!isInWorkspace || !documentId) {
+      console.warn('Not in workspace context, navigating to editor anyway');
       window.location.href = '/dashboard/editor';
       return;
     }
     
-    console.log('⬅️ Returning to Editor with updates');
+    // Use smart merge if we have original content
+    const markdown = originalContent 
+      ? smartMergeNodesWithContent(originalContent)
+      : convertNodesToMarkdownSimple();
     
-    // Export current state to Mermaid
-    const mindmapData = {
-      title: title,
-      nodes: nodes.map(n => ({
-        id: n.id,
-        label: n.data.label,
-        description: n.data.description,
-      })),
-      edges: edges.map(e => ({
-        id: e.id,
-        source: e.source,
-        target: e.target,
-        type: e.type,
-      })),
-    };
-    const mermaidCode = mindmapExporter.export(mindmapData, 'mermaid-mindmap');
+    // Save to document
+    const document = workspaceService.getDocument(documentId);
+    if (document) {
+      workspaceService.updateDocument(documentId, { content: markdown });
+      console.log('💾 Document updated with mindmap content');
+    }
     
-    // Extract PM data from nodes
-    const pmData: Record<string, any> = {};
-    nodes.forEach((node) => {
-      if (node.data.description || node.data.startDate || node.data.status) {
-        pmData[node.id] = {
-          description: node.data.description,
-          startDate: node.data.startDate,
-          endDate: node.data.endDate,
-          status: node.data.status,
-          priority: node.data.priority,
-          assignee: node.data.assignee,
-          estimate: node.data.estimate,
-          progress: node.data.progress,
-          tags: node.data.tags,
-        };
+    // Navigate back to editor
+    navigate(`/workspace/doc/${documentId}/edit`);
+  }, [isInWorkspace, documentId, originalContent, smartMergeNodesWithContent, convertNodesToMarkdownSimple, navigate]);
+
+  // Generate presentation from mindmap
+  const handleGeneratePresentation = useCallback(async () => {
+    console.log('🎬 Generating presentation from mindmap...');
+    
+    // Check if we have nodes
+    if (nodes.length === 0) {
+      alert('❌ Please add nodes to your mindmap before generating a presentation.');
+      return;
+    }
+    
+    // Show loading state
+    setAILoading(true);
+    
+    try {
+      console.log('📊 Converting mindmap to markdown...');
+      const markdown = convertNodesToMarkdownSimple();
+      console.log('Markdown preview:', markdown.substring(0, 200));
+      
+      console.log('🤖 Calling AI to generate presentation...');
+      const presentation = await presentationGenerator.generateFromMindmap(nodes, edges, {
+        documentId: documentId || undefined,
+      });
+      
+      console.log('✅ Presentation generated:', presentation);
+      
+      // Save presentation and navigate
+      if (isInWorkspace && documentId) {
+        console.log('💾 Saving presentation to workspace...');
+        const doc = await workspaceService.createDocument(
+          'presentation', 
+          `${title} - Presentation`, 
+          JSON.stringify(presentation)
+        );
+        console.log('✅ Presentation saved:', doc.id);
+        alert('✅ Presentation generated successfully! Navigating...');
+        navigate(`/workspace/doc/${doc.id}/slides`);
+      } else {
+        console.log('🔀 Navigating to standalone presentation editor...');
+        alert('✅ Presentation generated! Navigating...');
+        navigate(`/presentation/${presentation.id}/edit`);
       }
-    });
-    
-    // Save updates to session
-    sessionService.saveStudioUpdate({
-      sessionId: session.sessionId,
-      updatedDiagram: mermaidCode,
-      nodes,
-      edges,
-      pmData,
-      layout: currentLayout,
-      timestamp: Date.now(),
-    });
-    
-    // Navigate back
-    window.location.href = session.returnUrl;
-  }, [nodes, edges, currentLayout]);
+    } catch (error: any) {
+      console.error('❌ Failed to generate presentation:', error);
+      
+      // Better error messages
+      let errorMessage = 'Failed to generate presentation.\n\n';
+      
+      if (error.message?.includes('API key') || error.message?.includes('not configured')) {
+        errorMessage += 'AI service is not configured. Please set up your API key in .env file.';
+      } else if (error.message?.includes('timeout')) {
+        errorMessage += 'Request timed out. Please try again.';
+      } else if (error.message?.includes('rate limit')) {
+        errorMessage += 'Rate limit exceeded. Please wait a moment and try again.';
+      } else {
+        errorMessage += `Error: ${error.message || 'Unknown error'}`;
+      }
+      
+      alert(errorMessage);
+    } finally {
+      setAILoading(false);
+    }
+  }, [title, nodes, edges, isInWorkspace, documentId, convertNodesToMarkdownSimple, navigate]);
   
   // Build mindmap context for AI
   const buildMindmapContext = useCallback((): MindmapContext => {
@@ -2034,14 +2253,15 @@ Examples:
       {/* Header */}
       <div className="border-b border-border bg-card px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {/* Back to Editor Button (only show if from Editor) */}
-          {hasEditorSession && (
+          {/* Back to Editor Button (only show if in workspace) */}
+          {isInWorkspace && (
             <>
               <Button 
                 size="sm" 
                 variant="outline"
                 onClick={handleBackToEditor}
                 className="text-primary"
+                title="Save mindmap and return to editor"
               >
                 <ArrowLeft className="h-4 w-4 mr-2"/>Back to Editor
               </Button>
@@ -2118,6 +2338,24 @@ Examples:
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={handleGeneratePresentation}
+            disabled={aiLoading || nodes.length === 0}
+            title={nodes.length === 0 ? "Add nodes to generate presentation" : "Generate AI presentation from mindmap"}
+          >
+            {aiLoading ? (
+              <>
+                <div className="h-4 w-4 mr-2 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Presentation className="h-4 w-4 mr-2"/>Presentation
+              </>
+            )}
+          </Button>
           <Button size="sm" variant="outline" onClick={() => setShowExportModal(true)}>
             📤 Export
           </Button>
