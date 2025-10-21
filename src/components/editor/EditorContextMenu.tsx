@@ -23,6 +23,10 @@ import {
   ClipboardPaste,
   Trash2,
   Library,
+  Highlighter,
+  Underline,
+  Superscript as SuperscriptIcon,
+  Subscript as SubscriptIcon,
 } from 'lucide-react';
 
 interface EditorContextMenuProps {
@@ -134,12 +138,13 @@ export const EditorContextMenu: React.FC<EditorContextMenuProps> = ({
           <>
             <div className="h-px bg-border my-1.5" />
 
-            {/* Format - Compact icon row */}
+            {/* Format - Compact icon rows */}
             <div className="px-1">
               <div className="px-2 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
                 Format
               </div>
-              <div className="flex items-center gap-0.5">
+              {/* Row 1: Basic formatting */}
+              <div className="flex items-center gap-0.5 mb-1">
                 <IconButton 
                   icon={Bold} 
                   onClick={() => onFormat('bold')} 
@@ -151,14 +156,38 @@ export const EditorContextMenu: React.FC<EditorContextMenuProps> = ({
                   title="Italic (Ctrl+I)"
                 />
                 <IconButton 
+                  icon={Underline} 
+                  onClick={() => onFormat('underline')} 
+                  title="Underline (Ctrl+U)"
+                />
+                <IconButton 
                   icon={Strikethrough} 
                   onClick={() => onFormat('strikethrough')} 
                   title="Strikethrough"
                 />
                 <IconButton 
+                  icon={Highlighter} 
+                  onClick={() => onFormat('highlight')} 
+                  title="Highlight"
+                  className="text-yellow-600"
+                />
+              </div>
+              {/* Row 2: Advanced formatting */}
+              <div className="flex items-center gap-0.5">
+                <IconButton 
                   icon={Code} 
                   onClick={() => onFormat('code')} 
                   title="Code"
+                />
+                <IconButton 
+                  icon={SuperscriptIcon} 
+                  onClick={() => onFormat('superscript')} 
+                  title="Superscript (x²)"
+                />
+                <IconButton 
+                  icon={SubscriptIcon} 
+                  onClick={() => onFormat('subscript')} 
+                  title="Subscript (H₂O)"
                 />
                 <IconButton 
                   icon={LinkIcon} 

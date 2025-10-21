@@ -50,6 +50,9 @@ export default function Workspace() {
   const editorInstanceRef = React.useRef<any>(null);
   const editorContainerRef = useRef<HTMLElement>(null);
   
+  // 🔧 Ref to prevent overlapping scroll operations
+  const isScrollingRef = useRef(false);
+  
   // ScrollSpy for active heading detection - DISABLED for now to prevent loops
   // TODO: Re-enable after fixing container detection
   const activeHeadingText = null;
@@ -273,6 +276,12 @@ export default function Workspace() {
 
   // Helper function to scroll editor to specific text
   const scrollToTextInEditor = (searchText: string) => {
+    // 🔧 FIX: Prevent overlapping scroll operations (race condition fix!)
+    if (isScrollingRef.current) {
+      console.log('⏸️ Already scrolling, ignoring click');
+      return;
+    }
+    
     if (!editorInstanceRef.current) {
       console.warn('⚠️ Editor instance not available');
       return;
@@ -280,6 +289,9 @@ export default function Workspace() {
 
     const editor = editorInstanceRef.current;
     console.log('🔍 Searching for:', searchText);
+    
+    // Set scrolling flag
+    isScrollingRef.current = true;
     
     try {
       const { state } = editor;
@@ -290,97 +302,131 @@ export default function Workspace() {
       // Clean search text for better matching
       const cleanSearch = searchText.trim().toLowerCase();
 
+      // 🔧 FIX: Only search heading nodes for better precision
       doc.descendants((node, pos) => {
         if (found) return false;
         
-        // Check heading nodes specifically (they're most common in outline)
+        // ONLY check heading nodes (outline items are always headings)
         if (node.type.name === 'heading') {
           const nodeText = node.textContent.trim().toLowerCase();
-          if (nodeText === cleanSearch || nodeText.includes(cleanSearch)) {
-            targetPos = pos;
-            found = true;
-            console.log('✅ Found heading at position:', targetPos, 'Text:', node.textContent);
-            return false;
-          }
-        }
-        
-        // Check any node with text content
-        if (node.textContent) {
-          const nodeText = node.textContent.trim().toLowerCase();
+          
+          // Try exact match first
           if (nodeText === cleanSearch) {
             targetPos = pos;
             found = true;
-            console.log('✅ Found exact match at position:', targetPos);
+            console.log('✅ Found exact heading match:', node.textContent, 'at position:', targetPos);
             return false;
-          } else if (nodeText.includes(cleanSearch) && nodeText.length < 200) {
-            // Partial match for short nodes
+          }
+          
+          // If not exact, try if search text is contained in heading
+          // But make sure it's a significant match (not just "a" matching "Chapter A")
+          if (cleanSearch.length > 3 && nodeText.includes(cleanSearch)) {
             targetPos = pos;
             found = true;
-            console.log('✅ Found partial match at position:', targetPos);
+            console.log('✅ Found heading containing:', cleanSearch, 'Full text:', node.textContent, 'at position:', targetPos);
             return false;
           }
         }
       });
 
-      if (found) {
-        // Focus editor first
-        editor.commands.focus();
+      if (found) {  // 🔧 FIX: Allow targetPos = 0 (valid for first heading!)
+        console.log('📍 Scrolling to position:', targetPos);
         
-        // Set selection and scroll using TipTap's chain
-        editor.chain()
-          .setTextSelection(targetPos)
-          .scrollIntoView()
-          .run();
-        
-        // Enhanced scroll for better visibility - target the correct scroll container
+        // 🔧 FIX: More reliable scroll approach
         setTimeout(() => {
           try {
-            // Get the resolved DOM position
-            const resolvedPos = editor.view.state.doc.resolve(targetPos);
-            const domAtPos = editor.view.domAtPos(resolvedPos.pos);
-            const targetNode = domAtPos.node;
+            // Focus editor first
+            editor.commands.focus();
             
-            if (targetNode) {
-              // Find the closest element to scroll
-              const element = targetNode.nodeType === Node.ELEMENT_NODE 
-                ? targetNode as HTMLElement
-                : targetNode.parentElement;
+            // Get the DOM node at the target position
+            const domNode = editor.view.domAtPos(targetPos);
+            let element = domNode.node.nodeType === Node.ELEMENT_NODE 
+              ? (domNode.node as HTMLElement) 
+              : domNode.node.parentElement;
+            
+            // 🔧 FIX: Find the actual heading element - check CURRENT/CHILDREN first, not parents!
+            if (element) {
+              let headingElement: HTMLElement | null = null;
               
-              if (element) {
-                // Find the scrollable parent (editor content container)
-                const scrollableParent = element.closest('.overflow-y-auto, [data-radix-scroll-area-viewport]') as HTMLElement
-                  || document.querySelector('.overflow-y-auto') as HTMLElement;
-                
-                if (scrollableParent) {
-                  const elementRect = element.getBoundingClientRect();
-                  const parentRect = scrollableParent.getBoundingClientRect();
-                  
-                  // Calculate offset to position the element nicely in view (1/3 from top)
-                  const offset = elementRect.top - parentRect.top - (parentRect.height / 3);
-                  
-                  scrollableParent.scrollBy({
-                    top: offset,
-                    behavior: 'smooth'
-                  });
-                  
-                  console.log('✅ Enhanced scroll applied with offset:', offset);
-                } else {
-                  console.warn('⚠️ Could not find scrollable parent');
+              // Strategy 1: Check if current element IS a heading
+              if (element.tagName?.match(/^H[1-6]$/)) {
+                headingElement = element;
+              }
+              
+              // Strategy 2: Look for heading in immediate children
+              if (!headingElement) {
+                headingElement = element.querySelector('h1, h2, h3, h4, h5, h6');
+              }
+              
+              // Strategy 3: Look in siblings (sometimes the text node is separate)
+              if (!headingElement && element.parentElement) {
+                for (const sibling of Array.from(element.parentElement.children)) {
+                  if (sibling.tagName?.match(/^H[1-6]$/)) {
+                    headingElement = sibling as HTMLElement;
+                    break;
+                  }
                 }
               }
+              
+              // Strategy 4: Only as last resort, traverse up ONE level
+              if (!headingElement && element.parentElement && element.parentElement.tagName?.match(/^H[1-6]$/)) {
+                headingElement = element.parentElement;
+              }
+              
+              // Use the heading element if found, otherwise fall back to original
+              const targetElement = headingElement || element;
+              console.log('📍 Found element:', targetElement.tagName, targetElement.textContent?.substring(0, 50));
+              
+              // Use native scrollIntoView with center positioning for best results
+              targetElement.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+                inline: 'nearest'
+              });
+              
+              // Also set cursor position for visual feedback
+              editor.commands.setTextSelection(targetPos);
+              
+              console.log('✅ Scroll completed to position:', targetPos);
+              
+              // 🔧 Reset scrolling flag after animation completes (smooth scroll takes ~500ms)
+              setTimeout(() => {
+                isScrollingRef.current = false;
+                console.log('🔓 Scroll lock released');
+              }, 600);
+            } else {
+              console.warn('⚠️ Could not find DOM element for position:', targetPos);
+              isScrollingRef.current = false; // Reset on failure
             }
           } catch (scrollError) {
-            console.warn('⚠️ Enhanced scroll failed, using fallback');
+            console.error('❌ Scroll error:', scrollError);
+            // Fallback: Try TipTap's built-in scroll
+            try {
+              editor.chain()
+                .focus()
+                .setTextSelection(targetPos)
+                .scrollIntoView()
+                .run();
+              console.log('✅ Used fallback scroll');
+              
+              // Reset flag after fallback
+              setTimeout(() => {
+                isScrollingRef.current = false;
+                console.log('🔓 Scroll lock released (fallback)');
+              }, 600);
+            } catch (fallbackError) {
+              console.error('❌ Fallback scroll also failed:', fallbackError);
+              isScrollingRef.current = false; // Reset on failure
+            }
           }
-        }, 150);
-        
-        console.log('✅ Scrolled to position:', targetPos);
+        }, 100);
       } else {
-        console.warn('⚠️ Text not found in editor:', searchText);
-        console.log('💡 Try searching in browser console for:', cleanSearch);
+        console.warn('❌ Could not find text:', searchText);
+        isScrollingRef.current = false; // Reset on not found
       }
     } catch (error) {
       console.error('❌ Error scrolling to text:', error);
+      isScrollingRef.current = false; // Reset on error
     }
   };
 

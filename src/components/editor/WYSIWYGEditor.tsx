@@ -7,10 +7,17 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './wysiwyg-editor.css';
 import 'tippy.js/dist/tippy.css';
-import { useEditor, EditorContent } from '@tiptap/react';
+import '@fortawesome/fontawesome-free/css/all.min.css';
+import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import MarkdownIt from 'markdown-it';
 import TurndownService from 'turndown';
+// 🔥 Syntax highlighting imports - IMPORTANT: Load Prism core first!
+import Prism from 'prismjs';
+// Load theme and plugins after core
+import 'prismjs/themes/prism-tomorrow.css';
+import 'prismjs/plugins/line-numbers/prism-line-numbers.css';
+import 'prismjs/plugins/line-numbers/prism-line-numbers.js';
 import { Placeholder } from '@tiptap/extension-placeholder';
 import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
@@ -22,7 +29,25 @@ import { Image } from '@tiptap/extension-image';
 import { Link } from '@tiptap/extension-link';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { FontFamily } from '@tiptap/extension-font-family';
+import { Highlight } from '@tiptap/extension-highlight';
+import { Underline } from '@tiptap/extension-underline';
+import { Superscript } from '@tiptap/extension-superscript';
+import { Subscript } from '@tiptap/extension-subscript';
 import { MermaidNode } from './extensions/MermaidNode';
+import { CalloutNode } from './extensions/CalloutNode';
+import { YouTubeNode } from './extensions/YouTubeNode';
+import { VimeoNode } from './extensions/VimeoNode';
+import { PDFNode } from './extensions/PDFNode';
+import { GistNode } from './extensions/GistNode';
+import { EnhancedBlockquote } from './extensions/EnhancedBlockquote';
+import { FootnoteReference, FootnoteDefinition, FootnotesSection } from './extensions/FootnoteExtension';
+import { TOCNode } from './extensions/TOCNode';
+import { FontAwesomeIcon } from './extensions/FontAwesomeIcon';
+import { ResizableImageNodeView } from './extensions/ResizableImageNodeView';
+import { FloatingToolbar } from './FloatingToolbar';
+import { LinkHoverToolbar } from './LinkHoverToolbar';
+import { KeyboardShortcutsPanel } from './KeyboardShortcutsPanel';
+import { IconPickerModal } from './IconPickerModal';
 import { EditorContextMenu } from './EditorContextMenu';
 import { DiagramInsertMenu } from './DiagramInsertMenu';
 import { SlashCommandExtension, slashCommandSuggestion } from './SlashCommandExtension';
@@ -81,6 +106,8 @@ import {
   Workflow,
   GitBranch,
   BarChart,
+  Keyboard,
+  Sparkles as IconsIcon,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -113,13 +140,733 @@ interface WYSIWYGEditorProps {
   }>;
 }
 
+// 🔥 Helper to load Prism language dynamically
+const loadPrismLanguage = async (lang: string) => {
+  // Map of common languages to their Prism components
+  const languageMap: Record<string, string> = {
+    'js': 'javascript',
+    'ts': 'typescript',
+    'py': 'python',
+    'rs': 'rust',
+    'sh': 'bash',
+    'shell': 'bash',
+    'bash': 'bash',
+  };
+  
+  const normalizedLang = languageMap[lang] || lang;
+  
+  // Check if language is already loaded
+  if (Prism.languages[normalizedLang]) {
+    return normalizedLang;
+  }
+  
+  // Try to load the language component
+  try {
+    await import(/* @vite-ignore */ `prismjs/components/prism-${normalizedLang}.js`);
+    return normalizedLang;
+  } catch (e) {
+    // Silently fall back to 'markup' for unsupported languages
+    return 'markup'; // Default fallback language
+  }
+};
+
+// 🎉 Simple emoji shortcode map
+const emojiMap: Record<string, string> = {
+  'smile': '😀', 'grin': '😁', 'joy': '😂', 'heart': '❤️', 'fire': '🔥',
+  'rocket': '🚀', 'star': '⭐', 'thumbsup': '👍', 'thumbsdown': '👎',
+  'tada': '🎉', 'sparkles': '✨', 'zap': '⚡', 'boom': '💥', 'bulb': '💡',
+  'warning': '⚠️', 'x': '❌', 'check': '✅', 'white_check_mark': '✅',
+  'heavy_check_mark': '✔️', 'construction': '🚧', 'lock': '🔒',
+  'key': '🔑', 'bell': '🔔', 'bookmark': '🔖', 'link': '🔗',
+  'mag': '🔍', 'gear': '⚙️', 'tools': '🛠️', 'hammer': '🔨',
+  'pencil': '✏️', 'memo': '📝', 'books': '📚', 'book': '📖',
+  'newspaper': '📰', 'calendar': '📅', 'chart': '📊', 'bar_chart': '📊',
+  'computer': '💻', 'phone': '📱', 'email': '📧', 'inbox': '📥',
+  'package': '📦', 'folder': '📁', 'file': '📄', 'camera': '📷',
+  'movie': '🎬', 'art': '🎨', 'game': '🎮', 'trophy': '🏆',
+  'medal': '🏅', 'flag': '🚩', 'wave': '👋', 'clap': '👏',
+  'pray': '🙏', 'muscle': '💪', 'eyes': '👀', 'brain': '🧠',
+  'bug': '🐛', 'sunny': '☀️', 'cloud': '☁️', 'umbrella': '☂️',
+  'coffee': '☕', 'pizza': '🍕', 'beer': '🍺', 'cake': '🎂',
+};
+
 // Initialize markdown parser
 const md = new MarkdownIt({
   html: true,
   linkify: true,
   typographer: true,
   breaks: true, // Convert \n to <br>
+  highlight: (str, lang) => {
+    // 🔥 Enable syntax highlighting in markdown-it
+    // Return pre-formatted code that will be highlighted by Prism in useEffect
+    if (lang) {
+      return `<pre class="line-numbers language-${lang}"><code class="language-${lang}">${md.utils.escapeHtml(str)}</code></pre>`;
+    }
+    // Fallback for unknown languages
+    return `<pre class="line-numbers"><code>${md.utils.escapeHtml(str)}</code></pre>`;
+  },
 });
+
+// 🔥 TABLE ALIGNMENT SUPPORT - Override table rendering to preserve alignment
+// Store the default table renderer
+const defaultTableRender = md.renderer.rules.table_open || function(tokens, idx, options, env, self) {
+  return self.renderToken(tokens, idx, options);
+};
+
+const defaultTdRender = md.renderer.rules.td_open || function(tokens, idx, options, env, self) {
+  return self.renderToken(tokens, idx, options);
+};
+
+const defaultThRender = md.renderer.rules.th_open || function(tokens, idx, options, env, self) {
+  return self.renderToken(tokens, idx, options);
+};
+
+// Custom renderer for table cells to add alignment data
+md.renderer.rules.td_open = function(tokens, idx, options, env, self) {
+  const token = tokens[idx];
+  // markdown-it stores alignment info in token.attrGet('style')
+  const align = token.attrGet('style')?.match(/text-align:(left|center|right)/)?.[1];
+  if (align) {
+    token.attrSet('data-align', align);
+  }
+  return defaultTdRender(tokens, idx, options, env, self);
+};
+
+md.renderer.rules.th_open = function(tokens, idx, options, env, self) {
+  const token = tokens[idx];
+  const align = token.attrGet('style')?.match(/text-align:(left|center|right)/)?.[1];
+  if (align) {
+    token.attrSet('data-align', align);
+  }
+  return defaultThRender(tokens, idx, options, env, self);
+};
+
+// 🎉 Add simple emoji replacement rule
+md.core.ruler.after('inline', 'emoji', (state) => {
+  for (let i = 0; i < state.tokens.length; i++) {
+    if (state.tokens[i].type === 'inline' && state.tokens[i].children) {
+      const children = state.tokens[i].children || [];
+      for (let j = 0; j < children.length; j++) {
+        if (children[j].type === 'text') {
+          const text = children[j].content;
+          // Replace :emoji_name: with actual emoji
+          const replaced = text.replace(/:([a-z_]+):/g, (match, name) => {
+            return emojiMap[name] || match;
+          });
+          if (replaced !== text) {
+            children[j].content = replaced;
+          }
+        }
+      }
+    }
+  }
+  return true;
+});
+
+// 🎨 Add highlighting support - Parse ==text== to <mark> tags
+md.core.ruler.after('inline', 'highlight', (state) => {
+  for (let i = 0; i < state.tokens.length; i++) {
+    if (state.tokens[i].type === 'inline' && state.tokens[i].children) {
+      const children = state.tokens[i].children || [];
+      const newChildren: any[] = [];
+      
+      for (let j = 0; j < children.length; j++) {
+        if (children[j].type === 'text') {
+          const text = children[j].content;
+          // Split by ==highlighted text== pattern
+          const parts = text.split(/(==.+?==)/g);
+          
+          parts.forEach(part => {
+            if (!part) return;
+            
+            if (part.startsWith('==') && part.endsWith('==')) {
+              // This is highlighted text
+              const highlightedText = part.slice(2, -2); // Remove == markers
+              
+              // Create opening <mark> token
+              const markOpen = new state.Token('html_inline', '', 0);
+              markOpen.content = '<mark class="highlighted-text">';
+              newChildren.push(markOpen);
+              
+              // Create text token
+              const textToken = new state.Token('text', '', 0);
+              textToken.content = highlightedText;
+              newChildren.push(textToken);
+              
+              // Create closing </mark> token
+              const markClose = new state.Token('html_inline', '', 0);
+              markClose.content = '</mark>';
+              newChildren.push(markClose);
+            } else {
+              // Regular text
+              const textToken = new state.Token('text', '', 0);
+              textToken.content = part;
+              newChildren.push(textToken);
+            }
+          });
+        } else {
+          // Keep non-text tokens as-is
+          newChildren.push(children[j]);
+        }
+      }
+      
+      // Replace children with new tokens
+      if (newChildren.length > 0) {
+        state.tokens[i].children = newChildren;
+      }
+    }
+  }
+  return true;
+});
+
+// 🎨 Add superscript support - Parse ^text^ to <sup> tags
+md.core.ruler.after('inline', 'superscript', (state) => {
+  for (let i = 0; i < state.tokens.length; i++) {
+    if (state.tokens[i].type === 'inline' && state.tokens[i].children) {
+      const children = state.tokens[i].children || [];
+      const newChildren: any[] = [];
+      
+      for (let j = 0; j < children.length; j++) {
+        if (children[j].type === 'text') {
+          const text = children[j].content;
+          // Split by ^text^ pattern
+          const parts = text.split(/(\^.+?\^)/g);
+          
+          parts.forEach(part => {
+            if (!part) return;
+            
+            if (part.startsWith('^') && part.endsWith('^') && part.length > 2) {
+              // This is superscript text
+              const supText = part.slice(1, -1); // Remove ^ markers
+              
+              // Create <sup> tag
+              const supOpen = new state.Token('html_inline', '', 0);
+              supOpen.content = '<sup>';
+              newChildren.push(supOpen);
+              
+              const textToken = new state.Token('text', '', 0);
+              textToken.content = supText;
+              newChildren.push(textToken);
+              
+              const supClose = new state.Token('html_inline', '', 0);
+              supClose.content = '</sup>';
+              newChildren.push(supClose);
+            } else {
+              // Regular text
+              const textToken = new state.Token('text', '', 0);
+              textToken.content = part;
+              newChildren.push(textToken);
+            }
+          });
+        } else {
+          newChildren.push(children[j]);
+        }
+      }
+      
+      state.tokens[i].children = newChildren;
+    }
+  }
+  return true;
+});
+
+// 🎨 Add subscript support - Parse ~text~ to <sub> tags
+md.core.ruler.after('superscript', 'subscript', (state) => {
+  for (let i = 0; i < state.tokens.length; i++) {
+    if (state.tokens[i].type === 'inline' && state.tokens[i].children) {
+      const children = state.tokens[i].children || [];
+      const newChildren: any[] = [];
+      
+      for (let j = 0; j < children.length; j++) {
+        if (children[j].type === 'text') {
+          const text = children[j].content;
+          // Split by ~text~ pattern (but avoid ~~strikethrough~~)
+          const parts = text.split(/([~][^~]+?[~](?!~))/g);
+          
+          parts.forEach(part => {
+            if (!part) return;
+            
+            if (part.startsWith('~') && part.endsWith('~') && part.length > 2 && !part.includes('~~')) {
+              // This is subscript text
+              const subText = part.slice(1, -1); // Remove ~ markers
+              
+              // Create <sub> tag
+              const subOpen = new state.Token('html_inline', '', 0);
+              subOpen.content = '<sub>';
+              newChildren.push(subOpen);
+              
+              const textToken = new state.Token('text', '', 0);
+              textToken.content = subText;
+              newChildren.push(textToken);
+              
+              const subClose = new state.Token('html_inline', '', 0);
+              subClose.content = '</sub>';
+              newChildren.push(subClose);
+            } else {
+              // Regular text
+              const textToken = new state.Token('text', '', 0);
+              textToken.content = part;
+              newChildren.push(textToken);
+            }
+          });
+        } else {
+          newChildren.push(children[j]);
+        }
+      }
+      
+      state.tokens[i].children = newChildren;
+    }
+  }
+  return true;
+});
+
+// 💬 Enhanced Blockquotes - Parse GitHub-style callouts like > [!note]
+// This modifies blockquote_open tokens to add data-blockquote-type attribute
+md.core.ruler.after('block', 'enhanced_blockquote', (state) => {
+  for (let i = 0; i < state.tokens.length; i++) {
+    const token = state.tokens[i];
+    
+    if (token.type === 'blockquote_open') {
+      // Look ahead for the first paragraph content
+      for (let j = i + 1; j < state.tokens.length && j < i + 10; j++) {
+        const nextToken = state.tokens[j];
+        
+        if (nextToken.type === 'inline' && nextToken.content) {
+          // Check for [!type] at the start
+          const match = nextToken.content.match(/^\[!(note|tip|important|warning|caution)\]\s*/i);
+          if (match) {
+            const type = match[1].toLowerCase();
+            // Add the type attribute to the blockquote_open token
+            token.attrSet('data-blockquote-type', type);
+            token.attrJoin('class', `blockquote-${type}`);
+            // Remove the [!type] marker from the content
+            nextToken.content = nextToken.content.substring(match[0].length);
+            break;
+          }
+        }
+        
+        // Stop at blockquote_close
+        if (nextToken.type === 'blockquote_close') break;
+      }
+    }
+  }
+  return true;
+});
+
+// 📢 Add callout/alert support - Parse :::type to <div> callout boxes
+md.block.ruler.after('fence', 'callout', (state, startLine, endLine, silent) => {
+  // Safety check
+  if (!state.bCount || !state.tShift || !state.eMarks) return false;
+  if (startLine >= endLine) return false;
+  
+  let pos = state.bCount[startLine] + state.tShift[startLine];
+  let max = state.eMarks[startLine];
+  
+  // Check for ::: at start of line
+  if (pos + 3 > max) return false;
+  
+  const marker = state.src.slice(pos, pos + 3);
+  if (marker !== ':::') return false;
+  
+  pos += 3;
+  
+  // Get callout type
+  let type = state.src.slice(pos, max).trim();
+  if (!type) type = 'info';
+  
+  // Valid types
+  const validTypes = ['info', 'warning', 'danger', 'success'];
+  if (!validTypes.includes(type)) type = 'info';
+  
+  if (silent) return true;
+  
+  let nextLine = startLine;
+  let autoClose = false;
+  
+  // Search for closing :::
+  for (nextLine = startLine + 1; nextLine < endLine; nextLine++) {
+    if (!state.bCount[nextLine] || !state.tShift[nextLine] || !state.eMarks[nextLine]) break;
+    
+    pos = state.bCount[nextLine] + state.tShift[nextLine];
+    max = state.eMarks[nextLine];
+    
+    if (pos < max && state.sCount && state.sCount[nextLine] < state.blkIndent) {
+      // Non-empty line with negative indent should stop the list
+      break;
+    }
+    
+    if (state.src.slice(pos, max).trim() === ':::') {
+      autoClose = true;
+      break;
+    }
+  }
+  
+  const oldParent = state.parentType;
+  const oldLineMax = state.lineMax;
+  state.parentType = 'callout';
+  
+  let token = state.push('callout_open', 'div', 1);
+  token.markup = ':::';
+  token.block = true;
+  token.info = type;
+  token.map = [startLine, nextLine];
+  
+  state.md.block.tokenize(state, startLine + 1, autoClose ? nextLine : nextLine + 1);
+  
+  token = state.push('callout_close', 'div', -1);
+  token.markup = ':::';
+  token.block = true;
+  
+  state.parentType = oldParent;
+  state.lineMax = oldLineMax;
+  state.line = autoClose ? nextLine + 1 : nextLine;
+  
+  return true;
+});
+
+// Renderer for callout_open
+md.renderer.rules.callout_open = (tokens, idx) => {
+  const type = tokens[idx].info || 'info';
+  return `<div data-callout-type="${type}" class="callout callout-${type}">`;
+};
+
+// Renderer for callout_close
+md.renderer.rules.callout_close = () => {
+  return '</div>';
+};
+
+// 🎬 YouTube embed support - Parse [youtube:VIDEO_ID] and direct URLs
+// IMPORTANT: Run BEFORE link parser to intercept YouTube URLs
+md.inline.ruler.before('link', 'youtube', (state, silent) => {
+  const start = state.pos;
+  const max = state.posMax;
+  
+  // Check for [youtube:VIDEO_ID] syntax
+  if (state.src.charCodeAt(start) === 0x5B /* [ */) {
+    const match = state.src.slice(start).match(/^\[youtube:([a-zA-Z0-9_-]{11})\]/);
+    if (match) {
+      if (!silent) {
+        const token = state.push('youtube', '', 0);
+        token.content = match[1];
+      }
+      state.pos += match[0].length;
+      return true;
+    }
+  }
+  
+  // Check for direct YouTube URLs - must run before autolink!
+  if (state.src.slice(start, start + 8) === 'https://' || state.src.slice(start, start + 7) === 'http://') {
+    const urlMatch = state.src.slice(start).match(/^https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})(?:[&?][\w=&-]*)?/);
+    if (urlMatch) {
+      if (!silent) {
+        const token = state.push('youtube', '', 0);
+        token.content = urlMatch[1];
+      }
+      state.pos += urlMatch[0].length;
+      return true;
+    }
+  }
+  
+  return false;
+});
+
+// Renderer for YouTube embeds
+md.renderer.rules.youtube = (tokens, idx) => {
+  const videoId = tokens[idx].content;
+  return `<div data-youtube-video data-video-id="${videoId}" class="youtube-embed"><iframe src="https://www.youtube.com/embed/${videoId}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen width="640" height="360"></iframe></div>`;
+};
+
+// 📹 Vimeo embed support - Parse [vimeo:VIDEO_ID]
+md.inline.ruler.before('link', 'vimeo', (state, silent) => {
+  const start = state.pos;
+  const max = state.posMax;
+  
+  // Check for [vimeo:VIDEO_ID] syntax
+  if (state.src.charCodeAt(start) === 0x5B /* [ */) {
+    const match = state.src.slice(start).match(/^\[vimeo:(\d{8,})\]/);
+    if (match) {
+      if (!silent) {
+        const token = state.push('vimeo', '', 0);
+        token.content = match[1];
+      }
+      state.pos += match[0].length;
+      return true;
+    }
+  }
+  
+  return false;
+});
+
+// Renderer for Vimeo embeds
+md.renderer.rules.vimeo = (tokens, idx) => {
+  const videoId = tokens[idx].content;
+  return `<div data-vimeo-video data-video-id="${videoId}" class="vimeo-embed"><iframe src="https://player.vimeo.com/video/${videoId}" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen width="640" height="360"></iframe></div>`;
+};
+
+// 💻 Gist embed support - Parse [gist:USERNAME/GIST_ID] or [gist:GIST_URL]
+md.inline.ruler.before('link', 'gist', (state, silent) => {
+  const start = state.pos;
+  const max = state.posMax;
+  
+  // Check for [gist:...] syntax
+  if (state.src.charCodeAt(start) === 0x5B /* [ */) {
+    // Match [gist:username/gistid] or [gist:gistid]
+    const match = state.src.slice(start).match(/^\[gist:([\w-]+(?:\/[\w-]+)?)\]/);
+    if (match) {
+      if (!silent) {
+        const token = state.push('gist', '', 0);
+        token.content = match[1]; // username/gistid or just gistid
+      }
+      state.pos += match[0].length;
+      return true;
+    }
+  }
+  
+  return false;
+});
+
+// Renderer for Gist embeds
+md.renderer.rules.gist = (tokens, idx) => {
+  const gistId = tokens[idx].content;
+  return `<div data-gist-embed data-gist-id="${gistId}" class="gist-embed"><script src="https://gist.github.com/${gistId}.js"></script></div>`;
+};
+
+// 📑 TOC support - Parse [TOC] or [[TOC]] placeholder
+md.inline.ruler.after('link', 'toc_placeholder', (state, silent) => {
+  const start = state.pos;
+  const max = state.posMax;
+  
+  // Check for [TOC] or [[TOC]]
+  if (start + 5 > max) return false;
+  if (state.src.charCodeAt(start) !== 0x5B /* [ */) return false;
+  
+  // Check for [TOC]
+  if (state.src.slice(start, start + 5) === '[TOC]') {
+    if (!silent) {
+      const token = state.push('toc_placeholder', '', 0);
+      token.markup = '[TOC]';
+    }
+    state.pos = start + 5;
+    return true;
+  }
+  
+  // Check for [[TOC]]
+  if (state.src.slice(start, start + 7) === '[[TOC]]') {
+    if (!silent) {
+      const token = state.push('toc_placeholder', '', 0);
+      token.markup = '[[TOC]]';
+    }
+    state.pos = start + 7;
+    return true;
+  }
+  
+  return false;
+});
+
+// Render TOC placeholder as div
+md.renderer.rules.toc_placeholder = () => {
+  return '<div data-toc="true" data-toc-placeholder="true"></div>';
+};
+
+// 🎨 FontAwesome icons - Parse :fa-icon-name: or :fa-solid-icon-name:color
+// Supports color syntax: :fa-check:green or :fa-check:#00ff00
+md.inline.ruler.after('link', 'fontawesome_icon', (state, silent) => {
+  const start = state.pos;
+  const max = state.posMax;
+  
+  // Check for :fa-
+  if (start + 4 > max) return false;
+  if (state.src.charCodeAt(start) !== 0x3A /* : */) return false;
+  if (state.src.slice(start, start + 4) !== ':fa-') return false;
+  
+  // Find closing :
+  let end = start + 4;
+  while (end < max && state.src.charCodeAt(end) !== 0x3A /* : */) {
+    end++;
+  }
+  
+  if (end >= max) return false;
+  
+  // Extract icon name
+  const fullIconName = state.src.slice(start + 4, end);
+  let style = 'solid';
+  let iconName = fullIconName;
+  let color = null;
+  
+  // Check for style prefix (e.g., :fa-brands-github:, :fa-regular-heart:)
+  if (fullIconName.startsWith('solid-')) {
+    style = 'solid';
+    iconName = fullIconName.slice(6);
+  } else if (fullIconName.startsWith('regular-')) {
+    style = 'regular';
+    iconName = fullIconName.slice(8);
+  } else if (fullIconName.startsWith('brands-')) {
+    style = 'brands';
+    iconName = fullIconName.slice(7);
+  }
+  
+  // Check for optional color after closing :
+  // Syntax: :fa-check:green or :fa-check:#00ff00 or :fa-check:[red]
+  const colorStart = end + 1;
+  if (colorStart < max) {
+    // Check for color name or hex
+    const colorMatch = state.src.slice(colorStart).match(/^([\w-]+|#[\da-fA-F]{3,6}|\[[\w#-]+\])/);
+    if (colorMatch) {
+      color = colorMatch[1].replace(/[\[\]]/g, ''); // Remove brackets if present
+      end = colorStart + colorMatch[0].length - 1; // Update end position
+    }
+  }
+  
+  if (!silent) {
+    const token = state.push('fontawesome_icon', '', 0);
+    token.content = iconName;
+    token.meta = { style, color };
+  }
+  
+  state.pos = end + 1;
+  return true;
+});
+
+// Render FontAwesome icon with optional color
+md.renderer.rules.fontawesome_icon = (tokens, idx) => {
+  const icon = tokens[idx].content;
+  const style = tokens[idx].meta?.style || 'solid';
+  const color = tokens[idx].meta?.color;
+  const prefix = style === 'brands' ? 'fab' : style === 'regular' ? 'far' : 'fas';
+  
+  let colorAttr = '';
+  let colorStyle = '';
+  
+  if (color) {
+    // If hex color, use style attribute
+    if (color.startsWith('#')) {
+      colorStyle = ` style="color: ${color};"`;
+    } else {
+      // Use data-color attribute for named colors (handled by CSS)
+      colorAttr = ` data-color="${color}"`;
+    }
+  }
+  
+  return `<i class="${prefix} fa-${icon}" data-fa-icon="${icon}" data-fa-style="${style}"${colorAttr}${colorStyle} aria-hidden="true"></i>`;
+};
+
+// 📝 Footnote support - Parse [^1] references and [^1]: definitions
+// Parse footnote references [^1]
+md.inline.ruler.after('link', 'footnote_ref', (state, silent) => {
+  const start = state.pos;
+  const max = state.posMax;
+  
+  // Check for [^
+  if (start + 3 > max) return false;
+  if (state.src.charCodeAt(start) !== 0x5B /* [ */) return false;
+  if (state.src.charCodeAt(start + 1) !== 0x5E /* ^ */) return false;
+  
+  // Find the closing ]
+  let labelEnd = start + 2;
+  while (labelEnd < max && state.src.charCodeAt(labelEnd) !== 0x5D /* ] */) {
+    labelEnd++;
+  }
+  
+  if (labelEnd >= max) return false;
+  
+  const label = state.src.slice(start + 2, labelEnd);
+  if (!label) return false;
+  
+  if (!silent) {
+    const token = state.push('footnote_ref', '', 0);
+    token.meta = { id: label, label };
+  }
+  
+  state.pos = labelEnd + 1;
+  return true;
+});
+
+// Renderer for footnote references
+md.renderer.rules.footnote_ref = (tokens, idx) => {
+  const meta = tokens[idx].meta;
+  return `<sup data-footnote-id="${meta.id}" data-footnote-label="${meta.label}" class="footnote-ref"><a href="#fn-${meta.id}" id="fnref-${meta.id}" class="footnote-ref-link">[${meta.label}]</a></sup>`;
+};
+
+// Parse footnote definitions [^1]: content
+md.block.ruler.after('reference', 'footnote_def', (state, startLine, endLine, silent) => {
+  const start = state.bMarks[startLine] + state.tShift[startLine];
+  const max = state.eMarks[startLine];
+  
+  // Check for [^
+  if (start + 3 > max) return false;
+  if (state.src.charCodeAt(start) !== 0x5B /* [ */) return false;
+  if (state.src.charCodeAt(start + 1) !== 0x5E /* ^ */) return false;
+  
+  // Find the closing ]:
+  let labelEnd = start + 2;
+  while (labelEnd < max && state.src.charCodeAt(labelEnd) !== 0x5D /* ] */) {
+    labelEnd++;
+  }
+  
+  if (labelEnd >= max) return false;
+  if (state.src.charCodeAt(labelEnd + 1) !== 0x3A /* : */) return false;
+  
+  const label = state.src.slice(start + 2, labelEnd);
+  if (!label) return false;
+  
+  const content = state.src.slice(labelEnd + 2, max).trim();
+  
+  if (!silent) {
+    const token = state.push('footnote_def_open', 'div', 1);
+    token.meta = { id: label, label };
+    
+    const inline = state.push('inline', '', 0);
+    inline.content = content;
+    inline.children = [];
+    
+    state.push('footnote_def_close', 'div', -1);
+  }
+  
+  state.line = startLine + 1;
+  return true;
+});
+
+// Renderer for footnote definitions
+md.renderer.rules.footnote_def_open = (tokens, idx) => {
+  const meta = tokens[idx].meta;
+  return `<div data-footnote-id="${meta.id}" data-footnote-label="${meta.label}" id="fn-${meta.id}" class="footnote-def"><a href="#fnref-${meta.id}" class="footnote-backref">[${meta.label}]</a> <div class="footnote-content">`;
+};
+
+md.renderer.rules.footnote_def_close = () => {
+  return '</div></div>';
+};
+
+// 📄 PDF embed support - Parse [pdf:URL]
+md.inline.ruler.after('youtube', 'pdf', (state, silent) => {
+  const start = state.pos;
+  const max = state.posMax;
+  
+  // Check for [pdf:URL] syntax
+  if (state.src.charCodeAt(start) === 0x5B /* [ */) {
+    const match = state.src.slice(start).match(/^\[pdf:([^\]]+)\]/);
+    if (match) {
+      if (!silent) {
+        const token = state.push('pdf', '', 0);
+        token.content = match[1];
+      }
+      state.pos += match[0].length;
+      return true;
+    }
+  }
+  
+  return false;
+});
+
+// Renderer for PDF embeds
+md.renderer.rules.pdf = (tokens, idx) => {
+  const src = tokens[idx].content;
+  console.log('📄 PDF Renderer - Raw src:', src);
+  // Clean up any bracket artifacts that might have been included
+  const cleanSrc = src.replace(/^\[+/, '').replace(/\]+$/, '');
+  console.log('📄 PDF Renderer - Clean src:', cleanSrc);
+  // Use Google Docs viewer for better compatibility
+  const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(cleanSrc)}&embedded=true`;
+  return `<div data-pdf-embed data-pdf-src="${cleanSrc}" class="pdf-embed"><iframe src="${viewerUrl}" width="100%" height="600px"></iframe></div>`;
+};
 
 // Initialize HTML to markdown converter
 const turndownService = new TurndownService({
@@ -142,6 +889,187 @@ turndownService.addRule('mermaidDiagram', {
     return '\n\n```mermaid\n' + code.trim() + '\n```\n\n';
   }
 });
+
+// 🎨 Add custom rule for highlighted text
+turndownService.addRule('highlight', {
+  filter: (node) => {
+    return node.nodeName === 'MARK';
+  },
+  replacement: (content) => {
+    return '==' + content + '==';
+  }
+});
+
+// 💬 Add custom rule for enhanced blockquotes
+turndownService.addRule('enhancedBlockquote', {
+  filter: 'blockquote',
+  replacement: (content, node: any) => {
+    const type = node.getAttribute('data-blockquote-type');
+    
+    if (type && type !== 'default') {
+      // GitHub-style callout format: > [!type]\n> content
+      return '\n> [!' + type + ']\n> ' + content.trim().replace(/\n/g, '\n> ') + '\n\n';
+    }
+    
+    // Regular blockquote
+    return '\n> ' + content.trim().replace(/\n/g, '\n> ') + '\n\n';
+  }
+});
+
+// 📢 Add custom rule for callout boxes
+turndownService.addRule('callout', {
+  filter: (node) => {
+    return node.nodeName === 'DIV' && node.getAttribute('data-callout-type');
+  },
+  replacement: (content, node: any) => {
+    const type = node.getAttribute('data-callout-type') || 'info';
+    return '\n:::' + type + '\n' + content.trim() + '\n:::\n\n';
+  }
+});
+
+// 🎬 Add custom rule for YouTube embeds
+turndownService.addRule('youtube', {
+  filter: (node) => {
+    return node.nodeName === 'DIV' && node.getAttribute('data-youtube-video');
+  },
+  replacement: (content, node: any) => {
+    const videoId = node.getAttribute('data-video-id');
+    if (!videoId) return '';
+    return `\n[youtube:${videoId}]\n\n`;
+  }
+});
+
+// 📹 Add custom rule for Vimeo
+turndownService.addRule('vimeo', {
+  filter: (node) => {
+    return node.nodeName === 'DIV' && node.getAttribute('data-vimeo-video');
+  },
+  replacement: (content, node: any) => {
+    const videoId = node.getAttribute('data-video-id');
+    if (!videoId) return '';
+    return `\n[vimeo:${videoId}]\n\n`;
+  }
+});
+
+// 💻 Add custom rule for Gist
+turndownService.addRule('gist', {
+  filter: (node) => {
+    return node.nodeName === 'DIV' && node.getAttribute('data-gist-embed');
+  },
+  replacement: (content, node: any) => {
+    const gistId = node.getAttribute('data-gist-id');
+    if (!gistId) return '';
+    return `\n[gist:${gistId}]\n\n`;
+  }
+});
+
+// 📄 Add custom rule for PDF embeds
+turndownService.addRule('pdf', {
+  filter: (node) => {
+    return node.nodeName === 'DIV' && node.getAttribute('data-pdf-embed');
+  },
+  replacement: (content, node: any) => {
+    const src = node.getAttribute('data-pdf-src');
+    if (!src) return '';
+    return `\n[pdf:${src}]\n\n`;
+  }
+});
+
+// 📑 Add custom rule for TOC
+turndownService.addRule('toc', {
+  filter: (node) => {
+    return node.nodeName === 'DIV' && node.getAttribute('data-toc') === 'true';
+  },
+  replacement: () => {
+    return '\n\n[TOC]\n\n';
+  }
+});
+
+// 🎨 Add custom rule for FontAwesome icons
+turndownService.addRule('fontawesomeIcon', {
+  filter: (node) => {
+    return node.nodeName === 'I' && node.getAttribute('data-fa-icon');
+  },
+  replacement: (content, node: any) => {
+    const icon = node.getAttribute('data-fa-icon');
+    const style = node.getAttribute('data-fa-style') || 'solid';
+    
+    // Format as :fa-style-icon: or just :fa-icon: for solid
+    if (style === 'solid') {
+      return `:fa-${icon}:`;
+    } else {
+      return `:fa-${style}-${icon}:`;
+    }
+  }
+});
+
+// 📝 Add custom rules for footnotes
+turndownService.addRule('footnoteReference', {
+  filter: (node) => {
+    return node.nodeName === 'SUP' && node.getAttribute('data-footnote-id');
+  },
+  replacement: (content, node: any) => {
+    const id = node.getAttribute('data-footnote-id');
+    return `[^${id}]`;
+  }
+});
+
+turndownService.addRule('footnoteDefinition', {
+  filter: (node) => {
+    return node.nodeName === 'DIV' && node.getAttribute('data-footnote-id') && node.classList.contains('footnote-def');
+  },
+  replacement: (content, node: any) => {
+    const id = node.getAttribute('data-footnote-id');
+    // Get text content from the footnote-content div
+    const contentDiv = node.querySelector('.footnote-content');
+    const text = contentDiv ? contentDiv.textContent?.trim() : content.trim();
+    return `\n[^${id}]: ${text}\n`;
+  }
+});
+
+// 🔥 FIX: Ensure all table cells contain at least a paragraph tag
+// ProseMirror requires table cells to have block content (not just text)
+const fixEmptyTableCells = (html: string): string => {
+  if (!html.includes('<table')) return html;
+  
+  // Use DOMParser to properly handle HTML
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  
+  // Find all table cells (th and td)
+  const cells = doc.querySelectorAll('td, th');
+  
+  cells.forEach(cell => {
+    // 🔥 Preserve alignment data attribute for ProseMirror
+    const align = cell.getAttribute('data-align') || cell.style.textAlign;
+    
+    // If cell is empty or only has text nodes (no block elements)
+    const hasBlockElements = Array.from(cell.childNodes).some(node => 
+      node.nodeType === 1 && ['P', 'DIV', 'UL', 'OL', 'PRE', 'BLOCKQUOTE'].includes(node.nodeName)
+    );
+    
+    if (!hasBlockElements) {
+      // Get current content (text or inline elements)
+      const currentContent = cell.innerHTML.trim();
+      
+      // Wrap in paragraph tag
+      if (currentContent === '' || currentContent === '&nbsp;') {
+        // Empty cell - add empty paragraph
+        cell.innerHTML = '<p></p>';
+      } else {
+        // Has content but no block elements - wrap in paragraph
+        cell.innerHTML = `<p>${currentContent}</p>`;
+      }
+    }
+    
+    // 🔥 Reapply alignment as data attribute (will be picked up by TipTap)
+    if (align) {
+      cell.setAttribute('data-align', align);
+    }
+  });
+  
+  return doc.body.innerHTML;
+};
 
 // Helper function to convert markdown to HTML
 const markdownToHtml = (markdown: string): string => {
@@ -179,6 +1107,9 @@ const markdownToHtml = (markdown: string): string => {
     }
   });
   
+  // 🔥 FIX: Ensure table cells have proper structure for ProseMirror
+  html = fixEmptyTableCells(html);
+  
   return html;
 };
 
@@ -204,6 +1135,85 @@ const htmlToMarkdown = (html: string, editor?: any): string => {
   }
 };
 
+// 🔥 Helper function to convert table node to markdown
+const convertTableToMarkdown = (tableNode: any): string => {
+  if (!tableNode.content || tableNode.content.length === 0) {
+    return '';
+  }
+  
+  let markdown = '\n';
+  
+  // 🔥 Track column alignments from header row
+  const columnAlignments: (string | null)[] = [];
+  
+  // Process each row
+  tableNode.content.forEach((row: any, rowIndex: number) => {
+    if (!row.content) return;
+    
+    // Start row with pipe
+    markdown += '| ';
+    
+    // Process each cell in the row
+    row.content.forEach((cell: any, cellIndex: number) => {
+      // 🔥 Capture alignment from cell attributes (first row = header)
+      if (rowIndex === 0) {
+        columnAlignments[cellIndex] = cell.attrs?.textAlign || null;
+      }
+      
+      // Extract text from cell (handles paragraphs and formatted text)
+      let cellText = '';
+      if (cell.content) {
+        cellText = cell.content.map((n: any) => {
+          if (n.type === 'paragraph') {
+            return n.content?.map((c: any) => {
+              let text = c.text || '';
+              // Handle formatting marks (bold, italic, code, highlight, underline, super/subscript)
+              if (c.marks) {
+                c.marks.forEach((mark: any) => {
+                  if (mark.type === 'bold') text = `**${text}**`;
+                  if (mark.type === 'italic') text = `*${text}*`;
+                  if (mark.type === 'underline') text = `<u>${text}</u>`;
+                  if (mark.type === 'code') text = `\`${text}\``;
+                  if (mark.type === 'highlight') text = `==${text}==`;
+                  if (mark.type === 'superscript') text = `^${text}^`;
+                  if (mark.type === 'subscript') text = `~${text}~`;
+                });
+              }
+              return text;
+            }).join('') || '';
+          }
+          return n.text || '';
+        }).join('');
+      }
+      
+      markdown += cellText + ' | ';
+    });
+    
+    markdown += '\n';
+    
+    // 🔥 Add separator row with alignment after header (first row)
+    if (rowIndex === 0) {
+      markdown += '| ';
+      columnAlignments.forEach((align) => {
+        // Convert alignment to markdown syntax
+        let separator = '---';
+        if (align === 'center') {
+          separator = ':---:';
+        } else if (align === 'right') {
+          separator = '---:';
+        } else if (align === 'left') {
+          separator = ':---';
+        }
+        markdown += separator + ' | ';
+      });
+      markdown += '\n';
+    }
+  });
+  
+  markdown += '\n';
+  return markdown;
+};
+
 // Convert TipTap JSON to Markdown (preserves mermaid diagrams)
 const jsonToMarkdown = (json: any): string => {
   if (!json || !json.content) {
@@ -226,18 +1236,77 @@ const jsonToMarkdown = (json: any): string => {
       case 'text':
         let text2 = node.text || '';
         if (node.marks) {
+          // Process marks - order matters! Links should wrap other formatting
+          const hasLink = node.marks.find((m: any) => m.type === 'link');
+          
+          // Apply inline formatting first
           node.marks.forEach((mark: any) => {
             if (mark.type === 'bold') text2 = `**${text2}**`;
             if (mark.type === 'italic') text2 = `*${text2}*`;
+            if (mark.type === 'underline') text2 = `<u>${text2}</u>`;
             if (mark.type === 'code') text2 = `\`${text2}\``;
             if (mark.type === 'strike') text2 = `~~${text2}~~`;
+            if (mark.type === 'highlight') text2 = `==${text2}==`;
+            if (mark.type === 'superscript') text2 = `^${text2}^`;
+            if (mark.type === 'subscript') text2 = `~${text2}~`;
           });
+          
+          // Then wrap in link if present
+          if (hasLink) {
+            const href = hasLink.attrs?.href || '';
+            const title = hasLink.attrs?.title || '';
+            text2 = title ? `[${text2}](${href} "${title}")` : `[${text2}](${href})`;
+          }
         }
         return text2;
       
       case 'mermaid':
         const code = node.attrs?.code || '';
         return `\n\`\`\`mermaid\n${code}\n\`\`\`\n\n`;
+      
+      // 📢 Callout/Alert boxes
+      case 'callout':
+        const calloutType = node.attrs?.type || 'info';
+        const calloutContent = node.content?.map(processNode).join('') || '';
+        return `\n:::${calloutType}\n${calloutContent.trim()}\n:::\n\n`;
+      
+      // 🎬 YouTube embeds
+      case 'youtube':
+        const videoId = node.attrs?.videoId || '';
+        return `\n[youtube:${videoId}]\n\n`;
+      
+      // 📄 PDF embeds
+      case 'pdf':
+        const pdfSrc = node.attrs?.src || '';
+        return `\n[pdf:${pdfSrc}]\n\n`;
+      
+      // 📝 Footnotes
+      case 'footnoteReference':
+        const refId = node.attrs?.id || node.attrs?.label || '?';
+        return `[^${refId}]`;
+      
+      case 'footnoteDefinition':
+        const defId = node.attrs?.id || node.attrs?.label || '?';
+        const defContent = node.content?.map(processNode).join('').trim() || '';
+        return `\n[^${defId}]: ${defContent}\n`;
+      
+      case 'footnotesSection':
+        // Container for all footnote definitions
+        return '\n' + (node.content?.map(processNode).join('') || '') + '\n';
+      
+      case 'toc':
+        // Table of Contents placeholder
+        return '\n\n[TOC]\n\n';
+      
+      case 'fontawesomeIcon':
+        // FontAwesome icon - format as :fa-icon:
+        const faIcon = node.attrs?.icon || node.marks?.[0]?.attrs?.icon;
+        const faStyle = node.attrs?.style || node.marks?.[0]?.attrs?.style || 'solid';
+        if (faStyle === 'solid') {
+          return `:fa-${faIcon}:`;
+        } else {
+          return `:fa-${faStyle}-${faIcon}:`;
+        }
       
       case 'codeBlock':
         const codeContent = node.content?.map((n: any) => n.text || '').join('') || '';
@@ -258,10 +1327,37 @@ const jsonToMarkdown = (json: any): string => {
       
       case 'blockquote':
         const quoteText = node.content?.map(processNode).join('') || '';
-        return `> ${quoteText}\n\n`;
+        const quoteType = node.attrs?.type;
+        
+        if (quoteType && quoteType !== 'default') {
+          // GitHub-style callout format
+          return `> [!${quoteType}]\n> ${quoteText.trim().replace(/\n/g, '\n> ')}\n\n`;
+        }
+        
+        // Regular blockquote
+        return `> ${quoteText.trim().replace(/\n/g, '\n> ')}\n\n`;
       
       case 'hardBreak':
         return '\n';
+      
+      // 🔥 FIX: Add table support (prevents tables from disappearing!)
+      case 'table':
+        return convertTableToMarkdown(node);
+      
+      case 'tableRow':
+        // Handled by convertTableToMarkdown
+        return '';
+      
+      case 'tableHeader':
+      case 'tableCell':
+        // Extract text from cell content
+        const cellText = node.content?.map((n: any) => {
+          if (n.type === 'paragraph') {
+            return n.content?.map(processNode).join('') || '';
+          }
+          return processNode(n);
+        }).join('') || '';
+        return cellText;
       
       default:
         // Fallback: try to process content if it exists
@@ -292,7 +1388,9 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
   const [title, setTitle] = useState(documentTitle);
   const [showAIModal, setShowAIModal] = useState(false);
   const [showDiagramMenu, setShowDiagramMenu] = useState(false);
+  const [showIconPicker, setShowIconPicker] = useState(false);
   const [showMindmapChoiceModal, setShowMindmapChoiceModal] = useState(false);
+  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
   const [aiSuggestionsEnabled, setAiSuggestionsEnabled] = useState(false);
   const [aiAutocompleteEnabled, setAiAutocompleteEnabled] = useState(true); // Enabled by default!
   
@@ -416,6 +1514,7 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
       StarterKit.configure({
         heading: { levels: [1, 2, 3, 4, 5, 6] },
         link: false,
+        blockquote: false, // Use our EnhancedBlockquote instead
       }),
       Placeholder.configure({
         placeholder: 'Start writing your document... Type "/" for commands',
@@ -428,20 +1527,145 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
         resizable: true,
       }),
       TableRow,
-      TableCell,
-      TableHeader,
+      // 🔥 Configure TableCell to support text alignment
+      TableCell.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            textAlign: {
+              default: null,
+              parseHTML: element => element.getAttribute('data-align') || element.style.textAlign || null,
+              renderHTML: attributes => {
+                if (!attributes.textAlign) {
+                  return {};
+                }
+                return {
+                  'data-align': attributes.textAlign,
+                  style: `text-align: ${attributes.textAlign}`,
+                };
+              },
+            },
+          };
+        },
+      }),
+      // 🔥 Configure TableHeader to support text alignment
+      TableHeader.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            textAlign: {
+              default: null,
+              parseHTML: element => element.getAttribute('data-align') || element.style.textAlign || null,
+              renderHTML: attributes => {
+                if (!attributes.textAlign) {
+                  return {};
+                }
+                return {
+                  'data-align': attributes.textAlign,
+                  style: `text-align: ${attributes.textAlign}`,
+                };
+              },
+            },
+          };
+        },
+      }),
       TaskList,
       TaskItem.configure({
         nested: true,
       }),
-      Image.configure({
-        inline: true,
+      // 🖼️ Enhanced Images - drag/drop, paste, captions, alignment, RESIZE
+      Image.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            width: {
+              default: null,
+              parseHTML: element => element.getAttribute('width'),
+              renderHTML: attributes => {
+                if (!attributes.width) return {};
+                return { width: attributes.width };
+              },
+            },
+            height: {
+              default: null,
+              parseHTML: element => element.getAttribute('height'),
+              renderHTML: attributes => {
+                if (!attributes.height) return {};
+                return { height: attributes.height };
+              },
+            },
+            caption: {
+              default: null,
+              parseHTML: element => element.getAttribute('data-caption'),
+              renderHTML: attributes => {
+                if (!attributes.caption) return {};
+                return { 'data-caption': attributes.caption };
+              },
+            },
+            align: {
+              default: 'center',
+              parseHTML: element => element.getAttribute('data-align') || 'center',
+              renderHTML: attributes => {
+                return { 'data-align': attributes.align || 'center' };
+              },
+            },
+          };
+        },
+        addNodeView() {
+          return ReactNodeViewRenderer(ResizableImageNodeView);
+        },
+        addProseMirrorPlugins() {
+          return [
+            ...(this.parent?.() || []),
+          ];
+        },
+      }).configure({
+        inline: false,
         allowBase64: true,
+        HTMLAttributes: {
+          class: 'editor-image',
+        },
       }),
       Link.configure({
-        openOnClick: false,
-        HTMLAttributes: { class: 'text-primary underline cursor-pointer' },
+        openOnClick: false, // Will open with Cmd/Ctrl+Click instead
+        HTMLAttributes: {
+          class: 'text-primary underline cursor-pointer hover:text-primary/80 transition-colors',
+          rel: 'noopener noreferrer',
+          target: '_blank',
+        },
+        validate: (href) => /^https?:\/\//.test(href), // Only http(s) links
       }),
+      // 🎨 Text Highlighting - Yellow marker effect!
+      Highlight.configure({
+        multicolor: false, // Single color for now (yellow)
+        HTMLAttributes: {
+          class: 'highlighted-text',
+        },
+      }),
+      // 🎨 More text formatting
+      Underline,
+      Superscript,
+      Subscript,
+      // 📢 Callout/Alert Boxes
+      CalloutNode,
+      // 🎬 YouTube Embeds
+      YouTubeNode,
+      // 📹 Vimeo Embeds
+      VimeoNode,
+      // 📄 PDF Embeds
+      PDFNode,
+      // 💻 Gist Embeds
+      GistNode,
+      // 💬 Enhanced Blockquotes
+      EnhancedBlockquote,
+      // 📝 Footnotes
+      FootnoteReference,
+      FootnoteDefinition,
+      FootnotesSection,
+      // 📑 Table of Contents
+      TOCNode,
+      // 🎨 FontAwesome Icons
+      FontAwesomeIcon,
       MermaidNode,
       SlashCommandExtension.configure({
         suggestion: slashCommandSuggestion(
@@ -475,6 +1699,42 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
         class: 'prose prose-lg max-w-none focus:outline-none min-h-[calc(100vh-200px)] px-8 py-6',
       },
       handleDOMEvents: {
+        // Handle Cmd/Ctrl+Click to open links
+        click: (view, event) => {
+          const target = event.target as HTMLElement;
+          
+          // Check if clicked on a link
+          if (target.tagName === 'A' || target.closest('a')) {
+            const link = (target.tagName === 'A' ? target : target.closest('a')) as HTMLAnchorElement;
+            const href = link.getAttribute('href');
+            
+            // Open link if Cmd (Mac) or Ctrl (Windows/Linux) is pressed
+            if ((event.metaKey || event.ctrlKey) && href) {
+              event.preventDefault();
+              window.open(href, '_blank', 'noopener,noreferrer');
+              return true;
+            }
+          }
+          
+          return false;
+        },
+        // Handle YouTube URL pastes - convert to embeds automatically
+        paste: (view, event) => {
+          const text = event.clipboardData?.getData('text/plain');
+          if (text) {
+            const youtubeMatch = text.match(/^https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})(?:[&?][\w=&-]*)?$/);
+            if (youtubeMatch) {
+              event.preventDefault();
+              const videoId = youtubeMatch[1];
+              const { state, dispatch } = view;
+              const node = state.schema.nodes.youtube.create({ videoId });
+              const tr = state.tr.replaceSelectionWith(node);
+              dispatch(tr);
+              return true;
+            }
+          }
+          return false;
+        },
         contextmenu: (view, event) => {
           event.preventDefault();
           const { from, to } = view.state.selection;
@@ -569,6 +1829,52 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
       onEditorReady(editor);
     }
   }, [editor, onEditorReady]);
+  
+  // 🔥 Apply Prism syntax highlighting to code blocks
+  useEffect(() => {
+    // Safety check: ensure editor and view are ready
+    if (!editor || !editor.view || !editor.view.dom) {
+      return;
+    }
+    
+    const highlightCodeBlocks = async () => {
+      try {
+        const editorElement = editor.view.dom;
+        const codeBlocks = editorElement.querySelectorAll('pre code[class*="language-"]');
+        
+        for (const block of Array.from(codeBlocks)) {
+          // Extract language from class
+          const className = block.className;
+          const match = className.match(/language-(\w+)/);
+          
+          if (match && match[1]) {
+            const lang = match[1];
+            
+            // Load language if not already loaded
+            await loadPrismLanguage(lang);
+            
+            // Highlight the block
+            if (Prism.languages[lang]) {
+              try {
+                Prism.highlightElement(block as HTMLElement);
+              } catch (e) {
+                console.warn('Prism highlight failed:', e);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('Code highlighting error:', error);
+      }
+    };
+    
+    // Small delay to ensure DOM is ready
+    const timeoutId = setTimeout(() => {
+      highlightCodeBlocks();
+    }, 100);
+    
+    return () => clearTimeout(timeoutId);
+  }, [editor, editor?.state.doc]);
 
   // Update title - FIXED: removed onTitleChange from deps to prevent loop
   useEffect(() => {
@@ -900,11 +2206,23 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
       case 'italic':
         editor.chain().focus().toggleItalic().run();
         break;
+      case 'underline':
+        editor.chain().focus().toggleUnderline().run();
+        break;
       case 'strikethrough':
         editor.chain().focus().toggleStrike().run();
         break;
+      case 'highlight':
+        editor.chain().focus().toggleHighlight().run();
+        break;
       case 'code':
         editor.chain().focus().toggleCode().run();
+        break;
+      case 'superscript':
+        editor.chain().focus().toggleSuperscript().run();
+        break;
+      case 'subscript':
+        editor.chain().focus().toggleSubscript().run();
         break;
       case 'link':
         const url = window.prompt('Enter URL:');
@@ -1045,6 +2363,28 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
               }}
             />
 
+            {            /* Icon Picker */}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowIconPicker(true)}
+              title="Insert Icon"
+              className="gap-1"
+            >
+              <IconsIcon className="h-4 w-4" />
+            </Button>
+            
+            {/* Keyboard Shortcuts */}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowKeyboardShortcuts(true)}
+              title="Keyboard Shortcuts (?)"
+              className="gap-1"
+            >
+              <Keyboard className="h-4 w-4" />
+            </Button>
+
             <Separator orientation="vertical" className="h-6 mx-1" />
 
             {/* WYSIWYG / Markdown Toggle */}
@@ -1116,7 +2456,11 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
       {/* Editor Content - Conditional based on mode */}
       <div className="flex-1 overflow-y-auto bg-background">
         {editorMode === 'wysiwyg' ? (
+          <>
           <EditorContent editor={editor} />
+            {editor && <FloatingToolbar editor={editor} />}
+            {editor && <LinkHoverToolbar editor={editor} />}
+          </>
         ) : (
           <textarea
             ref={markdownTextareaRef}
@@ -1198,6 +2542,29 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
           onBasicAction={handleContextBasicAction}
         />
       )}
+
+      {/* Keyboard Shortcuts Panel */}
+      <KeyboardShortcutsPanel
+        open={showKeyboardShortcuts}
+        onOpenChange={setShowKeyboardShortcuts}
+      />
+      
+      {/* Icon Picker Modal */}
+      <IconPickerModal
+        isOpen={showIconPicker}
+        onClose={() => setShowIconPicker(false)}
+        onSelectIcon={(iconName, style) => {
+          if (!editor) return;
+          
+          // 🔧 FIX: Use the proper command to insert as a node
+          editor
+            .chain()
+            .focus()
+            .insertFontAwesomeIcon(iconName, style)
+            .insertContent(' ') // Add space after icon
+            .run();
+        }}
+      />
     </div>
   );
 };

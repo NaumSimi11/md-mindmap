@@ -72,6 +72,32 @@
   margin-bottom: 1rem;
 }
 
+/* FIX: Add bullet points and numbering */
+.ProseMirror ul {
+  list-style-type: disc;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal;
+}
+
+/* Nested list styles */
+.ProseMirror ul ul {
+  list-style-type: circle;
+}
+
+.ProseMirror ul ul ul {
+  list-style-type: square;
+}
+
+.ProseMirror ol ol {
+  list-style-type: lower-alpha;
+}
+
+.ProseMirror ol ol ol {
+  list-style-type: lower-roman;
+}
+
 .ProseMirror li {
   margin-bottom: 0.5rem;
 }
@@ -102,39 +128,218 @@
   opacity: 0.6;
 }
 
-/* Code */
+/* Code - Inline */
 .ProseMirror code {
   background: hsl(var(--muted));
   border-radius: 0.25rem;
   padding: 0.2rem 0.4rem;
-  font-family: 'Courier New', Courier, monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', Courier, monospace;
   font-size: 0.9em;
 }
 
+/* Code Blocks - Professional Styling with Syntax Highlighting 🔥 */
 .ProseMirror pre {
-  background: hsl(var(--muted));
-  border-radius: 0.5rem;
-  padding: 1rem;
-  overflow-x: auto;
-  margin-bottom: 1rem;
-  font-family: 'Courier New', Courier, monospace;
+  background: #2d2d2d !important;
+  padding: 0 !important;
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 1rem 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  position: relative;
 }
 
 .ProseMirror pre code {
   background: none;
-  padding: 0;
+  padding: 1rem;
+  display: block;
   font-size: 0.9rem;
+  line-height: 1.6;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', Courier, monospace;
+  color: #ccc;
+  overflow-x: auto;
+}
+
+/* Line Numbers Styling 🔥 */
+.ProseMirror pre.line-numbers {
+  position: relative;
+  padding-left: 3.8em !important;
+  counter-reset: linenumber;
+}
+
+.ProseMirror pre.line-numbers > code {
+  position: relative;
+  white-space: pre;
+  padding-left: 0 !important;
+}
+
+.ProseMirror pre.line-numbers .line-numbers-rows {
+  position: absolute;
+  pointer-events: none;
+  top: 0;
+  left: 0;
+  width: 3em;
+  letter-spacing: -1px;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  user-select: none;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 1rem 0;
+}
+
+.ProseMirror pre.line-numbers .line-numbers-rows > span {
+  display: block;
+  counter-increment: linenumber;
+}
+
+.ProseMirror pre.line-numbers .line-numbers-rows > span:before {
+  content: counter(linenumber);
+  color: #999;
+  display: block;
+  padding-right: 0.8em;
+  text-align: right;
+  font-size: 0.85em;
+}
+
+/* Language Badges 🔥 */
+.ProseMirror pre.language-javascript::before { content: "JavaScript"; position: absolute; top: 0.5rem; right: 0.5rem; padding: 0.25rem 0.5rem; background: rgba(247, 223, 30, 0.15); color: #f7df1e; border-radius: 4px; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; font-family: system-ui; font-weight: 600; }
+.ProseMirror pre.language-typescript::before { content: "TypeScript"; position: absolute; top: 0.5rem; right: 0.5rem; padding: 0.25rem 0.5rem; background: rgba(49, 120, 198, 0.15); color: #3178c6; border-radius: 4px; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; font-family: system-ui; font-weight: 600; }
+.ProseMirror pre.language-python::before { content: "Python"; position: absolute; top: 0.5rem; right: 0.5rem; padding: 0.25rem 0.5rem; background: rgba(53, 114, 165, 0.15); color: #3572a5; border-radius: 4px; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; font-family: system-ui; font-weight: 600; }
+.ProseMirror pre.language-rust::before { content: "Rust"; position: absolute; top: 0.5rem; right: 0.5rem; padding: 0.25rem 0.5rem; background: rgba(222, 165, 132, 0.15); color: #dea584; border-radius: 4px; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; font-family: system-ui; font-weight: 600; }
+.ProseMirror pre.language-go::before { content: "Go"; position: absolute; top: 0.5rem; right: 0.5rem; padding: 0.25rem 0.5rem; background: rgba(0, 173, 216, 0.15); color: #00add8; border-radius: 4px; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; font-family: system-ui; font-weight: 600; }
+.ProseMirror pre.language-java::before { content: "Java"; position: absolute; top: 0.5rem; right: 0.5rem; padding: 0.25rem 0.5rem; background: rgba(176, 114, 25, 0.15); color: #b07219; border-radius: 4px; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; font-family: system-ui; font-weight: 600; }
+.ProseMirror pre.language-css::before { content: "CSS"; position: absolute; top: 0.5rem; right: 0.5rem; padding: 0.25rem 0.5rem; background: rgba(86, 61, 124, 0.15); color: #563d7c; border-radius: 4px; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; font-family: system-ui; font-weight: 600; }
+.ProseMirror pre.language-json::before { content: "JSON"; position: absolute; top: 0.5rem; right: 0.5rem; padding: 0.25rem 0.5rem; background: rgba(41, 128, 185, 0.15); color: #2980b9; border-radius: 4px; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; font-family: system-ui; font-weight: 600; }
+
+/* Scrollbar styling for code blocks */
+.ProseMirror pre code::-webkit-scrollbar {
+  height: 8px;
+}
+
+.ProseMirror pre code::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.ProseMirror pre code::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.ProseMirror pre code::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 /* Blockquote */
+/* 💬 Enhanced Blockquotes - GitHub-style with color themes */
 .ProseMirror blockquote {
   border-left: 4px solid hsl(var(--primary));
-  padding-left: 1rem;
-  margin-left: 0;
-  margin-right: 0;
-  margin-bottom: 1rem;
-  color: hsl(var(--muted-foreground));
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  background: hsl(var(--muted) / 0.3);
+  border-radius: 0 0.5rem 0.5rem 0;
   font-style: italic;
+  color: hsl(var(--foreground));
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.ProseMirror blockquote:hover {
+  background: hsl(var(--muted) / 0.4);
+  transform: translateX(2px);
+}
+
+/* Default/generic blockquote */
+.ProseMirror blockquote[data-blockquote-type="default"] {
+  border-left-color: hsl(var(--primary));
+}
+
+/* Note blockquote - Blue theme */
+.ProseMirror blockquote[data-blockquote-type="note"],
+.ProseMirror blockquote.blockquote-note {
+  border-left-color: #3b82f6;
+  background: #eff6ff;
+}
+
+.ProseMirror blockquote[data-blockquote-type="note"]::before,
+.ProseMirror blockquote.blockquote-note::before {
+  content: "📘 Note";
+  display: block;
+  font-weight: 600;
+  font-style: normal;
+  color: #3b82f6;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+/* Tip blockquote - Green theme */
+.ProseMirror blockquote[data-blockquote-type="tip"],
+.ProseMirror blockquote.blockquote-tip {
+  border-left-color: #10b981;
+  background: #f0fdf4;
+}
+
+.ProseMirror blockquote[data-blockquote-type="tip"]::before,
+.ProseMirror blockquote.blockquote-tip::before {
+  content: "💡 Tip";
+  display: block;
+  font-weight: 600;
+  font-style: normal;
+  color: #10b981;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+/* Important blockquote - Purple theme */
+.ProseMirror blockquote[data-blockquote-type="important"],
+.ProseMirror blockquote.blockquote-important {
+  border-left-color: #a855f7;
+  background: #faf5ff;
+}
+
+.ProseMirror blockquote[data-blockquote-type="important"]::before,
+.ProseMirror blockquote.blockquote-important::before {
+  content: "⭐ Important";
+  display: block;
+  font-weight: 600;
+  font-style: normal;
+  color: #a855f7;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+/* Warning blockquote - Orange theme */
+.ProseMirror blockquote[data-blockquote-type="warning"],
+.ProseMirror blockquote.blockquote-warning {
+  border-left-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.ProseMirror blockquote[data-blockquote-type="warning"]::before,
+.ProseMirror blockquote.blockquote-warning::before {
+  content: "⚠️ Warning";
+  display: block;
+  font-weight: 600;
+  font-style: normal;
+  color: #f59e0b;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+/* Caution blockquote - Red theme */
+.ProseMirror blockquote[data-blockquote-type="caution"],
+.ProseMirror blockquote.blockquote-caution {
+  border-left-color: #ef4444;
+  background: #fef2f2;
+}
+
+.ProseMirror blockquote[data-blockquote-type="caution"]::before,
+.ProseMirror blockquote.blockquote-caution::before {
+  content: "🚨 Caution";
+  display: block;
+  font-weight: 600;
+  font-style: normal;
+  color: #ef4444;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
 }
 
 /* Horizontal Rule */
@@ -186,6 +391,22 @@
   min-width: 100px;
   position: relative;
   transition: background-color 0.2s ease;
+}
+
+/* 🔥 Table Cell Alignment Support */
+.ProseMirror th[data-align="left"],
+.ProseMirror td[data-align="left"] {
+  text-align: left;
+}
+
+.ProseMirror th[data-align="center"],
+.ProseMirror td[data-align="center"] {
+  text-align: center;
+}
+
+.ProseMirror th[data-align="right"],
+.ProseMirror td[data-align="right"] {
+  text-align: right;
 }
 
 .ProseMirror th {
@@ -317,9 +538,529 @@
   font-family: inherit;
 }
 
-/* Import common fonts for better rendering */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* Links - Make them more visible and add helpful cursor */
+.ProseMirror a {
+  position: relative;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  transition: all 0.2s ease;
+}
+
+.ProseMirror a:hover {
+  text-decoration-thickness: 2px;
+}
+
+/* Tooltip hint for links */
+.ProseMirror a::after {
+  content: attr(href);
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  font-size: 12px;
+  border-radius: 4px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 1000;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ProseMirror a:hover::after {
+  opacity: 1;
+}
+
+/* Hint text for Cmd/Ctrl+Click */
+.ProseMirror a::before {
+  content: "⌘ Click to open";
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: 4px;
+  padding: 2px 6px;
+  background: rgba(59, 130, 246, 0.1);
+  color: rgb(59, 130, 246);
+  font-size: 10px;
+  border-radius: 3px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 1000;
+  font-weight: 500;
+}
+
+@media (not (pointer: coarse)) {
+  /* Only show on non-touch devices */
+  .ProseMirror a:hover::before {
+    opacity: 1;
+  }
+}
+
+/* Windows/Linux users see Ctrl instead of Cmd */
+@media (platform: windows), (platform: linux) {
+  .ProseMirror a::before {
+    content: "Ctrl+Click to open";
+  }
+}
+
+/* Emoji Support 🎉 */
+.ProseMirror .emoji {
+  height: 1.2em;
+  width: 1.2em;
+  margin: 0 0.05em 0 0.1em;
+  vertical-align: -0.1em;
+  display: inline-block;
+  font-style: normal;
+  font-weight: normal;
+  line-height: 1;
+}
+
+/* 🎨 Text Highlighting - Yellow marker effect! */
+.ProseMirror mark,
+.ProseMirror .highlighted-text {
+  background-color: #fef08a; /* Tailwind yellow-200 */
+  background-image: linear-gradient(to right, #fef08a 0%, #fde047 100%); /* Subtle gradient */
+  color: inherit;
+  padding: 0.1em 0.2em;
+  border-radius: 0.2em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  font-weight: inherit;
+  transition: background-color 0.2s ease;
+}
+
+/* 🎨 Underline */
+.ProseMirror u {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
+}
+
+/* 🎨 Superscript and Subscript */
+.ProseMirror sup {
+  vertical-align: super;
+  font-size: 0.75em;
+  line-height: 0;
+}
+
+.ProseMirror sub {
+  vertical-align: sub;
+  font-size: 0.75em;
+  line-height: 0;
+}
+
+/* 📝 Footnotes - Professional academic style */
+.ProseMirror .footnote-ref {
+  font-size: 0.75em;
+  line-height: 0;
+  position: relative;
+  vertical-align: super;
+}
+
+.ProseMirror .footnote-ref-link {
+  color: hsl(var(--primary));
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.ProseMirror .footnote-ref-link:hover {
+  background: hsl(var(--primary) / 0.1);
+  text-decoration: underline;
+}
+
+/* Footnotes section at bottom of document */
+.ProseMirror .footnotes-section {
+  margin-top: 3rem;
+  padding-top: 2rem;
+  border-top: 2px solid hsl(var(--border));
+}
+
+.ProseMirror .footnotes-separator {
+  display: none; /* Already have border-top */
+}
+
+.ProseMirror .footnote-def {
+  margin: 0.75rem 0;
+  padding: 0.5rem 0;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: hsl(var(--muted-foreground));
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ProseMirror .footnote-backref {
+  color: hsl(var(--primary));
+  text-decoration: none;
+  font-weight: 600;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.ProseMirror .footnote-backref:hover {
+  text-decoration: underline;
+  transform: translateX(-2px);
+}
+
+.ProseMirror .footnote-content {
+  flex: 1;
+}
+
+/* Footnote hover preview tooltip */
+.ProseMirror .footnote-ref-link[title] {
+  position: relative;
+}
+
+.ProseMirror .footnote-ref-link[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: hsl(var(--popover));
+  border: 1px solid hsl(var(--border));
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  white-space: nowrap;
+  max-width: 300px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  pointer-events: none;
+  margin-bottom: 0.5rem;
+  font-weight: normal;
+  vertical-align: baseline;
+}
+
+/* Dark mode adjustments for footnotes */
+@media (prefers-color-scheme: dark) {
+  .ProseMirror .footnotes-section {
+    border-top-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  .ProseMirror .footnote-def {
+    color: hsl(var(--muted-foreground));
+  }
+}
+
+/* Highlighted text hover effect */
+.ProseMirror mark:hover,
+.ProseMirror .highlighted-text:hover {
+  background-color: #fde047; /* Slightly darker yellow on hover */
+}
+
+/* Dark mode support for highlighting */
+@media (prefers-color-scheme: dark) {
+  .ProseMirror mark,
+  .ProseMirror .highlighted-text {
+    background-color: #854d0e; /* Dark mode: amber-800 */
+    background-image: linear-gradient(to right, #854d0e 0%, #a16207 100%);
+    color: #fef3c7; /* Light text color for readability */
+  }
+  
+  .ProseMirror mark:hover,
+  .ProseMirror .highlighted-text:hover {
+    background-color: #a16207; /* amber-700 on hover */
+  }
+}
+
+/* Highlighted text selection (for editing) */
+.ProseMirror mark::selection,
+.ProseMirror .highlighted-text::selection {
+  background-color: rgba(59, 130, 246, 0.3); /* Blue selection */
+}
+
+/* 📢 Callout/Alert Boxes - Professional Notion-style! */
+.ProseMirror .callout {
+  margin: 1.5rem 0;
+  padding: 1rem 1.25rem;
+  border-radius: 0.5rem;
+  border-left: 4px solid;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.ProseMirror .callout p:last-child {
+  margin-bottom: 0;
+}
+
+/* Info Callout - Blue */
+.ProseMirror .callout-info {
+  background-color: rgba(59, 130, 246, 0.1);
+  border-left-color: #3b82f6;
+  color: inherit;
+}
+
+.ProseMirror .callout-info::before {
+  content: "💡 INFO";
+  display: block;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #3b82f6;
+  margin-bottom: 0.5rem;
+  letter-spacing: 0.05em;
+}
+
+/* Warning Callout - Orange/Yellow */
+.ProseMirror .callout-warning {
+  background-color: rgba(251, 146, 60, 0.1);
+  border-left-color: #fb923c;
+  color: inherit;
+}
+
+.ProseMirror .callout-warning::before {
+  content: "⚠️ WARNING";
+  display: block;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #ea580c;
+  margin-bottom: 0.5rem;
+  letter-spacing: 0.05em;
+}
+
+/* Danger Callout - Red */
+.ProseMirror .callout-danger {
+  background-color: rgba(239, 68, 68, 0.1);
+  border-left-color: #ef4444;
+  color: inherit;
+}
+
+.ProseMirror .callout-danger::before {
+  content: "🚨 DANGER";
+  display: block;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #dc2626;
+  margin-bottom: 0.5rem;
+  letter-spacing: 0.05em;
+}
+
+/* Success Callout - Green */
+.ProseMirror .callout-success {
+  background-color: rgba(34, 197, 94, 0.1);
+  border-left-color: #22c55e;
+  color: inherit;
+}
+
+.ProseMirror .callout-success::before {
+  content: "✅ SUCCESS";
+  display: block;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #16a34a;
+  margin-bottom: 0.5rem;
+  letter-spacing: 0.05em;
+}
+
+/* Hover effect for all callouts */
+.ProseMirror .callout:hover {
+  transform: translateX(2px);
+  box-shadow: -4px 0 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .ProseMirror .callout-info {
+    background-color: rgba(59, 130, 246, 0.15);
+  }
+  
+  .ProseMirror .callout-warning {
+    background-color: rgba(251, 146, 60, 0.15);
+  }
+  
+  .ProseMirror .callout-danger {
+    background-color: rgba(239, 68, 68, 0.15);
+  }
+  
+  .ProseMirror .callout-success {
+    background-color: rgba(34, 197, 94, 0.15);
+  }
+}
+
+/* 🎬 YouTube Embeds - Resizable wrapper */
+.ProseMirror .youtube-embed {
+  position: relative;
+  width: 800px;
+  max-width: 100%;
+  margin: 1.5rem auto;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  background: #000;
+  resize: horizontal;
+  overflow: auto;
+  min-width: 300px;
+  aspect-ratio: 16 / 9;
+}
+
+.ProseMirror .youtube-embed:hover {
+  outline: 2px solid hsl(var(--primary) / 0.3);
+}
+
+.ProseMirror .youtube-embed.ProseMirror-selectednode {
+  outline: 3px solid hsl(var(--primary));
+}
+
+.ProseMirror .youtube-embed iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0.5rem;
+  display: block;
+}
+
+/* 🖼️ Enhanced Images - with captions, alignment, and resize */
+.ProseMirror img.editor-image {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1.5rem auto;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ProseMirror img.editor-image:hover {
+  transform: scale(1.01);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Image alignment */
+.ProseMirror img.editor-image[data-align="left"] {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+.ProseMirror img.editor-image[data-align="center"] {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.ProseMirror img.editor-image[data-align="right"] {
+  margin-left: auto;
+  margin-right: 0;
+}
+
+/* Image with caption */
+.ProseMirror img.editor-image[data-caption]::after {
+  content: attr(data-caption);
+  display: block;
+  text-align: center;
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+  margin-top: 0.5rem;
+  font-style: italic;
+}
+
+/* Image selection state */
+.ProseMirror img.ProseMirror-selectednode {
+  outline: 3px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
+/* Drag & drop indicator */
+.ProseMirror img.editor-image {
+  cursor: move;
+}
+
+.ProseMirror img.editor-image:active {
+  cursor: grabbing;
+}
+
+/* 📄 PDF Embeds - Resizable viewer */
+.ProseMirror .pdf-embed {
+  width: 900px;
+  max-width: 100%;
+  height: 600px;
+  margin: 1.5rem auto;
+  border-radius: 0.5rem;
+  overflow: auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid hsl(var(--border));
+  resize: both;
+  min-width: 300px;
+  min-height: 400px;
+  position: relative;
+}
+
+.ProseMirror .pdf-embed:hover {
+  outline: 2px solid hsl(var(--primary) / 0.3);
+}
+
+.ProseMirror .pdf-embed.ProseMirror-selectednode {
+  outline: 3px solid hsl(var(--primary));
+}
+
+.ProseMirror .pdf-embed iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+/* PDF loading state */
+.ProseMirror .pdf-embed::before {
+  content: "Loading PDF...";
+  display: block;
+  text-align: center;
+  padding: 2rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+}
+
+/* Resize handle hint */
+.ProseMirror .pdf-embed::after,
+.ProseMirror .youtube-embed::after {
+  content: "↔";
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  background: hsl(var(--primary));
+  color: white;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.ProseMirror .pdf-embed:hover::after,
+.ProseMirror .youtube-embed:hover::after {
+  opacity: 0.7;
+}
+
+/* Native emoji rendering */
+.ProseMirror img.emoji {
+  height: 1em;
+  width: 1em;
+  margin: 0 .05em 0 .1em;
+  vertical-align: -0.1em;
+  border: none;
+  background: none;
+}
+
+/* Make sure emojis are readable */
+.ProseMirror span[role="img"] {
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", sans-serif;
+}
 
 /* Responsive */
 @media (max-width: 768px) {
@@ -339,4 +1080,567 @@
   .ProseMirror h3 {
     font-size: 1.25rem;
   }
+  
+  /* Hide link tooltips on mobile */
+  .ProseMirror a::before,
+  .ProseMirror a::after {
+    display: none;
+  }
+}
+
+/* ✨ Enhanced Hover States & Transitions */
+.ProseMirror a {
+  transition: all 0.2s ease;
+}
+
+.ProseMirror a:hover {
+  text-decoration-thickness: 2px;
+  transform: translateY(-1px);
+}
+
+/* Only apply hover to inline code, not code blocks */
+.ProseMirror p code,
+.ProseMirror li code,
+.ProseMirror td code,
+.ProseMirror th code {
+  transition: all 0.15s ease;
+}
+
+.ProseMirror p code:hover,
+.ProseMirror li code:hover,
+.ProseMirror td code:hover,
+.ProseMirror th code:hover {
+  background: hsl(var(--muted) / 0.8);
+  transform: scale(1.02);
+}
+
+/* Prevent hover effects on code blocks */
+.ProseMirror pre code {
+  transition: none;
+}
+
+.ProseMirror pre code:hover {
+  background: none;
+  transform: none;
+}
+
+.ProseMirror .callout {
+  transition: all 0.2s ease;
+}
+
+.ProseMirror .callout:hover {
+  box-shadow: -6px 0 12px rgba(0, 0, 0, 0.08);
+}
+
+/* 🌙 Better Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  .ProseMirror pre {
+    background: #1e1e1e !important;
+    border-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .ProseMirror code {
+    background: hsl(var(--muted) / 0.5);
+    color: #e5c07b;
+  }
+
+  .ProseMirror a {
+    color: #61afef;
+  }
+
+  .ProseMirror a:hover {
+    color: #84c0f5;
+  }
+
+  .ProseMirror table th {
+    background: hsl(var(--muted) / 0.3);
+  }
+
+  .ProseMirror table tr:hover {
+    background: hsl(var(--accent) / 0.5);
+  }
+
+  .ProseMirror blockquote {
+    background: hsl(var(--muted) / 0.2);
+  }
+
+  /* Dark mode blockquote types */
+  .ProseMirror blockquote[data-blockquote-type="note"],
+  .ProseMirror blockquote.blockquote-note {
+    background: rgba(59, 130, 246, 0.1);
+  }
+
+  .ProseMirror blockquote[data-blockquote-type="tip"],
+  .ProseMirror blockquote.blockquote-tip {
+    background: rgba(16, 185, 129, 0.1);
+  }
+
+  .ProseMirror blockquote[data-blockquote-type="important"],
+  .ProseMirror blockquote.blockquote-important {
+    background: rgba(168, 85, 247, 0.1);
+  }
+
+  .ProseMirror blockquote[data-blockquote-type="warning"],
+  .ProseMirror blockquote.blockquote-warning {
+    background: rgba(245, 158, 11, 0.1);
+  }
+
+  .ProseMirror blockquote[data-blockquote-type="caution"],
+  .ProseMirror blockquote.blockquote-caution {
+    background: rgba(239, 68, 68, 0.1);
+  }
+
+  .ProseMirror .youtube-embed,
+  .ProseMirror .pdf-embed {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+
+  .ProseMirror img.editor-image {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .ProseMirror img.editor-image:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* 🎯 Selection States */
+.ProseMirror ::selection {
+  background: hsl(var(--primary) / 0.2);
+}
+
+.ProseMirror ::-moz-selection {
+  background: hsl(var(--primary) / 0.2);
+}
+
+/* 🎨 Floating Toolbar Animations */
+.floating-toolbar {
+  animation: slideUp 0.2s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 🔗 Link Hover Toolbar - Appears when cursor is on a link */
+.link-hover-toolbar {
+  animation: slideUp 0.2s ease-out;
+  backdrop-filter: blur(8px);
+  background: hsl(var(--popover) / 0.95) !important;
+}
+
+.link-hover-toolbar button {
+  transition: all 0.15s ease;
+}
+
+.link-hover-toolbar button:hover {
+  background: hsl(var(--accent));
+  transform: scale(1.05);
+}
+
+.link-hover-toolbar input {
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+}
+
+.link-hover-toolbar input:focus {
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 2px hsl(var(--primary) / 0.1);
+}
+
+/* Dark mode adjustments for link toolbar */
+@media (prefers-color-scheme: dark) {
+  .link-hover-toolbar {
+    background: hsl(var(--popover) / 0.98) !important;
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* 🖼️ Resizable Image - Selected State */
+.resizable-image-container.selected {
+  outline: 3px solid hsl(var(--primary));
+  outline-offset: 4px;
+  border-radius: 0.5rem;
+}
+
+.resizable-image-container.resizing {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+.resize-handle {
+  transition: transform 0.2s ease;
+}
+
+.resize-handle:hover {
+  transform: scale(1.2);
+}
+
+/* 📑 Table of Contents - Professional navigation component */
+.toc-wrapper {
+  margin: 2rem 0;
+}
+
+.toc-container {
+  background: hsl(var(--muted) / 0.3);
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  max-width: 600px;
+}
+
+.toc-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid hsl(var(--border));
+}
+
+.toc-icon {
+  color: hsl(var(--primary));
+  flex-shrink: 0;
+}
+
+.toc-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  margin: 0;
+}
+
+.toc-empty {
+  padding: 1rem;
+  text-align: center;
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+}
+
+.toc-empty p {
+  margin: 0;
+}
+
+.toc-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.toc-link {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  color: hsl(var(--foreground));
+  text-decoration: none;
+  border-radius: 0.5rem;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+
+.toc-link:hover {
+  background: hsl(var(--accent));
+  border-left-color: hsl(var(--primary));
+  transform: translateX(4px);
+}
+
+/* Indent based on heading level */
+.toc-link.toc-level-1 {
+  padding-left: 0.75rem;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.toc-link.toc-level-2 {
+  padding-left: 1.5rem;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
+.toc-link.toc-level-3 {
+  padding-left: 2.25rem;
+  font-size: 0.9rem;
+}
+
+.toc-link.toc-level-4 {
+  padding-left: 3rem;
+  font-size: 0.875rem;
+}
+
+.toc-link.toc-level-5 {
+  padding-left: 3.75rem;
+  font-size: 0.85rem;
+}
+
+.toc-link.toc-level-6 {
+  padding-left: 4.5rem;
+  font-size: 0.825rem;
+}
+
+/* Dark mode adjustments for TOC */
+@media (prefers-color-scheme: dark) {
+  .toc-container {
+    background: hsl(var(--muted) / 0.2);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  .toc-header {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  .toc-link:hover {
+    background: hsl(var(--accent) / 0.8);
+  }
+}
+
+/* 🎨 FontAwesome Icons in Tables - Professional styling */
+.ProseMirror table i[data-fa-icon] {
+  font-size: 1.125rem; /* Slightly larger for visibility */
+  line-height: 1;
+  vertical-align: middle;
+  display: inline-block;
+  margin: 0 0.25rem;
+}
+
+/* Icon sizing variants in tables */
+.ProseMirror table i[data-fa-icon].fa-sm {
+  font-size: 0.875rem;
+}
+
+.ProseMirror table i[data-fa-icon].fa-lg {
+  font-size: 1.25rem;
+}
+
+.ProseMirror table i[data-fa-icon].fa-xl {
+  font-size: 1.5rem;
+}
+
+.ProseMirror table i[data-fa-icon].fa-2x {
+  font-size: 2rem;
+}
+
+/* Ensure icons don't break table layout */
+.ProseMirror table td i[data-fa-icon],
+.ProseMirror table th i[data-fa-icon] {
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+/* Icon color utilities for tables */
+.ProseMirror table i[data-fa-icon].text-success,
+.ProseMirror table i[data-fa-icon][data-color="success"],
+.ProseMirror table i[data-fa-icon][data-color="green"] {
+  color: #10b981; /* green-500 */
+}
+
+.ProseMirror table i[data-fa-icon].text-danger,
+.ProseMirror table i[data-fa-icon][data-color="danger"],
+.ProseMirror table i[data-fa-icon][data-color="red"] {
+  color: #ef4444; /* red-500 */
+}
+
+.ProseMirror table i[data-fa-icon].text-warning,
+.ProseMirror table i[data-fa-icon][data-color="warning"],
+.ProseMirror table i[data-fa-icon][data-color="yellow"] {
+  color: #f59e0b; /* yellow-500 */
+}
+
+.ProseMirror table i[data-fa-icon].text-info,
+.ProseMirror table i[data-fa-icon][data-color="info"],
+.ProseMirror table i[data-fa-icon][data-color="blue"] {
+  color: #3b82f6; /* blue-500 */
+}
+
+.ProseMirror table i[data-fa-icon].text-muted,
+.ProseMirror table i[data-fa-icon][data-color="muted"],
+.ProseMirror table i[data-fa-icon][data-color="gray"] {
+  color: #6b7280; /* gray-500 */
+}
+
+.ProseMirror table i[data-fa-icon].text-primary,
+.ProseMirror table i[data-fa-icon][data-color="primary"] {
+  color: hsl(var(--primary));
+}
+
+/* Centered icons in table cells */
+.ProseMirror table td.text-center i[data-fa-icon],
+.ProseMirror table th.text-center i[data-fa-icon] {
+  display: inline-block;
+}
+
+/* Icon-only cells (common pattern) */
+.ProseMirror table td:has(> i[data-fa-icon]:only-child),
+.ProseMirror table th:has(> i[data-fa-icon]:only-child) {
+  text-align: center;
+  width: 40px; /* Fixed width for icon-only columns */
+}
+
+/* Status icons with text */
+.ProseMirror table td i[data-fa-icon] + span,
+.ProseMirror table td span + i[data-fa-icon] {
+  margin-left: 0.25rem;
+  vertical-align: middle;
+}
+
+/* Dark mode adjustments for icon colors */
+@media (prefers-color-scheme: dark) {
+  .ProseMirror table i[data-fa-icon].text-success,
+  .ProseMirror table i[data-fa-icon][data-color="success"],
+  .ProseMirror table i[data-fa-icon][data-color="green"] {
+    color: #34d399; /* green-400 for dark mode */
+  }
+
+  .ProseMirror table i[data-fa-icon].text-danger,
+  .ProseMirror table i[data-fa-icon][data-color="danger"],
+  .ProseMirror table i[data-fa-icon][data-color="red"] {
+    color: #f87171; /* red-400 for dark mode */
+  }
+
+  .ProseMirror table i[data-fa-icon].text-warning,
+  .ProseMirror table i[data-fa-icon][data-color="warning"],
+  .ProseMirror table i[data-fa-icon][data-color="yellow"] {
+    color: #fbbf24; /* yellow-400 for dark mode */
+  }
+
+  .ProseMirror table i[data-fa-icon].text-info,
+  .ProseMirror table i[data-fa-icon][data-color="info"],
+  .ProseMirror table i[data-fa-icon][data-color="blue"] {
+    color: #60a5fa; /* blue-400 for dark mode */
+  }
+
+  .ProseMirror table i[data-fa-icon].text-muted,
+  .ProseMirror table i[data-fa-icon][data-color="muted"],
+  .ProseMirror table i[data-fa-icon][data-color="gray"] {
+    color: #9ca3af; /* gray-400 for dark mode */
+  }
+}
+
+/* Hover effects for interactive icon cells */
+.ProseMirror table td:has(> i[data-fa-icon]):hover i[data-fa-icon] {
+  transform: scale(1.1);
+  transition: transform 0.2s ease;
+}
+
+/* Common icon patterns in tables */
+.ProseMirror table i.fa-check[data-color="success"] {
+  color: #10b981;
+}
+
+.ProseMirror table i.fa-times[data-color="danger"],
+.ProseMirror table i.fa-xmark[data-color="danger"] {
+  color: #ef4444;
+}
+
+.ProseMirror table i.fa-star[data-color="warning"] {
+  color: #f59e0b;
+}
+
+.ProseMirror table i.fa-circle[data-color="info"] {
+  color: #3b82f6;
+}
+
+/* 📹 Vimeo Embeds - Resizable wrapper (same as YouTube) */
+.ProseMirror .vimeo-embed {
+  position: relative;
+  width: 640px;
+  max-width: 100%;
+  margin: 1.5rem auto;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  background: #000;
+  resize: horizontal;
+  overflow: auto;
+  min-width: 300px;
+  aspect-ratio: 16 / 9;
+}
+
+.ProseMirror .vimeo-embed iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0.5rem;
+  display: block;
+}
+
+/* 💻 Gist Embeds - Clean styling */
+.ProseMirror .gist-embed {
+  margin: 1.5rem 0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Override Gist default styles to match theme */
+.ProseMirror .gist-embed .gist {
+  margin: 0 !important;
+}
+
+.ProseMirror .gist-embed .gist-file {
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 0.5rem !important;
+  background: hsl(var(--background)) !important;
+}
+
+.ProseMirror .gist-embed .gist-data {
+  background: hsl(var(--background)) !important;
+  border-bottom: 1px solid hsl(var(--border)) !important;
+}
+
+.ProseMirror .gist-embed .gist-meta {
+  background: hsl(var(--muted)) !important;
+  padding: 0.75rem 1rem !important;
+  font-size: 0.875rem !important;
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.ProseMirror .gist-embed .gist-meta a {
+  color: hsl(var(--primary)) !important;
+  text-decoration: none !important;
+}
+
+.ProseMirror .gist-embed .gist-meta a:hover {
+  text-decoration: underline !important;
+}
+
+/* Dark mode adjustments for Gist */
+@media (prefers-color-scheme: dark) {
+  .ProseMirror .gist-embed .gist-file {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+  }
+  
+  .ProseMirror .gist-embed .gist-data {
+    border-bottom-color: rgba(255, 255, 255, 0.1) !important;
+  }
+}
+
+/* Resize handle hints for Vimeo (same as YouTube) */
+.ProseMirror .vimeo-embed::after {
+  content: "↔";
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  background: hsl(var(--primary));
+  color: white;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.ProseMirror .vimeo-embed:hover::after {
+  opacity: 0.7;
 }

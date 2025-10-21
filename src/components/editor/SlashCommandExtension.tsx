@@ -23,6 +23,10 @@ import {
   Sparkles,
   Image as ImageIcon,
   Minus,
+  Info,
+  AlertTriangle,
+  AlertCircle,
+  CheckCircle,
 } from 'lucide-react';
 
 export interface SlashCommandItem {
@@ -261,6 +265,183 @@ export const createSlashCommands = (
       },
     },
 
+    // ALERT/CALLOUT BOXES
+    {
+      title: 'Info Box',
+      description: 'Blue info callout (:::info)',
+      icon: <Info className="w-4 h-4 text-blue-500" />,
+      category: 'basic',
+      command: ({ editor, range }: any) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertContent('<div data-callout-type="info" class="callout callout-info"><p>Your info message here...</p></div><p></p>')
+          .run();
+      },
+    },
+    {
+      title: 'Warning Box',
+      description: 'Orange warning callout (:::warning)',
+      icon: <AlertTriangle className="w-4 h-4 text-orange-500" />,
+      category: 'basic',
+      command: ({ editor, range }: any) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertContent('<div data-callout-type="warning" class="callout callout-warning"><p>Your warning message here...</p></div><p></p>')
+          .run();
+      },
+    },
+    {
+      title: 'Danger Box',
+      description: 'Red danger callout (:::danger)',
+      icon: <AlertCircle className="w-4 h-4 text-red-500" />,
+      category: 'basic',
+      command: ({ editor, range }: any) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertContent('<div data-callout-type="danger" class="callout callout-danger"><p>Your danger message here...</p></div><p></p>')
+          .run();
+      },
+    },
+    {
+      title: 'Success Box',
+      description: 'Green success callout (:::success)',
+      icon: <CheckCircle className="w-4 h-4 text-green-500" />,
+      category: 'basic',
+      command: ({ editor, range }: any) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertContent('<div data-callout-type="success" class="callout callout-success"><p>Your success message here...</p></div><p></p>')
+          .run();
+      },
+    },
+    
+    // FOOTNOTE
+    {
+      title: 'Footnote',
+      description: 'Add footnote reference [^1]',
+      icon: <span className="text-sm font-bold">¹</span>,
+      category: 'basic',
+      command: ({ editor, range }: any) => {
+        const footnoteId = Date.now().toString().slice(-4); // Generate simple ID
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertContent(`<sup data-footnote-id="${footnoteId}" data-footnote-label="${footnoteId}" class="footnote-ref"><a href="#fn-${footnoteId}" id="fnref-${footnoteId}" class="footnote-ref-link">[${footnoteId}]</a></sup> `)
+          .run();
+      },
+    },
+    
+    // TABLE OF CONTENTS
+    {
+      title: 'Table of Contents',
+      description: 'Auto-generate TOC from headings',
+      icon: <span className="text-xl">📑</span>,
+      category: 'basic',
+      command: ({ editor, range }: any) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertContent({ type: 'toc', attrs: { placeholder: true } })
+          .run();
+      },
+    },
+    
+    // FONTAWESOME ICONS - Popular icons
+    {
+      title: 'Icon: Check',
+      description: ':fa-check: ✓',
+      icon: <i className="fas fa-check"></i>,
+      category: 'basic',
+      command: ({ editor, range }: any) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertContent('<i class="fas fa-check" data-fa-icon="check" data-fa-style="solid"></i> ')
+          .run();
+      },
+    },
+    {
+      title: 'Icon: Star',
+      description: ':fa-star: ★',
+      icon: <i className="fas fa-star"></i>,
+      category: 'basic',
+      command: ({ editor, range }: any) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertContent('<i class="fas fa-star" data-fa-icon="star" data-fa-style="solid"></i> ')
+          .run();
+      },
+    },
+    {
+      title: 'Icon: Heart',
+      description: ':fa-heart: ♥',
+      icon: <i className="fas fa-heart"></i>,
+      category: 'basic',
+      command: ({ editor, range }: any) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertContent('<i class="fas fa-heart" data-fa-icon="heart" data-fa-style="solid"></i> ')
+          .run();
+      },
+    },
+    {
+      title: 'Icon: Warning',
+      description: ':fa-triangle-exclamation: ⚠',
+      icon: <i className="fas fa-triangle-exclamation"></i>,
+      category: 'basic',
+      command: ({ editor, range }: any) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertContent('<i class="fas fa-triangle-exclamation" data-fa-icon="triangle-exclamation" data-fa-style="solid"></i> ')
+          .run();
+      },
+    },
+    {
+      title: 'Icon: Fire',
+      description: ':fa-fire: 🔥',
+      icon: <i className="fas fa-fire"></i>,
+      category: 'basic',
+      command: ({ editor, range }: any) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertContent('<i class="fas fa-fire" data-fa-icon="fire" data-fa-style="solid"></i> ')
+          .run();
+      },
+    },
+    {
+      title: 'Icon: Lightbulb',
+      description: ':fa-lightbulb: 💡',
+      icon: <i className="fas fa-lightbulb"></i>,
+      category: 'basic',
+      command: ({ editor, range }: any) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertContent('<i class="fas fa-lightbulb" data-fa-icon="lightbulb" data-fa-style="solid"></i> ')
+          .run();
+      },
+    },
+
     // AI ACTIONS
     {
       title: 'Continue Writing',
@@ -355,8 +536,13 @@ export const slashCommandSuggestion = (
         },
 
         onExit() {
-          popup[0].destroy();
-          component.destroy();
+          // 🔧 FIX: Add safety checks for cleanup
+          if (popup && popup[0]) {
+            popup[0].destroy();
+          }
+          if (component) {
+            component.destroy();
+          }
         },
       };
     },
