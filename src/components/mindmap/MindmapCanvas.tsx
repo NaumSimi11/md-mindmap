@@ -21,6 +21,7 @@ import MindNode from "@/components/mindmap/MindNode";
 import MilestoneNode from "@/components/mindmap/MilestoneNode";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import NodeDetailsPanel, { NodePMData } from "@/components/mindmap/NodeDetailsPanel";
+import AwsNode from "@/components/diagram/nodes/AwsNode";
 
 const elk = new ELK();
 
@@ -34,7 +35,7 @@ interface MindmapCanvasProps {
   initialEntities?: MindmapEntity[];
 }
 
-const nodeTypes = { mind: MindNode, milestone: MilestoneNode } as const;
+const nodeTypes = { mind: MindNode, milestone: MilestoneNode, aws: AwsNode } as const;
 
 type LayoutMode = 'down' | 'right' | 'left' | 'up' | 'radial';
 
@@ -143,6 +144,17 @@ export default function MindmapCanvas({ initialEntities = [] }: MindmapCanvasPro
   };
 
   const addChildToRoot = () => addChildTo("root");
+
+  // AWS icon nodes: quick insert helpers
+  const addAwsNode = (title: string, icon: any) => {
+    const id = `aws-${Date.now()}`;
+    // Place near root with spacing based on count
+    const countAws = nodes.filter((n)=> n.type === 'aws').length;
+    const baseX = 120 + (countAws % 4) * 220;
+    const baseY = 80 + Math.floor(countAws / 4) * 160;
+    const newNode: Node = { id, type: 'aws', position: { x: baseX, y: baseY }, data: { title, icon, status: 'ok' } } as Node;
+    setNodes((ns) => [...ns, newNode]);
+  };
 
   const renameNode = (id: string, titleOrLabel: string) => {
     setNodes((ns) => ns.map((n) => {
@@ -406,6 +418,9 @@ export default function MindmapCanvas({ initialEntities = [] }: MindmapCanvasPro
         <Button size="sm" variant="outline" onClick={restoreFlow}>Restore</Button>
         <Button size="sm" variant="outline" onClick={expandAll}>Expand all</Button>
         <Button size="sm" variant="outline" onClick={collapseAll}>Collapse all</Button>
+        {/* Quick AWS nodes (research phase) */}
+        <Button size="sm" variant="outline" onClick={() => addAwsNode('ALB', 'aws.alb')}>+ ALB</Button>
+        <Button size="sm" variant="outline" onClick={() => addAwsNode('EC2', 'aws.ec2')}>+ EC2</Button>
         <Button size="sm" variant={milestoneSelectActive? 'default':'outline'} onClick={() => setMilestoneSelectActive((v)=>!v)}>
           {milestoneSelectActive? 'Selecting… drag to box' : 'Milestone select'}
         </Button>

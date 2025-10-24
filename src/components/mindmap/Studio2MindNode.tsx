@@ -22,7 +22,9 @@ function Studio2MindNode({ data, id, selected }: NodeProps<MindNodeData>) {
   const [isEditing, setIsEditing] = useState(false);
   const [label, setLabel] = useState(data.label);
 
-  const handleDoubleClick = () => {
+  const handleLabelDoubleClick = (e: React.MouseEvent) => {
+    // Stop propagation to prevent React Flow's onNodeDoubleClick from firing
+    e.stopPropagation();
     setIsEditing(true);
   };
 
@@ -43,20 +45,58 @@ function Studio2MindNode({ data, id, selected }: NodeProps<MindNodeData>) {
     }
   };
 
+  // Get color and shape from data, with defaults
+  const nodeColor = data.color || 'indigo';
+  const nodeShape = data.shape || 'rounded-full';
+  
+  // Map color names to Tailwind gradient classes
+  const colorMap: Record<string, { from: string; to: string; ring: string; shadow: string }> = {
+    indigo: { from: 'from-indigo-500', to: 'to-indigo-600', ring: 'ring-indigo-300', shadow: 'rgba(99, 102, 241, 0.3)' },
+    blue: { from: 'from-blue-500', to: 'to-blue-600', ring: 'ring-blue-300', shadow: 'rgba(59, 130, 246, 0.3)' },
+    purple: { from: 'from-purple-500', to: 'to-purple-600', ring: 'ring-purple-300', shadow: 'rgba(139, 92, 246, 0.3)' },
+    pink: { from: 'from-pink-500', to: 'to-pink-600', ring: 'ring-pink-300', shadow: 'rgba(236, 72, 153, 0.3)' },
+    red: { from: 'from-red-500', to: 'to-red-600', ring: 'ring-red-300', shadow: 'rgba(239, 68, 68, 0.3)' },
+    orange: { from: 'from-orange-500', to: 'to-orange-600', ring: 'ring-orange-300', shadow: 'rgba(249, 115, 22, 0.3)' },
+    yellow: { from: 'from-yellow-500', to: 'to-yellow-600', ring: 'ring-yellow-300', shadow: 'rgba(234, 179, 8, 0.3)' },
+    green: { from: 'from-green-500', to: 'to-green-600', ring: 'ring-green-300', shadow: 'rgba(34, 197, 94, 0.3)' },
+    teal: { from: 'from-teal-500', to: 'to-teal-600', ring: 'ring-teal-300', shadow: 'rgba(20, 184, 166, 0.3)' },
+  };
+  
+  const colors = colorMap[nodeColor] || colorMap.indigo;
+  
+  // Special handling for diamond and hexagon shapes
+  const isDiamond = nodeShape === 'diamond';
+  const isHexagon = nodeShape === 'hexagon';
+  
+  // Get the appropriate border-radius class
+  const borderRadiusClass = isDiamond || isHexagon ? '' : nodeShape;
+
   return (
     <div
       className={`
-        relative px-6 py-4 rounded-full
-        bg-gradient-to-br from-indigo-500 to-indigo-600
+        relative px-6 py-4 ${borderRadiusClass}
+        bg-gradient-to-br ${colors.from} ${colors.to}
         shadow-lg
-        border-2 border-white
+        border-4
         transition-all duration-200
-        ${selected ? 'ring-4 ring-indigo-300 scale-105' : 'hover:shadow-xl hover:scale-102'}
+        ${selected ? `ring-4 ${colors.ring} scale-105 shadow-2xl` : 'hover:shadow-xl hover:scale-102'}
       `}
-      onDoubleClick={handleDoubleClick}
       style={{
         minWidth: '120px',
-        filter: 'drop-shadow(0px 4px 8px rgba(99, 102, 241, 0.3))',
+        borderColor: `rgba(255, 255, 255, 0.4)`,
+        filter: `drop-shadow(0px 4px 8px ${colors.shadow})`,
+        ...(isDiamond && {
+          transform: 'rotate(45deg)',
+          width: '100px',
+          height: '100px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }),
+        ...(isHexagon && {
+          clipPath: 'polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%)',
+          minWidth: '140px',
+        }),
       }}
     >
       {/* Connection Handles - Top-down tree layout */}
@@ -89,11 +129,21 @@ function Studio2MindNode({ data, id, selected }: NodeProps<MindNodeData>) {
             bg-white/20 text-white font-semibold text-center
             border-none outline-none rounded px-2 py-1
             placeholder-white/50
+            nodrag nopan
           "
-          style={{ minWidth: '80px' }}
+          style={{ 
+            minWidth: '80px',
+            ...(isDiamond && { transform: 'rotate(-45deg)' }),
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
         />
       ) : (
-        <div className="text-white font-semibold text-center text-sm whitespace-nowrap">
+        <div 
+          className="text-white font-semibold text-center text-sm whitespace-nowrap"
+          onDoubleClick={handleLabelDoubleClick}
+          title="Double-click to edit label"
+          style={isDiamond ? { transform: 'rotate(-45deg)' } : {}}
+        >
           {label.length > 15 ? label.slice(0, 13) + '...' : label}
         </div>
       )}
@@ -130,7 +180,7 @@ function Studio2MindNode({ data, id, selected }: NodeProps<MindNodeData>) {
             title="Edit"
             onClick={(e) => {
               e.stopPropagation();
-              handleDoubleClick();
+              setIsEditing(true);
             }}
           >
             <Edit2 className="h-3 w-3 text-gray-700" />

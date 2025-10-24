@@ -29,6 +29,7 @@ import { Image } from '@tiptap/extension-image';
 import { Link } from '@tiptap/extension-link';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { FontFamily } from '@tiptap/extension-font-family';
+import { FontSize } from './extensions/FontSizeExtension';
 import { Highlight } from '@tiptap/extension-highlight';
 import { Underline } from '@tiptap/extension-underline';
 import { Superscript } from '@tiptap/extension-superscript';
@@ -53,6 +54,7 @@ import { DiagramInsertMenu } from './DiagramInsertMenu';
 import { SlashCommandExtension, slashCommandSuggestion } from './SlashCommandExtension';
 import { FormatDropdown } from './FormatDropdown';
 import { FontFamilyDropdown } from './FontFamilyDropdown';
+import { FontSizeDropdown } from './FontSizeDropdown';
 import { AISettingsDropdown } from './AISettingsDropdown';
 import { InlineDocumentTitle } from './InlineDocumentTitle';
 import { GhostTextExtension } from './extensions/GhostTextExtension';
@@ -64,6 +66,8 @@ import { Separator } from '@/components/ui/separator';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { usePlatform } from '@/contexts/PlatformContext';
+import { storageService } from '@/services/storage/StorageService';
 import {
   Dialog,
   DialogContent,
@@ -71,8 +75,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { AIAssistantModal } from '@/components/modals/AIAssistantModal';
-import { SmartAIModal } from '@/components/modals/SmartAIModal';
+import { UnifiedAIModal } from '@/components/modals/UnifiedAIModal';
 import UnifiedDiagramModal from '@/components/modals/UnifiedDiagramModal';
 import {
   Bold,
@@ -108,6 +111,7 @@ import {
   BarChart,
   Keyboard,
   Sparkles as IconsIcon,
+  FolderOpen,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -1393,6 +1397,9 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
   const [aiSuggestionsEnabled, setAiSuggestionsEnabled] = useState(false);
   const [aiAutocompleteEnabled, setAiAutocompleteEnabled] = useState(true); // Enabled by default!
+  // File open/insert helpers
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const openReplaceNextRef = useRef<boolean>(false);
   
   // Editor mode toggle: WYSIWYG or Markdown
   const [editorMode, setEditorMode] = useState<'wysiwyg' | 'markdown'>('wysiwyg');
@@ -1521,6 +1528,9 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
       }),
       TextStyle,
       FontFamily.configure({
+        types: ['textStyle'],
+      }),
+      FontSize.configure({
         types: ['textStyle'],
       }),
       Table.configure({
@@ -1894,12 +1904,31 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
     }
   }, [aiSuggestionsEnabled, editor]);
 
-  // Keyboard shortcut: Ctrl+M to toggle editor mode
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'm') {
+      // Ctrl+M: Toggle editor mode
+      if ((e.ctrlKey || e.metaKey) && e.key === 'm' && !e.shiftKey) {
         e.preventDefault();
         toggleEditorMode();
+      }
+      
+      // Ctrl+Shift+A: Open AI Assistant
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'A') {
+        e.preventDefault();
+        setShowAIModal(true);
+      }
+      
+      // Ctrl+Shift+D: Open Diagram Menu
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        setShowDiagramMenu(true);
+      }
+      
+      // Ctrl+Shift+M: Open Mindmap Studio
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'M') {
+        e.preventDefault();
+        setShowMindmapChoiceModal(true);
       }
     };
 
@@ -2125,6 +2154,61 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
     }
   };
 
+  // Detect extension
+  const getFileExtension = (name: string): string => {
+    const i = name.lastIndexOf('.')
+    return i >= 0 ? name.slice(i + 1).toLowerCase() : '';
+  };
+
+  // Convert raw file text to HTML suitable for editor
+  const fileTextToHtml = (text: string, ext: string): string => {
+    if (!text) return '';
+    if (ext === 'html' || ext === 'htm') {
+      return text;
+    }
+    // Treat everything else as markdown
+    return markdownToHtml(text);
+  };
+
+  const handleFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Reset input value so selecting same file again still triggers change
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (!file) return;
+
+    try {
+      const ext = getFileExtension(file.name);
+      const text = await file.text();
+      const html = fileTextToHtml(text, ext);
+      if (!html) return;
+
+      if (openReplaceNextRef.current) {
+        // Replace entire document
+        isProgrammaticUpdate.current = true;
+        editor.commands.clearContent();
+        editor.commands.setContent(html);
+        requestAnimationFrame(() => {
+          isProgrammaticUpdate.current = false;
+          try { editor.commands.focus(); } catch {}
+          // Notify parent of new content (convert via editor JSON)
+          const md = htmlToMarkdown('', editor);
+          onContentChange?.(md);
+        });
+      } else {
+        // Insert at cursor
+        editor.chain().focus().insertContent(html).run();
+      }
+    } catch (err) {
+      console.error('Failed to open file:', err);
+      alert('Failed to open file. Please try another file.');
+    }
+  };
+
+  const triggerOpenFile = (replaceDocument: boolean) => {
+    openReplaceNextRef.current = replaceDocument;
+    fileInputRef.current?.click();
+  };
+
   const insertLink = () => {
     const url = window.prompt('Enter link URL:');
     if (url) {
@@ -2309,6 +2393,9 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
             {/* Font Family Dropdown */}
             <FontFamilyDropdown editor={editor} />
 
+            {/* Font Size Dropdown */}
+            <FontSizeDropdown editor={editor} />
+
             <Separator orientation="vertical" className="h-6 mx-1" />
 
             {/* Diagrams */}
@@ -2323,14 +2410,15 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
               <span className="text-xs">Diagram</span>
             </Button>
 
-            {/* AI Assistant */}
+            {/* AI Assistant - Unified Modal */}
             <Button
               size="sm"
               className="gradient-primary border-0 text-white hover:scale-105 transition-transform"
               onClick={() => setShowAIModal(true)}
+              title="AI Assistant - Text & Diagrams"
             >
               <Sparkles className="h-4 w-4 mr-1" />
-              AI
+              AI Assistant
             </Button>
 
             {/* Mindmap Studio */}
@@ -2433,6 +2521,15 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => triggerOpenFile(false)}>
+                  <FolderOpen className="h-4 w-4 mr-2" />
+                  Insert from file…
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => triggerOpenFile(true)}>
+                  <FolderOpen className="h-4 w-4 mr-2" />
+                  Open file… (replace document)
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem>
                   <Save className="h-4 w-4 mr-2" />
                   Save
@@ -2489,18 +2586,25 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
         </div>
       </div>
 
-      {/* Smart AI Modal with @ mentions and context files */}
-      <SmartAIModal
+      {/* Unified AI Modal - Text & Diagrams with context files */}
+      <UnifiedAIModal
         open={showAIModal}
         onOpenChange={setShowAIModal}
         documentContent={editor ? htmlToMarkdown('', editor) : ''}
         selectedText={contextMenu.selectedText}
         contextFiles={flattenedContextFiles}
-        onGenerate={(result: string) => {
+        onInsertText={(result: string) => {
           if (editor) {
             editor.chain().focus().insertContent(`\n\n${result}\n\n`).run();
           }
         }}
+        onInsertDiagram={(code: string) => {
+          if (editor) {
+            const mermaidBlock = `\n\`\`\`mermaid\n${code}\n\`\`\`\n`;
+            editor.chain().focus().insertContent(mermaidBlock).run();
+          }
+        }}
+        defaultTab="text"
       />
 
       {/* Unified Diagram Modal - combines Quick Insert, AI Generate, and Open Studio */}
@@ -2564,6 +2668,15 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
             .insertContent(' ') // Add space after icon
             .run();
         }}
+      />
+
+      {/* Hidden file input for Open/Insert */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".md,.markdown,.txt,.html,.htm,text/markdown,text/plain,text/html"
+        className="hidden"
+        onChange={handleFileChosen}
       />
     </div>
   );

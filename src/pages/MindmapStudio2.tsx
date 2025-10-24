@@ -24,8 +24,19 @@ import "@xyflow/react/dist/style.css";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sparkles, Plus, FileText, Upload, Layout as LayoutIcon, Folder, ArrowLeft, Presentation } from "lucide-react";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
+import { Sparkles, Plus, FileText, Upload, Layout as LayoutIcon, Folder, ArrowLeft, Presentation, ChevronDown, Palette, Download } from "lucide-react";
 import { presentationGenerator } from "@/services/presentation/PresentationGenerator";
+import { safePresentationService, type ProgressUpdate } from "@/services/presentation/SafePresentationService";
+import { PresentationWizardModal, type GenerationSettings } from "@/components/presentation/PresentationWizardModal";
+import { PresentationLoadingScreen } from "@/components/presentation/PresentationLoadingScreen";
 import { workspaceService } from "@/services/workspace/WorkspaceService";
 import Studio2MindNode from "@/components/mindmap/Studio2MindNode";
 import Studio2MilestoneNode from "@/components/mindmap/Studio2MilestoneNode";
@@ -33,6 +44,7 @@ import Studio2Sidebar from "@/components/mindmap/Studio2Sidebar";
 import Studio2ExportModal from "@/components/mindmap/Studio2ExportModal";
 import Studio2TemplateModal from "@/components/mindmap/Studio2TemplateModal";
 import Studio2AIToolsModal, { type AIAction } from "@/components/mindmap/Studio2AIToolsModal";
+import IconPickerModal from "@/components/mindmap/IconPickerModal";
 import StreamingText from "@/components/mindmap/StreamingText";
 import { mindmapAIService, type MindmapContext } from "@/services/mindmap/MindmapAIService";
 import { aiService } from "@/services/ai/AIService";
@@ -45,11 +57,15 @@ import { type MindmapTemplate } from "@/services/mindmap/MindmapTemplates";
 import { sessionService } from "@/services/EditorStudioSession";
 import MindmapGenerator from "@/services/MindmapGenerator";
 import { mindmapExporter } from "@/services/mindmap/MindmapExporter";
+import AwsNode from "@/components/diagram/nodes/AwsNode";
+import IconNode from "@/components/diagram/nodes/IconNode";
 
 // Custom node types
 const nodeTypes = {
   mindNode: Studio2MindNode,
   milestone: Studio2MilestoneNode,
+  aws: AwsNode,
+  icon: IconNode,
 };
 
 // Initial nodes and edges
@@ -88,6 +104,26 @@ function MindmapStudio2Content() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [currentLayout, setCurrentLayout] = useState<string>('manual');
   const [edgeType, setEdgeType] = useState<'smoothstep' | 'bezier' | 'straight' | 'step'>('bezier');
+  
+  // Quick AWS insert (research phase)
+  const addAwsNode = (title: string, icon: string) => {
+    const id = `aws-${Date.now()}`;
+    const count = nodes.filter((n)=> n.type === 'aws').length;
+    const x = 200 + (count % 4) * 240;
+    const y = 200 + Math.floor(count / 4) * 160;
+    const newNode: Node = { id, type: 'aws', position: { x, y }, data: { title, icon, status: 'ok' } } as Node;
+    setNodes((ns)=> [...ns, newNode]);
+  };
+  
+  // Generic Iconify node insert
+  const addIconifyNode = (title: string, iconId: string, color?: string) => {
+    const id = `icon-${Date.now()}`;
+    const count = nodes.filter((n)=> n.type === 'icon').length;
+    const x = 220 + (count % 4) * 240;
+    const y = 220 + Math.floor(count / 4) * 160;
+    const newNode: Node = { id, type: 'icon', position: { x, y }, data: { title, icon: iconId, color } } as Node;
+    setNodes((ns)=> [...ns, newNode]);
+  };
   
   // Store original document content for smart merge
   const [originalContent, setOriginalContent] = useState<string>('');
@@ -146,10 +182,18 @@ function MindmapStudio2Content() {
   const [edgeStyle, setEdgeStyle] = useState<'solid' | 'dashed' | 'dotted'>('solid');
   const [aiLoading, setAILoading] = useState(false);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+  const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [sidebarNode, setSidebarNode] = useState<Node | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showAIToolsModal, setShowAIToolsModal] = useState(false);
+  
+  // Presentation wizard & progress
+  const [showPresentationWizard, setShowPresentationWizard] = useState(false);
+  const [showPresentationProgress, setShowPresentationProgress] = useState(false);
+  const [presentationProgress, setPresentationProgress] = useState<ProgressUpdate | null>(null);
+  const [presentationError, setPresentationError] = useState<string | null>(null);
+  const [showIconPickerModal, setShowIconPickerModal] = useState(false);
   const [showChatPanel, setShowChatPanel] = useState(false);
   const [chatMode, setChatMode] = useState<'brainstorm' | 'command'>('brainstorm');
   const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'ai'; content: string }>>([]);
@@ -464,8 +508,16 @@ function MindmapStudio2Content() {
       selectedCount: ids.length,
       selectedIds: ids,
       selectedTypes: params.nodes.map(n => n.type),
+      selectedEdges: params.edges.length,
     });
     setSelectedNodeIds(ids);
+    
+    // Track selected edge for label editing
+    if (params.edges.length === 1) {
+      setSelectedEdge(params.edges[0]);
+    } else {
+      setSelectedEdge(null);
+    }
   }, []);
 
   // Create milestone from selected nodes
@@ -624,8 +676,10 @@ function MindmapStudio2Content() {
     console.log(`🗑️ Deleted milestone: ${milestoneId}`);
   }, [nodes, edges, setNodes, setEdges]);
 
-  // Open sidebar for node
+  // Open sidebar for node - only for icon/aws nodes (mindNodes have inline editing)
   const onNodeDoubleClick = useCallback((_event: React.MouseEvent, node: Node) => {
+    // Open sidebar for ALL node types
+    // This provides access to full node details, description, status, etc.
     setSidebarNode(node);
   }, []);
 
@@ -799,28 +853,49 @@ function MindmapStudio2Content() {
     navigate(`/workspace/doc/${documentId}/edit`);
   }, [isInWorkspace, documentId, originalContent, smartMergeNodesWithContent, convertNodesToMarkdownSimple, navigate]);
 
-  // Generate presentation from mindmap
-  const handleGeneratePresentation = useCallback(async () => {
-    console.log('🎬 Generating presentation from mindmap...');
-    
-    // Check if we have nodes
+  // Open presentation wizard
+  const handleOpenPresentationWizard = useCallback(() => {
     if (nodes.length === 0) {
       alert('❌ Please add nodes to your mindmap before generating a presentation.');
       return;
     }
+    setShowPresentationWizard(true);
+  }, [nodes.length]);
+
+  // Generate presentation with settings from wizard
+  const handleGeneratePresentation = useCallback(async (settings: GenerationSettings) => {
+    console.log('🎬 Generating presentation with settings:', settings);
     
-    // Show loading state
-    setAILoading(true);
+    // 🔧 CLEAR OLD SESSION KEYS (from old Editor.tsx flow)
+    localStorage.removeItem('presentation-session');
+    const oldKeys = Object.keys(localStorage).filter(key => 
+      key.startsWith('editor-pres-session-') || 
+      key.startsWith('mindmap-pres-session-')
+    );
+    oldKeys.forEach(key => localStorage.removeItem(key));
+    console.log('🧹 Cleared old session keys:', oldKeys.length);
+    
+    // Close wizard, show progress
+    setShowPresentationWizard(false);
+    setShowPresentationProgress(true);
+    setPresentationProgress(null);
+    setPresentationError(null);
     
     try {
       console.log('📊 Converting mindmap to markdown...');
       const markdown = convertNodesToMarkdownSimple();
-      console.log('Markdown preview:', markdown.substring(0, 200));
       
-      console.log('🤖 Calling AI to generate presentation...');
-      const presentation = await presentationGenerator.generateFromMindmap(nodes, edges, {
-        documentId: documentId || undefined,
-      });
+      console.log('🤖 Calling safe presentation service...');
+      const presentation = await safePresentationService.generateSafely(
+        markdown,
+        { nodes, edges },
+        settings,
+        documentId, // ✅ Pass source document ID
+        (progress: ProgressUpdate) => {
+          console.log('📊 Progress:', progress);
+          setPresentationProgress(progress);
+        }
+      );
       
       console.log('✅ Presentation generated:', presentation);
       
@@ -833,32 +908,28 @@ function MindmapStudio2Content() {
           JSON.stringify(presentation)
         );
         console.log('✅ Presentation saved:', doc.id);
-        alert('✅ Presentation generated successfully! Navigating...');
-        navigate(`/workspace/doc/${doc.id}/slides`);
+        
+        // Wait a moment to show success, then navigate
+        setTimeout(() => {
+          setShowPresentationProgress(false);
+          navigate(`/workspace/doc/${doc.id}/slides`);
+        }, 1500);
       } else {
         console.log('🔀 Navigating to standalone presentation editor...');
-        alert('✅ Presentation generated! Navigating...');
-        navigate(`/presentation/${presentation.id}/edit`);
+        setTimeout(() => {
+          setShowPresentationProgress(false);
+          navigate(`/presentation/${presentation.id}/edit`);
+        }, 1500);
       }
     } catch (error: any) {
       console.error('❌ Failed to generate presentation:', error);
+      setPresentationError(error.message || 'Failed to generate presentation');
       
-      // Better error messages
-      let errorMessage = 'Failed to generate presentation.\n\n';
-      
-      if (error.message?.includes('API key') || error.message?.includes('not configured')) {
-        errorMessage += 'AI service is not configured. Please set up your API key in .env file.';
-      } else if (error.message?.includes('timeout')) {
-        errorMessage += 'Request timed out. Please try again.';
-      } else if (error.message?.includes('rate limit')) {
-        errorMessage += 'Rate limit exceeded. Please wait a moment and try again.';
-      } else {
-        errorMessage += `Error: ${error.message || 'Unknown error'}`;
-      }
-      
-      alert(errorMessage);
-    } finally {
-      setAILoading(false);
+      // Auto-close error after 5 seconds
+      setTimeout(() => {
+        setShowPresentationProgress(false);
+        setPresentationError(null);
+      }, 5000);
     }
   }, [title, nodes, edges, isInWorkspace, documentId, convertNodesToMarkdownSimple, navigate]);
   
@@ -948,17 +1019,17 @@ function MindmapStudio2Content() {
       setNodes(nds => [...nds, ...newNodesAndEdges.nodes]);
       setEdges(eds => [...eds, ...newNodesAndEdges.edges]);
       
-      alert(`🎉 Smart Expand Complete!\n\n✅ ${successCount} nodes expanded\n🆕 ${newNodesAndEdges.nodes.length} new nodes created${failCount > 0 ? `\n❌ ${failCount} failed` : ''}`);
+      console.log(`🎉 Smart Expand Complete! ✅ ${successCount} nodes expanded, 🆕 ${newNodesAndEdges.nodes.length} new nodes created${failCount > 0 ? `, ❌ ${failCount} failed` : ''}`);
     } else {
-      alert('All nodes already have sufficient children! 🎯');
+      console.log('All nodes already have sufficient children! 🎯');
     }
   }, [nodes, edges, title, edgeType, setNodes, setEdges, buildMindmapContext, getReactFlowEdgeType]);
 
   // Auto-Connect - AI finds hidden relationships
   const handleAutoConnect = useCallback(async () => {
     if (nodes.length < 3) {
-      alert('❌ Need at least 3 nodes to suggest connections!');
-      return;
+      console.warn('❌ Need at least 3 nodes to suggest connections!');
+      throw new Error('Need at least 3 nodes to suggest connections');
     }
 
     const context = buildMindmapContext();
@@ -970,25 +1041,18 @@ function MindmapStudio2Content() {
       const suggestions = await mindmapAIService.suggestConnections(context, 5);
       
       if (suggestions.length === 0) {
-        alert('✅ Your mindmap is already well-connected! No new connections needed.');
-        return;
+        console.log('✅ Your mindmap is already well-connected! No new connections needed.');
+        throw new Error('Your mindmap is already well-connected');
       }
       
-      // Create preview message
-      const previewText = suggestions.map((s, idx) => {
+      // Log preview for debugging
+      suggestions.forEach((s, idx) => {
         const sourceNode = nodes.find(n => n.id === s.source);
         const targetNode = nodes.find(n => n.id === s.target);
-        return `${idx + 1}. "${sourceNode?.data.label}" → "${targetNode?.data.label}"\n   💡 ${s.reason}`;
-      }).join('\n\n');
+        console.log(`${idx + 1}. "${sourceNode?.data.label}" → "${targetNode?.data.label}" - ${s.reason}`);
+      });
       
-      const confirmed = confirm(`🔗 AI found ${suggestions.length} smart connections:\n\n${previewText}\n\nAdd these connections?`);
-      
-      if (!confirmed) {
-        console.log('❌ User cancelled auto-connect');
-        return;
-      }
-      
-      // Create new edges
+      // Create new edges (no confirmation needed - AI Response panel will show results)
       const newEdges: Edge[] = suggestions.map(s => ({
         id: `edge-${s.source}-${s.target}-${Date.now()}`,
         source: s.source,
@@ -1007,19 +1071,19 @@ function MindmapStudio2Content() {
       }));
       
       setEdges(eds => [...eds, ...newEdges]);
-      alert(`✨ Added ${newEdges.length} smart connections!`);
+      console.log(`✨ Added ${newEdges.length} smart connections!`);
       
     } catch (error) {
       console.error('❌ Auto-connect failed:', error);
-      alert('❌ Failed to find connections. Please try again.');
+      throw error; // Re-throw so modal can catch it
     }
   }, [nodes, edges, buildMindmapContext, setEdges]);
 
   // Quality Audit - AI analyzes mindmap
   const handleQualityAudit = useCallback(async () => {
     if (nodes.length === 0) {
-      alert('❌ No nodes to analyze!');
-      return;
+      console.warn('❌ No nodes to analyze!');
+      throw new Error('No nodes to analyze');
     }
 
     const context = buildMindmapContext();
@@ -1088,20 +1152,20 @@ ${analysis.issues?.map((i: any) => `  • [${i.severity.toUpperCase()}] ${i.desc
 ${analysis.suggestions?.map((s: string) => `  • ${s}`).join('\n') || '  • Keep up the good work!'}
 `;
       
-      alert(report);
+      console.log('📊 Quality Audit Report:\n', report);
       console.log('✅ Quality audit complete');
       
     } catch (error) {
       console.error('❌ Quality audit failed:', error);
-      alert('❌ Failed to analyze mindmap. Please try again.');
+      throw error; // Re-throw so modal can catch it
     }
   }, [nodes, edges, title, buildMindmapContext]);
 
   // Goal-Oriented Generation - Generate complete mindmap from prompt
   const handleGoalGeneration = useCallback(async (goal: string) => {
     if (!goal || goal.trim().length < 10) {
-      alert('❌ Please provide a more detailed goal description!');
-      return;
+      console.warn('❌ Please provide a more detailed goal description!');
+      throw new Error('Please provide a more detailed goal description');
     }
 
     try {
@@ -1135,8 +1199,8 @@ ${analysis.suggestions?.map((s: string) => `  • ${s}`).join('\n') || '  • Ke
       }));
       
       if (rfNodes.length === 0) {
-        alert('❌ Failed to generate mindmap. Please try a different goal.');
-        return;
+        console.error('❌ Failed to generate mindmap');
+        throw new Error('Failed to generate mindmap. Please try a different goal');
       }
       
       // Confirm replacement
@@ -1162,20 +1226,20 @@ ${analysis.suggestions?.map((s: string) => `  • ${s}`).join('\n') || '  • Ke
       setEdges(layoutedEdges);
       setCurrentLayout('tree');
       
-      alert(`✨ Generated ${layoutedNodes.length} nodes with hierarchical layout!`);
+      console.log(`✨ Generated ${layoutedNodes.length} nodes with hierarchical layout!`);
       console.log('✅ Goal generation complete');
       
     } catch (error) {
       console.error('❌ Goal generation failed:', error);
-      alert('❌ Failed to generate mindmap. Please try again with a different prompt.');
+      throw error; // Re-throw so modal can catch it
     }
   }, [edgeType, setTitle, setNodes, setEdges, setCurrentLayout, getReactFlowEdgeType]);
 
   // AI Reorganize - Optimize structure and grouping
   const handleReorganize = useCallback(async () => {
     if (nodes.length < 5) {
-      alert('❌ Need at least 5 nodes to reorganize!');
-      return;
+      console.warn('❌ Need at least 5 nodes to reorganize!');
+      throw new Error('Need at least 5 nodes to reorganize');
     }
 
     const context = buildMindmapContext();
@@ -2101,7 +2165,13 @@ Examples:
     } finally {
       setAILoading(false);
     }
-  }, []);
+  }, [
+    handleSmartExpandAll,
+    handleAutoConnect,
+    handleReorganize,
+    handleGoalGeneration,
+    handleQualityAudit,
+  ]);
 
   const handleLoadTemplate = useCallback((template: MindmapTemplate) => {
     setTitle(template.name);
@@ -2250,8 +2320,8 @@ Examples:
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      {/* Header */}
-      <div className="border-b border-border bg-card px-6 py-3 flex items-center justify-between">
+      {/* Header - Reorganized with Dropdowns */}
+      <div className="border-b border-border bg-card px-6 py-3 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
           {/* Back to Editor Button (only show if in workspace) */}
           {isInWorkspace && (
@@ -2260,90 +2330,166 @@ Examples:
                 size="sm" 
                 variant="outline"
                 onClick={handleBackToEditor}
-                className="text-primary"
+                className="text-primary hover:bg-primary/10"
                 title="Save mindmap and return to editor"
               >
-                <ArrowLeft className="h-4 w-4 mr-2"/>Back to Editor
+                <ArrowLeft className="h-4 w-4 mr-2"/>Back
               </Button>
-              <Separator orientation="vertical" className="h-6 mx-1" />
+              <Separator orientation="vertical" className="h-6" />
             </>
           )}
           
-          <input
-            className="bg-transparent border-none outline-none text-lg font-semibold"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-          <Separator orientation="vertical" className="h-6 mx-1" />
-          <Button size="sm" variant="outline" onClick={() => setShowTemplateModal(true)}>
-            <FileText className="h-4 w-4 mr-2"/>Templates
-          </Button>
-          <Button size="sm" variant="outline">
-            <Upload className="h-4 w-4 mr-2"/>Import
-          </Button>
-          <Button size="sm" className="gradient-primary text-white" onClick={addNode}>
-            <Plus className="h-4 w-4 mr-2"/>New Node
-          </Button>
+          {/* File Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline" className="hover:bg-muted">
+                <FileText className="h-4 w-4 mr-2"/>
+                File
+                <ChevronDown className="h-3 w-3 ml-2 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48">
+              <DropdownMenuItem onClick={() => setShowTemplateModal(true)}>
+                <FileText className="h-4 w-4 mr-2"/>
+                Templates
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Upload className="h-4 w-4 mr-2"/>
+                Import
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowExportModal(true)}>
+                <Download className="h-4 w-4 mr-2"/>
+                Export
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          
+          {/* Add Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" className="gradient-primary text-white hover:opacity-90">
+                <Plus className="h-4 w-4 mr-2"/>
+                Add
+                <ChevronDown className="h-3 w-3 ml-2" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48">
+              <DropdownMenuItem onClick={addNode}>
+                <Plus className="h-4 w-4 mr-2"/>
+                New Node
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowIconPickerModal(true)}>
+                🎨 Browse Icons...
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          
+          {/* Group Button - Visible on toolbar to avoid losing selection */}
           <Button 
             size="sm" 
             variant="outline" 
             onClick={createMilestone}
             disabled={selectedNodeIds.length < 2}
+            className="hover:bg-muted"
+            title={selectedNodeIds.length < 2 ? "Select 2+ nodes to group" : `Group ${selectedNodeIds.length} selected nodes`}
           >
             <Folder className="h-4 w-4 mr-2"/>
-            Group ({selectedNodeIds.length})
+            Group {selectedNodeIds.length > 0 && `(${selectedNodeIds.length})`}
           </Button>
-          <Separator orientation="vertical" className="h-6 mx-1" />
-          <div className="flex items-center gap-2">
-            <LayoutIcon className="h-4 w-4 text-muted-foreground" />
-            <Select value={currentLayout} onValueChange={setCurrentLayout}>
-              <SelectTrigger className="w-[140px] h-8">
-                <SelectValue placeholder="Layout" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="manual">Manual</SelectItem>
-                <SelectItem value="tree">🌳 Tree</SelectItem>
-                <SelectItem value="radial">🎯 Radial</SelectItem>
-                <SelectItem value="force">⚛️ Force</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <Separator orientation="vertical" className="h-6 mx-1" />
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Edge Type:</span>
-            <Select value={edgeType} onValueChange={(v: any) => setEdgeType(v)}>
-              <SelectTrigger className="w-[130px] h-8">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="smoothstep">Smooth Step</SelectItem>
-                <SelectItem value="bezier">Bezier</SelectItem>
-                <SelectItem value="straight">Straight</SelectItem>
-                <SelectItem value="step">Step</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Style:</span>
-            <Select value={edgeStyle} onValueChange={(v: any) => setEdgeStyle(v)}>
-              <SelectTrigger className="w-[100px] h-8">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="solid">Solid</SelectItem>
-                <SelectItem value="dashed">Dashed</SelectItem>
-                <SelectItem value="dotted">Dotted</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          
+          {/* Style Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline" className="hover:bg-muted">
+                <Palette className="h-4 w-4 mr-2"/>
+                Style
+                <ChevronDown className="h-3 w-3 ml-2 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuLabel>Edge Type</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => setEdgeType('smoothstep')}>
+                <span className={edgeType === 'smoothstep' ? 'font-bold' : ''}>Smooth Step</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setEdgeType('bezier')}>
+                <span className={edgeType === 'bezier' ? 'font-bold' : ''}>Bezier</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setEdgeType('straight')}>
+                <span className={edgeType === 'straight' ? 'font-bold' : ''}>Straight</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setEdgeType('step')}>
+                <span className={edgeType === 'step' ? 'font-bold' : ''}>Step</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Edge Style</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => setEdgeStyle('solid')}>
+                <span className={edgeStyle === 'solid' ? 'font-bold' : ''}>──── Solid</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setEdgeStyle('dashed')}>
+                <span className={edgeStyle === 'dashed' ? 'font-bold' : ''}>- - - Dashed</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setEdgeStyle('dotted')}>
+                <span className={edgeStyle === 'dotted' ? 'font-bold' : ''}>· · · Dotted</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          
+          {/* Layout Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline" className="hover:bg-muted">
+                <LayoutIcon className="h-4 w-4 mr-2"/>
+                Layout
+                <ChevronDown className="h-3 w-3 ml-2 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48">
+              <DropdownMenuItem onClick={() => setCurrentLayout('manual')}>
+                <span className={currentLayout === 'manual' ? 'font-bold' : ''}>✋ Manual</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setCurrentLayout('tree')}>
+                <span className={currentLayout === 'tree' ? 'font-bold' : ''}>🌳 Tree</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setCurrentLayout('radial')}>
+                <span className={currentLayout === 'radial' ? 'font-bold' : ''}>🎯 Radial</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setCurrentLayout('force')}>
+                <span className={currentLayout === 'force' ? 'font-bold' : ''}>⚛️ Force</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          
+          {/* Context Actions - Delete Connection (conditional) */}
+          {(() => {
+            const selectedEdges = edges.filter(e => e.selected);
+            return selectedEdges.length > 0 ? (
+              <>
+                <Separator orientation="vertical" className="h-6" />
+                <Button 
+                  size="sm" 
+                  variant="destructive"
+                  onClick={() => {
+                    setEdges((eds) => eds.filter(e => !e.selected));
+                    setSelectedEdge(null);
+                  }}
+                  className="hover:bg-destructive/90"
+                >
+                  🗑️ Delete ({selectedEdges.length})
+                </Button>
+              </>
+            ) : null;
+          })()}
         </div>
+        
+        {/* Right Section */}
         <div className="flex items-center gap-2">
           <Button 
             size="sm" 
             variant="outline" 
-            onClick={handleGeneratePresentation}
+            onClick={handleOpenPresentationWizard}
             disabled={aiLoading || nodes.length === 0}
             title={nodes.length === 0 ? "Add nodes to generate presentation" : "Generate AI presentation from mindmap"}
+            className="hover:bg-muted"
           >
             {aiLoading ? (
               <>
@@ -2356,12 +2502,9 @@ Examples:
               </>
             )}
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setShowExportModal(true)}>
-            📤 Export
-          </Button>
           <Button 
             size="sm" 
-            className="gradient-primary text-white" 
+            className="gradient-primary text-white hover:opacity-90 shadow-md" 
             onClick={() => setShowAIToolsModal(true)}
             disabled={aiLoading}
           >
@@ -2396,6 +2539,8 @@ Examples:
           defaultEdgeOptions={{
             type: getReactFlowEdgeType(edgeType),
             animated: false,
+            selectable: true,
+            deletable: true,
             markerEnd: {
               type: 'arrowclosed',
               color: '#64748b',
@@ -2406,6 +2551,7 @@ Examples:
               strokeDasharray: edgeStyle === 'dashed' ? '5,5' : edgeStyle === 'dotted' ? '2,2' : undefined,
             },
           }}
+          edgesFocusable={true}
         >
           {/* Background Grid */}
           <Background 
@@ -2450,8 +2596,26 @@ Examples:
       {/* PM Fields Sidebar */}
       <Studio2Sidebar
         selectedNode={sidebarNode}
-        onClose={() => setSidebarNode(null)}
+        selectedEdge={selectedEdge}
+        onClose={() => {
+          setSidebarNode(null);
+          setSelectedEdge(null);
+        }}
         onUpdate={handleSidebarUpdate}
+        onUpdateEdge={(edgeId, data) => {
+          setEdges((eds) =>
+            eds.map((edge) => {
+              if (edge.id === edgeId) {
+                const updatedEdge = { ...edge, ...data };
+                // Also update selectedEdge so sidebar shows current values
+                setSelectedEdge(updatedEdge);
+                return updatedEdge;
+              }
+              return edge;
+            })
+          );
+        }}
+        onAddIconNode={addIconifyNode}
       />
 
       {/* Export Modal */}
@@ -2470,6 +2634,15 @@ Examples:
         onLoadTemplate={handleLoadTemplate}
       />
 
+      {/* Icon Picker Modal */}
+      <IconPickerModal
+        isOpen={showIconPickerModal}
+        onClose={() => setShowIconPickerModal(false)}
+        onSelectIcon={(title, icon, color) => {
+          addIconifyNode(title, icon, color);
+        }}
+      />
+
       {/* AI Tools Modal */}
       <Studio2AIToolsModal
         isOpen={showAIToolsModal}
@@ -2478,6 +2651,18 @@ Examples:
         edges={edges}
         onApplyAI={handleAIAction}
       />
+
+      {/* Presentation Wizard */}
+      <PresentationWizardModal
+        open={showPresentationWizard}
+        onOpenChange={setShowPresentationWizard}
+        onGenerate={handleGeneratePresentation}
+      />
+
+      {/* Full-Screen Presentation Loading */}
+      {showPresentationProgress && (
+        <PresentationLoadingScreen progress={presentationProgress} />
+      )}
 
       {/* Floating AI Chat Button - Conversational Assistant */}
       <Button

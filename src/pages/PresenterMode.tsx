@@ -11,35 +11,66 @@
  */
 
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { SlideRenderer } from '@/components/presentation/SlideRenderer';
+import { workspaceService } from '@/services/workspace/WorkspaceService';
 import type { Presentation, Slide } from '@/services/presentation/PresentationGenerator';
 
 export default function PresenterMode() {
   const { presentationId } = useParams<{ presentationId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [presentation, setPresentation] = useState<Presentation | null>(null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [startTime] = useState<Date>(new Date());
   const [elapsedTime, setElapsedTime] = useState(0);
 
+  // Determine the actual presentation ID from URL
+  const getActualPresentationId = (): string | null => {
+    const pathParts = location.pathname.split('/').filter(Boolean);
+    
+    // Check if we're in workspace context
+    if (pathParts[0] === 'workspace' && pathParts[1] === 'doc') {
+      return pathParts[2] || null; // /workspace/doc/{id}/present
+    }
+    
+    // Otherwise use the presentationId param
+    return presentationId || null; // /presentation/{id}/present
+  };
+
+  const actualId = getActualPresentationId();
+
   // Load presentation
   useEffect(() => {
-    if (presentationId) {
-      const saved = localStorage.getItem(`presentation-${presentationId}`);
+    if (actualId) {
+      // Try workspace first (for new flow)
+      const workspaceDoc = workspaceService.getDocument(actualId);
+      if (workspaceDoc && workspaceDoc.type === 'presentation') {
+        try {
+          const parsed = JSON.parse(workspaceDoc.content);
+          setPresentation(parsed);
+          console.log('✅ Loaded presentation from workspace for presenting:', parsed.title);
+          return;
+        } catch (e) {
+          console.error('Failed to parse workspace presentation:', e);
+        }
+      }
+      
+      // Fallback to localStorage (for old flow)
+      const saved = localStorage.getItem(`presentation-${actualId}`);
       if (saved) {
         const parsed = JSON.parse(saved);
         setPresentation(parsed);
-        console.log('✅ Loaded presentation for presenting:', parsed.title);
+        console.log('✅ Loaded presentation from localStorage for presenting:', parsed.title);
       } else {
-        console.error('❌ Presentation not found:', presentationId);
-        navigate('/dashboard/editor');
+        console.error('❌ Presentation not found:', actualId);
+        navigate('/workspace');
       }
     }
-  }, [presentationId, navigate]);
+  }, [actualId, navigate]);
 
   // Timer - update every second
   useEffect(() => {
@@ -90,7 +121,14 @@ export default function PresenterMode() {
   };
 
   const exitPresenterMode = () => {
-    navigate(`/presentation/${presentationId}/edit`);
+    // Check if we're in workspace context
+    if (actualId && location.pathname.includes('/workspace/')) {
+      // Go back to slides editor in workspace
+      navigate(`/workspace/doc/${actualId}/slides`);
+    } else {
+      // Fallback to old standalone route
+      navigate(`/presentation/${presentationId}/edit`);
+    }
   };
 
   const formatTime = (seconds: number): string => {

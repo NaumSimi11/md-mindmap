@@ -46,6 +46,7 @@ const App = () => (
             <Route path="/workspace/doc/:id/edit" element={<Workspace />} />
             <Route path="/workspace/doc/:id/mindmap" element={<Workspace />} />
             <Route path="/workspace/doc/:id/slides" element={<Workspace />} />
+            <Route path="/workspace/doc/:id/present" element={<Workspace />} />
             
             {/* Standalone Mindmap Studio */}
             <Route path="/studio2" element={<MindmapStudio2 />} />

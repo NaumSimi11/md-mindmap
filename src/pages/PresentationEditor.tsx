@@ -11,7 +11,8 @@
  */
 
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { workspaceService } from '@/services/workspace/WorkspaceService';
 import { Button } from '@/components/ui/button';
 import { 
   Presentation as PresentationIcon, 
@@ -31,6 +32,7 @@ import { PresentationSidebar } from '@/components/presentation/PresentationSideb
 export default function PresentationEditor() {
   const { presentationId } = useParams<{ presentationId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [presentation, setPresentation] = useState<Presentation | null>(null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -38,10 +40,28 @@ export default function PresentationEditor() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Determine the actual presentation ID from URL
+  // Supports both:
+  // - /presentation/{id}/edit (standalone)
+  // - /workspace/doc/{id}/slides (workspace)
+  const getActualPresentationId = (): string | null => {
+    const pathParts = location.pathname.split('/').filter(Boolean);
+    
+    // Check if we're in workspace context
+    if (pathParts[0] === 'workspace' && pathParts[1] === 'doc') {
+      return pathParts[2] || null; // /workspace/doc/{id}/slides
+    }
+    
+    // Otherwise use the presentationId param
+    return presentationId || null; // /presentation/{id}/edit
+  };
+
+  const actualId = getActualPresentationId();
+
   // Load or generate presentation on mount
   useEffect(() => {
     loadOrGeneratePresentation();
-  }, [presentationId]);
+  }, [actualId]);
 
   const loadOrGeneratePresentation = async () => {
     try {
@@ -51,9 +71,10 @@ export default function PresentationEditor() {
       if (sessionKey) {
         console.log('🎤 Generating presentation from session:', sessionKey);
         await generateFromSession(sessionKey);
-      } else if (presentationId) {
-        // Load existing presentation
-        loadExistingPresentation(presentationId);
+      } else if (actualId) {
+        // Load existing presentation from workspace or localStorage
+        console.log('📂 Loading presentation:', actualId);
+        loadExistingPresentation(actualId);
       } else {
         setError('No presentation ID or session found');
       }
@@ -111,11 +132,25 @@ export default function PresentationEditor() {
   };
 
   const loadExistingPresentation = (id: string) => {
+    // Try workspace first (for new flow)
+    const workspaceDoc = workspaceService.getDocument(id);
+    if (workspaceDoc && workspaceDoc.type === 'presentation') {
+      try {
+        const parsed = JSON.parse(workspaceDoc.content);
+        setPresentation(parsed);
+        console.log('✅ Loaded presentation from workspace:', parsed.title);
+        return;
+      } catch (e) {
+        console.error('Failed to parse workspace presentation:', e);
+      }
+    }
+    
+    // Fallback to localStorage (for old flow)
     const saved = localStorage.getItem(`presentation-${id}`);
     if (saved) {
       const parsed = JSON.parse(saved);
       setPresentation(parsed);
-      console.log('✅ Loaded existing presentation:', parsed.title);
+      console.log('✅ Loaded presentation from localStorage:', parsed.title);
     } else {
       setError('Presentation not found');
     }
@@ -235,7 +270,14 @@ export default function PresentationEditor() {
 
   const handlePresent = () => {
     if (presentation) {
-      navigate(`/presentation/${presentation.id}/present`);
+      // Check if we're in workspace context
+      if (actualId && location.pathname.includes('/workspace/')) {
+        // Stay in workspace, navigate to presenter mode with workspace context
+        navigate(`/workspace/doc/${actualId}/present`);
+      } else {
+        // Fallback to old standalone route
+        navigate(`/presentation/${presentation.id}/present`);
+      }
     }
   };
 
@@ -244,7 +286,14 @@ export default function PresentationEditor() {
   };
 
   const handleBackToEditor = () => {
-    navigate('/dashboard/editor');
+    // Check if we have a source document
+    if (presentation?.metadata?.sourceDocumentId) {
+      // Navigate back to the original document in workspace
+      navigate(`/workspace/doc/${presentation.metadata.sourceDocumentId}/edit`);
+    } else {
+      // No source document, go to workspace home
+      navigate('/workspace');
+    }
   };
 
   const currentSlide = presentation?.slides[currentSlideIndex];

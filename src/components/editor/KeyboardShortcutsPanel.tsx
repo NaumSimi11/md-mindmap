@@ -69,6 +69,14 @@ const shortcuts = [
     ],
   },
   {
+    category: 'AI Tools',
+    items: [
+      { keys: ['Ctrl', 'Shift', 'A'], action: 'Open AI Assistant' },
+      { keys: ['Ctrl', 'Shift', 'D'], action: 'Insert diagram' },
+      { keys: ['Ctrl', 'Shift', 'M'], action: 'Open mindmap studio' },
+    ],
+  },
+  {
     category: 'Navigation',
     items: [
       { keys: ['Ctrl', 'Home'], action: 'Go to start' },

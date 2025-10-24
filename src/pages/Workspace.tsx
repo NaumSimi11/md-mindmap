@@ -6,7 +6,7 @@ import { QuickSwitcher } from '@/components/workspace/QuickSwitcher';
 import { NewDocumentModal } from '@/components/workspace/NewDocumentModal';
 import { DesktopWorkspaceSelector } from '@/components/workspace/DesktopWorkspaceSelector';
 import { Button } from '@/components/ui/button';
-import { Plus, Search, Sparkles } from 'lucide-react';
+import { Plus, Search, Sparkles, Presentation as PresentationIcon } from 'lucide-react';
 import { getGuestCredits } from '@/lib/guestCredits';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { usePlatform } from '@/contexts/PlatformContext';
@@ -14,13 +14,17 @@ import { MindmapLoadingScreen } from '@/components/mindmap/MindmapLoadingScreen'
 import MindmapGenerator from '@/services/MindmapGenerator';
 import { sessionService } from '@/services/EditorStudioSession';
 import { useScrollSpy } from '@/hooks/useScrollSpy';
+import { PresentationWizardModal, type GenerationSettings } from '@/components/presentation/PresentationWizardModal';
+import { PresentationLoadingScreen } from '@/components/presentation/PresentationLoadingScreen';
+import { safePresentationService, type ProgressUpdate } from '@/services/presentation/SafePresentationService';
 
 // Import document editors
 import { WYSIWYGEditor } from '@/components/editor/WYSIWYGEditor';
 import MindmapStudio2 from './MindmapStudio2';
 import PresentationEditor from './PresentationEditor';
+import PresenterMode from './PresenterMode';
 
-type ViewMode = 'home' | 'edit' | 'mindmap' | 'slides';
+type ViewMode = 'home' | 'edit' | 'mindmap' | 'slides' | 'present';
 
 export default function Workspace() {
   const navigate = useNavigate();
@@ -33,6 +37,7 @@ export default function Workspace() {
   // /workspace/doc/:id/edit → edit mode
   // /workspace/doc/:id/mindmap → mindmap mode
   // /workspace/doc/:id/slides → slides mode
+  // /workspace/doc/:id/present → present mode (full-screen)
   const pathParts = location.pathname.split('/').filter(Boolean);
   const viewMode: ViewMode = pathParts[3] as ViewMode || 'home';
   const documentId = pathParts[2] || null;
@@ -85,6 +90,12 @@ export default function Workspace() {
   // Mindmap generation state
   const [isGeneratingMindmap, setIsGeneratingMindmap] = useState(false);
   const [mindmapProgress, setMindmapProgress] = useState(0);
+  
+  // Presentation wizard & progress
+  const [showPresentationWizard, setShowPresentationWizard] = useState(false);
+  const [showPresentationProgress, setShowPresentationProgress] = useState(false);
+  const [presentationProgress, setPresentationProgress] = useState<ProgressUpdate | null>(null);
+  const [presentationError, setPresentationError] = useState<string | null>(null);
 
   // Removed debug logging that was causing confusion
 
@@ -239,6 +250,71 @@ export default function Workspace() {
   const handleNewDocument = () => {
     console.log('🆕 Opening new document modal...');
     setShowNewDocModal(true);
+  };
+
+  // Generate presentation from editor
+  const handleGeneratePresentation = async (settings: GenerationSettings) => {
+    console.log('🎬 Generating presentation from editor with settings:', settings);
+    
+    if (!currentDocument) return;
+    
+    // 🔧 CLEAR OLD SESSION KEYS (from old Editor.tsx flow)
+    localStorage.removeItem('presentation-session');
+    const oldKeys = Object.keys(localStorage).filter(key => 
+      key.startsWith('editor-pres-session-') || 
+      key.startsWith('mindmap-pres-session-')
+    );
+    oldKeys.forEach(key => localStorage.removeItem(key));
+    console.log('🧹 Cleared old session keys:', oldKeys.length);
+    
+    // Close wizard, show progress
+    setShowPresentationWizard(false);
+    setShowPresentationProgress(true);
+    setPresentationProgress(null);
+    setPresentationError(null);
+    
+    try {
+      const editorContent = liveEditorContent || currentDocument.content;
+      console.log('📝 Editor content length:', editorContent.length);
+      
+      console.log('🤖 Calling safe presentation service...');
+      const presentation = await safePresentationService.generateSafely(
+        editorContent,
+        null, // No mindmap data from editor
+        settings,
+        currentDocument.id, // ✅ Pass source document ID
+        (progress: ProgressUpdate) => {
+          console.log('📊 Progress:', progress);
+          setPresentationProgress(progress);
+        }
+      );
+      
+      console.log('✅ Presentation generated:', presentation);
+      
+      // Save presentation to workspace
+      console.log('💾 Saving presentation to workspace...');
+      const doc = await workspaceService.createDocument(
+        'presentation', 
+        `${currentDocument.title} - Presentation`, 
+        JSON.stringify(presentation)
+      );
+      console.log('✅ Presentation saved:', doc.id);
+      
+      // Wait a moment to show success, then navigate
+      setTimeout(() => {
+        setShowPresentationProgress(false);
+        navigate(`/workspace/doc/${doc.id}/slides`);
+      }, 1500);
+    } catch (error: any) {
+      console.error('❌ Failed to generate presentation:', error);
+      setPresentationError(error.message || 'Failed to generate presentation');
+      
+      // Auto-close error after 5 seconds
+      setTimeout(() => {
+        setShowPresentationProgress(false);
+        setPresentationError(null);
+      }, 5000);
+    }
   };
 
   const handleDocumentCreated = (docId: string) => {
@@ -593,13 +669,18 @@ export default function Workspace() {
       return <PresentationEditor />;
     }
 
+    if (viewMode === 'present') {
+      // Full-screen presenter mode - no sidebar
+      return <PresenterMode />;
+    }
+
     return null;
   };
 
   return (
     <div className="flex h-screen bg-background relative">
-      {/* Adaptive Sidebar - Hidden in Focus Mode */}
-      {!focusMode && (
+      {/* Adaptive Sidebar - Hidden in Focus Mode and Presenter Mode */}
+      {!focusMode && viewMode !== 'present' && (
         <AdaptiveSidebar
           isEditingDocument={viewMode === 'edit' || viewMode === 'mindmap' || viewMode === 'slides'}
           documentContent={liveEditorContent || currentDocument?.content || ''}
@@ -644,11 +725,11 @@ export default function Workspace() {
         {/* Top Bar */}
         {!focusMode && (
           <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-card/50 backdrop-blur-sm">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-glow">MD Creator</h1>
             {currentDocument && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">/</span>
+              <>
+                <span className="text-muted-foreground">/</span>
                 <input
                   type="text"
                   value={currentDocument.title}
@@ -657,14 +738,44 @@ export default function Workspace() {
                     setCurrentDocument({ ...currentDocument, title: newTitle });
                     workspaceService.updateDocument(currentDocument.id, { title: newTitle });
                   }}
-                  className="text-sm font-medium bg-transparent border-none outline-none focus:ring-0 min-w-[200px] max-w-[400px]"
+                  className="text-sm font-medium bg-transparent border-none outline-none focus:ring-0 min-w-[200px] max-w-[400px] hover:bg-muted/30 px-2 py-1 rounded transition-colors"
                   placeholder="Untitled Document"
                 />
-              </div>
+                
+                {/* View Mode Indicator */}
+                {viewMode && viewMode !== 'home' && (
+                  <>
+                    <span className="text-muted-foreground">/</span>
+                    <span className="text-sm font-medium text-primary px-2 py-1 rounded-md bg-primary/10">
+                      {viewMode === 'edit' && '✍️ Editor'}
+                      {viewMode === 'mindmap' && '🧠 Mindmap'}
+                      {viewMode === 'presentation' && '📊 Presentation'}
+                    </span>
+                  </>
+                )}
+              </>
             )}
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Prepare Presentation - Only show when editing */}
+            {viewMode === 'edit' && currentDocument && (
+              <Button
+                size="sm"
+                className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white hover:scale-105 transition-transform"
+                onClick={() => {
+                  if (!liveEditorContent && !currentDocument.content) {
+                    alert('❌ Please add some content before generating a presentation.');
+                    return;
+                  }
+                  setShowPresentationWizard(true);
+                }}
+              >
+                <PresentationIcon className="h-4 w-4 mr-2" />
+                📊 Prepare Presentation
+              </Button>
+            )}
+            
             {/* Guest Credits */}
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border border-border/40 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1">
@@ -714,6 +825,18 @@ export default function Workspace() {
         onDocumentCreated={handleDocumentCreated}
         folderId={null}
       />
+
+      {/* Presentation Wizard */}
+      <PresentationWizardModal
+        open={showPresentationWizard}
+        onOpenChange={setShowPresentationWizard}
+        onGenerate={handleGeneratePresentation}
+      />
+
+      {/* Full-Screen Presentation Loading */}
+      {showPresentationProgress && (
+        <PresentationLoadingScreen progress={presentationProgress} />
+      )}
     </div>
   );
 }
