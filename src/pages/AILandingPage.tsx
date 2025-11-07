@@ -221,7 +221,7 @@ Create 5-8 slides with varied layouts: title, content, bullets, diagram.`,
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white overflow-hidden relative">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white overflow-hidden relative">
       {/* Animated background with modern colors */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {/* Soft cyan glow - top right */}
@@ -320,7 +320,7 @@ Create 5-8 slides with varied layouts: title, content, bullets, diagram.`,
                     ${
                       isSelected
                         ? 'border-cyan-500/50 bg-slate-800/60 scale-[1.02]'
-                        : 'border-slate-700/50 bg-slate-900/40 hover:bg-slate-800/60 hover:border-slate-600'
+                        : 'border-slate-600/50 bg-slate-800/50 hover:bg-slate-700/70 hover:border-slate-500'
                     }
                   `}
                 >
@@ -340,15 +340,15 @@ Create 5-8 slides with varied layouts: title, content, bullets, diagram.`,
 
         {/* Main Prompt Area */}
         <div className="mb-8">
-          <div className="bg-slate-900/60 backdrop-blur-xl rounded-2xl border border-cyan-500/20 p-8 shadow-2xl shadow-cyan-500/10">
+          <div className="bg-slate-800/70 backdrop-blur-xl rounded-2xl border border-cyan-500/30 p-8 shadow-2xl shadow-cyan-500/10">
             <textarea
               placeholder="Describe what you want to create... (e.g., 'Create a project roadmap for launching a mobile app')"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              className="w-full min-h-32 bg-slate-950/50 border border-slate-700 rounded-md px-3 py-2 text-lg resize-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:border-cyan-500 focus-visible:outline-none"
+              className="w-full min-h-32 bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-lg resize-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:border-cyan-500 focus-visible:outline-none"
               style={{ 
                 color: '#ffffff',
-                backgroundColor: 'rgba(2, 6, 23, 0.5)',
+                backgroundColor: 'rgba(51, 65, 85, 0.4)',
               }}
             />
             <div className="flex items-center justify-between mt-4">
@@ -411,7 +411,7 @@ Create 5-8 slides with varied layouts: title, content, bullets, diagram.`,
               <div className="w-full border-t border-slate-700"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-slate-950 text-slate-400">or skip AI generation</span>
+              <span className="px-4 bg-slate-800 text-slate-300">or skip AI generation</span>
             </div>
           </div>
           

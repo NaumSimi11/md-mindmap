@@ -89,16 +89,6 @@ export function HamburgerMenu({ isOpen, onClose }: HamburgerMenuProps) {
                 </button>
               </li>
               
-              <li>
-                <button
-                  onClick={() => handleNavigation("/dashboard")}
-                  className="flex items-center gap-4 w-full p-4 rounded-xl hover:bg-muted transition-all duration-200 group hover:translate-x-1 opacity-50"
-                >
-                  <Home size={20} className="text-muted-foreground group-hover:text-foreground transition-colors" />
-                  <span className="text-foreground font-medium">Old Dashboard</span>
-                </button>
-              </li>
-              
               <div className="border-t border-border my-4"></div>
               
               <li>
@@ -113,7 +103,7 @@ export function HamburgerMenu({ isOpen, onClose }: HamburgerMenuProps) {
               
               <li>
                 <button
-                  onClick={() => handleNavigation("/dashboard/settings")}
+                  onClick={() => handleNavigation("/workspace")}
                   className="flex items-center gap-4 w-full p-4 rounded-xl hover:bg-muted transition-all duration-200 group hover:translate-x-1"
                 >
                   <Settings size={20} className="text-muted-foreground group-hover:text-foreground transition-colors" />

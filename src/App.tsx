@@ -3,7 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppLayout } from "./components/layout/AppLayout";
 import { LandingPage } from "./components/landing/LandingPage";
 import Index from "./pages/Index";
@@ -21,6 +21,7 @@ import PresentationEditor from "./pages/PresentationEditor";
 import PresenterMode from "./pages/PresenterMode";
 import WorkspaceDemo from "./pages/WorkspaceDemo";
 import AILandingPage from "./pages/AILandingPage";
+import AILandingPageRedesigned from "./pages/AILandingPageRedesigned";
 import Workspace from "./pages/Workspace";
 
 const queryClient = new QueryClient();
@@ -39,6 +40,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<AILandingPage />} />
+            <Route path="/landing-redesigned" element={<AILandingPageRedesigned />} />
             <Route path="/old-landing" element={<LandingPage />} />
             
             {/* NEW: Main Workspace (AI Office Suite) */}
@@ -51,20 +53,18 @@ const App = () => (
             {/* Standalone Mindmap Studio */}
             <Route path="/studio2" element={<MindmapStudio2 />} />
             
-            {/* OLD: Dashboard (keeping for backward compatibility) */}
-            <Route path="/dashboard" element={<AppLayout />}>
-              <Route index element={<Index />} />
-              <Route path="editor" element={<Editor />} />
-              <Route path="mindmaps" element={<Mindmaps />} />
-              <Route path="mindmaps/editor" element={<MindmapEditor />} />
-              <Route path="mindmaps/studio" element={<MindmapStudio />} />
-              <Route path="mindmaps/studio1" element={<MindmapStudio1 />} />
-              <Route path="mindmaps/studio2" element={<MindmapStudio2 />} />
-              <Route path="library" element={<div className="p-6 text-center text-muted-foreground">Library feature coming soon...</div>} />
-              <Route path="slash-demo" element={<SlashCommandDemo />} />
-              <Route path="templates" element={<Templates />} />
-              <Route path="settings" element={<div className="p-6 text-center text-muted-foreground">Settings feature coming soon...</div>} />
-            </Route>
+            {/* OLD: Dashboard - Redirect to Workspace (unified navigation) */}
+            <Route path="/dashboard" element={<Navigate to="/workspace" replace />} />
+            <Route path="/dashboard/*" element={<Navigate to="/workspace" replace />} />
+            
+            {/* Legacy dashboard routes - redirect to workspace */}
+            <Route path="/dashboard/editor" element={<Navigate to="/workspace" replace />} />
+            <Route path="/dashboard/mindmaps" element={<Navigate to="/workspace" replace />} />
+            <Route path="/dashboard/mindmaps/*" element={<Navigate to="/workspace" replace />} />
+            <Route path="/dashboard/templates" element={<Navigate to="/workspace" replace />} />
+            <Route path="/dashboard/library" element={<Navigate to="/workspace" replace />} />
+            <Route path="/dashboard/settings" element={<Navigate to="/workspace" replace />} />
+            <Route path="/dashboard/slash-demo" element={<Navigate to="/workspace" replace />} />
             <Route path="/workspace-demo" element={<WorkspaceDemo />} />
             <Route path="/presentation/:presentationId/edit" element={<PresentationEditor />} />
             <Route path="/presentation/:presentationId/present" element={<PresenterMode />} />

@@ -102,7 +102,7 @@ export function LandingPage() {
         {/* Call-to-Action Buttons */}
         <div className="flex flex-col sm:flex-row items-center gap-6">
           <button
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate('/workspace')}
             className="btn-primary text-lg px-8 py-4 min-w-[200px] group"
           >
             Get Started Online
@@ -133,7 +133,7 @@ export function LandingPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             {/* New Document */}
             <button
-              onClick={() => navigate('/dashboard/editor')}
+              onClick={() => navigate('/workspace')}
               className="glass-card p-6 text-center hover:scale-[1.01] transition-all duration-200 group"
             >
               <FileText size={32} className="mx-auto mb-3 text-purple-400 transition-colors" />
@@ -153,7 +153,7 @@ export function LandingPage() {
 
             {/* Mindmaps */}
             <button
-              onClick={() => navigate('/dashboard/mindmaps')}
+              onClick={() => navigate('/workspace')}
               className="glass-card p-6 text-center hover:scale-[1.01] transition-all duration-200 group"
             >
               <Brain size={32} className="mx-auto mb-3 text-purple-400 group-hover:text-purple-300" />
@@ -163,7 +163,7 @@ export function LandingPage() {
 
             {/* Templates */}
             <button
-              onClick={() => navigate('/dashboard/templates')}
+              onClick={() => navigate('/workspace')}
               className="glass-card p-6 text-center hover:scale-[1.01] transition-all duration-200 group"
             >
               <FileImage size={32} className="mx-auto mb-3 text-orange-400 transition-colors" />

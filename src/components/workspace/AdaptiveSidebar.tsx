@@ -94,7 +94,7 @@ export function AdaptiveSidebar({
 
   if (collapsed) {
     return (
-      <div className="w-12 border-r border-border bg-card flex flex-col items-center py-4">
+      <div className="w-12 bg-card/40 backdrop-blur-sm mr-2 flex flex-col items-center py-4">
         <Button
           variant="ghost"
           size="sm"
@@ -108,12 +108,12 @@ export function AdaptiveSidebar({
   }
 
   return (
-    <div className="w-72 border-r border-border bg-card flex flex-col h-full">
+    <div className="w-72 bg-card/40 backdrop-blur-sm mr-2 flex flex-col h-full">
       {/* Show tabs only when editing a document */}
       {isEditingDocument ? (
         <Tabs value={currentTab} onValueChange={(v) => setActiveTab(v as any)} className="flex flex-col h-full">
           {/* Main Tab Switcher at Top */}
-          <div className="border-b border-border px-2 py-2">
+          <div className="px-2 py-2 mb-2">
             <div className="flex items-center gap-1">
               <Button
                 variant={currentTab === 'documents' ? 'secondary' : 'ghost'}
@@ -147,7 +147,7 @@ export function AdaptiveSidebar({
 
           {/* Shared Header and Subtabs for This Doc (shown for both outline and context) */}
           {(currentTab === 'outline' || currentTab === 'context') && (
-            <div className="px-4 py-3 border-b border-border">
+            <div className="px-4 py-3 mb-2">
               <div className="flex items-center gap-2 mb-3">
                 <Hash className="w-4 h-4 text-muted-foreground" />
                 <h3 className="text-sm font-semibold">Document Outline</h3>
@@ -202,7 +202,7 @@ export function AdaptiveSidebar({
           </TabsContent>
 
           {/* Collapse Button */}
-          <div className="p-2 border-t border-border">
+          <div className="p-2 mt-2">
             <Button
               variant="ghost"
               size="sm"

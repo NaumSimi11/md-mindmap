@@ -45,6 +45,7 @@ import { FootnoteReference, FootnoteDefinition, FootnotesSection } from './exten
 import { TOCNode } from './extensions/TOCNode';
 import { ResizableImageNodeView } from './extensions/ResizableImageNodeView';
 import { FloatingToolbar } from './FloatingToolbar';
+import { FloatingSideToolbar } from './FloatingSideToolbar';
 import { LinkHoverToolbar } from './LinkHoverToolbar';
 import { KeyboardShortcutsPanel } from './KeyboardShortcutsPanel';
 import { EditorContextMenu } from './EditorContextMenu';
@@ -2406,9 +2407,49 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
   };
 
   return (
-    <div className="h-screen flex flex-col bg-background">
-      {/* Toolbar */}
-      <div className="border-b border-border bg-card px-6 py-3 flex-shrink-0">
+    <div className="h-screen flex flex-col bg-background relative">
+      {/* Floating Side Toolbar - NEW */}
+      <FloatingSideToolbar
+        editor={editor}
+        onInsertTable={insertTable}
+        onInsertLink={insertLink}
+        onInsertImage={insertImage}
+        onAutoFormat={handleAutoFormat}
+        onAutoFormatAll={handleAutoFormatAll}
+        onAIFormat={handleAIFormat}
+        onShowDiagramMenu={() => setShowDiagramMenu(true)}
+        onShowAIModal={() => setShowAIModal(true)}
+        onShowMindmapChoice={() => {
+          if (editor && onContentChange) {
+            const markdown = htmlToMarkdown('', editor);
+            onContentChange(markdown);
+          }
+          setShowMindmapChoiceModal(true);
+        }}
+        onShowKeyboardShortcuts={() => setShowKeyboardShortcuts(true)}
+        onToggleEditorMode={toggleEditorMode}
+        editorMode={editorMode}
+        aiAutocompleteEnabled={aiAutocompleteEnabled}
+        onAIAutocompleteChange={setAiAutocompleteEnabled}
+        aiHintsEnabled={aiSuggestionsEnabled}
+        onAIHintsChange={(checked) => setAiSuggestionsEnabled(checked)}
+        onImportFile={triggerOpenFile}
+        onExportMarkdown={exportAsMarkdown}
+        onSave={() => {
+          // Save functionality - can be implemented later
+          if (onContentChange && editor) {
+            const markdown = htmlToMarkdown('', editor);
+            onContentChange(markdown);
+          }
+        }}
+        onShare={() => {
+          // Share functionality - can be implemented later
+          console.log('Share clicked');
+        }}
+      />
+
+      {/* Toolbar - OLD (keeping for comparison) */}
+      <div className="bg-card/40 backdrop-blur-sm px-6 py-3 flex-shrink-0 mb-2">
         <div className="flex items-center justify-between w-full">
           {/* Left: Compact Toolbar */}
           <div className="flex items-center gap-2">
@@ -2606,7 +2647,7 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
       </div>
 
       {/* Status Bar */}
-      <div className="border-t border-border bg-muted px-6 py-2 flex-shrink-0">
+      <div className="bg-muted/50 backdrop-blur-sm px-6 py-2 flex-shrink-0 mt-2">
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <div className="flex items-center gap-4">
             <span>

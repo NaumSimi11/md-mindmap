@@ -5,6 +5,7 @@ import { AdaptiveSidebar } from '@/components/workspace/AdaptiveSidebar';
 import { QuickSwitcher } from '@/components/workspace/QuickSwitcher';
 import { NewDocumentModal } from '@/components/workspace/NewDocumentModal';
 import { DesktopWorkspaceSelector } from '@/components/workspace/DesktopWorkspaceSelector';
+import { WorkspaceHome } from '@/components/workspace/WorkspaceHome';
 import { Button } from '@/components/ui/button';
 import { Plus, Search, Sparkles, Presentation as PresentationIcon } from 'lucide-react';
 import { getGuestCredits } from '@/lib/guestCredits';
@@ -533,136 +534,11 @@ export default function Workspace() {
   const renderMainContent = () => {
     if (viewMode === 'home') {
       return (
-        <div className="flex-1 p-8">
-          <div className="max-w-4xl mx-auto">
-            <h1 className="text-4xl font-bold mb-4">Welcome to Your Workspace</h1>
-            <p className="text-muted-foreground text-lg mb-8">
-              Create, organize, and manage all your documents, mindmaps, and presentations in one place.
-            </p>
-
-            {/* Storage Warning */}
-            {isDesktop ? (
-              <div className="mb-8">
-                <div className="mb-4 p-4 bg-primary/10 border-2 border-primary/30 rounded-lg">
-                  <h2 className="text-lg font-bold text-primary mb-2 flex items-center gap-2">
-                    💾 Important: Select a folder to save your documents!
-                  </h2>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Without selecting a folder, your documents will only be saved in browser memory and 
-                    <strong className="text-foreground"> will be lost on refresh</strong>!
-                  </p>
-                </div>
-                <DesktopWorkspaceSelector />
-              </div>
-            ) : (
-              <div className="mb-8 p-4 bg-yellow-500/10 border-2 border-yellow-500/30 rounded-lg">
-                <h2 className="text-lg font-bold text-yellow-600 dark:text-yellow-400 mb-2 flex items-center gap-2">
-                  ⚠️ Web Mode: Documents stored in browser
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  You're using the web version. Documents are saved in browser storage (localStorage).
-                  <strong className="text-foreground"> They will be lost if you clear browser data!</strong>
-                  <br />
-                  <span className="text-xs mt-2 block">
-                    💡 For permanent storage, use the desktop app (Tauri) and select a folder.
-                  </span>
-                </p>
-              </div>
-            )}
-
-            {/* Quick Actions */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-              <button
-                onClick={handleNewDocument}
-                className="p-6 rounded-lg border border-border hover:border-primary bg-card hover:bg-card/80 transition-all text-left group"
-              >
-                <div className="flex items-center gap-3 mb-2">
-                  <Plus className="w-5 h-5 text-primary" />
-                  <h3 className="font-semibold">New Document</h3>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Create from templates or start blank
-                </p>
-              </button>
-
-              <button
-                onClick={() => {
-                  console.log('🔍 Opening quick switcher...');
-                  setShowQuickSwitcher(true);
-                }}
-                className="p-6 rounded-lg border border-border hover:border-primary bg-card hover:bg-card/80 transition-all text-left group"
-              >
-                <div className="flex items-center gap-3 mb-2">
-                  <Search className="w-5 h-5 text-blue-500" />
-                  <h3 className="font-semibold">Quick Search</h3>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Press Cmd+K to search documents
-                </p>
-              </button>
-
-              <button
-                onClick={() => navigate('/')}
-                className="p-6 rounded-lg border border-border hover:border-primary bg-card hover:bg-card/80 transition-all text-left group"
-              >
-                <div className="flex items-center gap-3 mb-2">
-                  <Sparkles className="w-5 h-5 text-purple-500" />
-                  <h3 className="font-semibold">AI Generate</h3>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Create content with AI assistance
-                </p>
-              </button>
-
-              <button
-                onClick={handleLoadDemoPresentation}
-                className="p-6 rounded-lg border-2 border-indigo-500/50 hover:border-indigo-500 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 hover:from-indigo-500/30 hover:to-purple-500/30 transition-all text-left group"
-              >
-                <div className="flex items-center gap-3 mb-2">
-                  <span className="text-xl">✨</span>
-                  <h3 className="font-bold text-indigo-300">Blocks Demo</h3>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  See all 10 beautiful components
-                </p>
-              </button>
-            </div>
-
-            {/* Recent Documents */}
-            <div>
-              <h2 className="text-2xl font-semibold mb-4">Recent Documents</h2>
-              <div className="space-y-2">
-                {workspaceService.getRecentDocuments(5).map((doc) => (
-                  <button
-                    key={doc.id}
-                    onClick={() => handleDocumentSelect(doc.id)}
-                    className="w-full p-4 rounded-lg border border-border hover:border-primary bg-card hover:bg-card/80 transition-all text-left"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-medium">{doc.title}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {doc.type === 'markdown' && '📝 Markdown'}
-                          {doc.type === 'mindmap' && '🧠 Mindmap'}
-                          {doc.type === 'presentation' && '🎤 Presentation'}
-                          {' • '}
-                          {doc.lastOpenedAt ? new Date(doc.lastOpenedAt).toLocaleDateString() : 'Never opened'}
-                        </p>
-                      </div>
-                      {doc.starred && <span className="text-yellow-500">⭐</span>}
-                    </div>
-                  </button>
-                ))}
-                {workspaceService.getRecentDocuments(5).length === 0 && (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <p>No recent documents</p>
-                    <p className="text-sm mt-2">Create your first document to get started!</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        <WorkspaceHome
+          onDocumentSelect={handleDocumentSelect}
+          onNewDocument={handleNewDocument}
+          onLoadDemo={handleLoadDemoPresentation}
+        />
       );
     }
 
@@ -761,7 +637,7 @@ export default function Workspace() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Bar */}
         {!focusMode && (
-          <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-card/50 backdrop-blur-sm">
+          <header className="flex items-center justify-between px-6 py-4 bg-card/30 backdrop-blur-sm mb-2">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-glow">MD Creator</h1>
             {currentDocument && (

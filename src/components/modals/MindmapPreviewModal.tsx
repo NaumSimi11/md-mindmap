@@ -204,14 +204,14 @@ Ensure all node names are simple and avoid special characters.`;
       diagramFormat: 'flowchart', // Force flowchart
       cursorPosition,
       cursorLine: getCursorLine(markdown, cursorPosition),
-      returnUrl: '/dashboard/editor',
+      returnUrl: '/workspace',
       generationMode,
     });
     
     console.log('🚀 Opening Studio2 with session:', sessionId);
     
     // Navigate to Studio2
-    window.location.href = '/dashboard/mindmaps/studio2';
+    window.location.href = '/workspace';
   };
   
   // Helper to get current line number from cursor position

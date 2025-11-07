@@ -19,11 +19,11 @@
     --dark-surface: 0 0% 0% / 0.05;
     --dark-surface-hover: 0 0% 0% / 0.1;
     
-    /* Purple accent system (same for both themes) */
-    --purple-primary: 262 83% 67%;
-    --purple-light: 262 100% 78%;
-    --purple-dark: 262 83% 58%;
-    --purple-glow: 262 83% 67% / 0.3;
+    /* Neural Blue accent system */
+    --purple-primary: 200 70% 55%;
+    --purple-light: 200 75% 65%;
+    --purple-dark: 200 65% 45%;
+    --purple-glow: 200 70% 55% / 0.3;
 
     /* Text colors - Light mode */
     --text-primary: 222.2 84% 4.9%;
@@ -40,8 +40,9 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 262 83% 67%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary color - Neural Blue (Bright cyan-blue) */
+    --primary: 200 70% 55%;
+    --primary-foreground: 0 0% 98%;
 
     --secondary: 210 40% 96%;
     --secondary-foreground: 222.2 84% 4.9%;
@@ -49,13 +50,13 @@
     --muted: 210 40% 96%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 262 83% 67%;
+    --accent: 200 70% 55%;
     --accent-foreground: 0 0% 100%;
 
-    --success: 262 83% 67%;
+    --success: 200 70% 55%;
     --success-foreground: 0 0% 100%;
 
-    --creative: 326 78% 66%;
+    --creative: 210 60% 50%;
     --creative-foreground: 0 0% 100%;
 
     --warning: 43 96% 56%;
@@ -65,32 +66,32 @@
     --destructive-foreground: 0 0% 100%;
 
     /* Borders and inputs */
-    --border: 262 83% 67% / 0.2;
+    --border: 200 70% 55% / 0.2;
     --border-subtle: 255 255 255 / 0.1;
     --input: 215 28% 17%;
-    --ring: 262 83% 67%;
+    --ring: 200 70% 55%;
 
-    /* Sidebar colors */
-    --sidebar-background: 218 100% 3%;
-    --sidebar-foreground: 0 0% 100%;
-    --sidebar-primary: 262 83% 67%;
+    /* Sidebar colors - Neural Blue theme */
+    --sidebar-background: 220 22% 24%;
+    --sidebar-foreground: 220 15% 92%;
+    --sidebar-primary: 200 70% 55%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 255 255 255 / 0.05;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 262 83% 67% / 0.2;
-    --sidebar-ring: 262 83% 67%;
+    --sidebar-accent: 255 255 255 / 0.06;
+    --sidebar-accent-foreground: 220 15% 92%;
+    --sidebar-border: 200 70% 55% / 0.2;
+    --sidebar-ring: 200 70% 55%;
 
-    /* Modern gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(262 83% 67%), hsl(262 83% 58%));
-    --gradient-secondary: linear-gradient(135deg, hsl(233 100% 70%), hsl(221 83% 53%));
-    --gradient-success: linear-gradient(135deg, hsl(262 83% 67%), hsl(262 83% 58%));
-    --gradient-creative: linear-gradient(135deg, hsl(326 78% 66%), hsl(316 73% 52%));
+    /* Modern gradients - Neural Blue theme (applies to both light and dark) */
+    --gradient-primary: linear-gradient(135deg, hsl(200 70% 55%), hsl(210 60% 50%));
+    --gradient-secondary: linear-gradient(135deg, hsl(210 60% 50%), hsl(180 65% 50%));
+    --gradient-success: linear-gradient(135deg, hsl(200 70% 55%), hsl(180 65% 50%));
+    --gradient-creative: linear-gradient(135deg, hsl(210 60% 50%), hsl(200 70% 55%));
     --gradient-warning: linear-gradient(135deg, hsl(43 96% 56%), hsl(32 95% 44%));
 
-    /* Glass morphism */
+    /* Glass morphism - Neural Blue accents */
     --glass-bg: rgba(255, 255, 255, 0.05);
-    --glass-border: rgba(139, 92, 246, 0.2);
-    --glass-shadow: 0 8px 32px rgba(139, 92, 246, 0.1);
+    --glass-border: rgba(59, 130, 246, 0.25);
+    --glass-shadow: 0 8px 32px rgba(59, 130, 246, 0.15);
 
     /* Radius */
     --radius: 1rem;
@@ -104,48 +105,51 @@
     /* Shadows */
     --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.15);
     --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.2);
-    --shadow-glow: 0 0 40px hsl(262 83% 67% / 0.15);
-    --shadow-purple: 0 0 20px hsl(262 83% 67% / 0.3);
+    --shadow-glow: 0 0 40px hsl(200 70% 55% / 0.2);
+    --shadow-purple: 0 0 20px hsl(200 70% 55% / 0.35);
   }
 
   .dark {
-    /* Dark mode overrides */
-    --bg-primary: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
-    --bg-secondary: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    /* Dark mode - Neural Blue (AI Era Palette) */
+    --bg-primary: linear-gradient(135deg, #1e2330 0%, #222840 50%, #252d45 100%);
+    --bg-secondary: linear-gradient(135deg, #222840 0%, #252d45 100%);
     
-    --background: 218 100% 3%;
-    --foreground: 0 0% 100%;
+    /* Warm dark blue-gray background - Neural Blue */
+    --background: 220 25% 20%;
+    --foreground: 220 15% 92%;
     
-    /* Dark theme colors */
-    --dark-bg: 218 100% 3%;
-    --dark-surface: 255 255 255 / 0.05;
+    /* Smooth, lighter backgrounds */
+    --dark-bg: 220 25% 20%;
+    --dark-surface: 255 255 255 / 0.06;
     --dark-surface-hover: 255 255 255 / 0.1;
     
-    /* Text colors - Dark mode */
-    --text-primary: 0 0% 100%;
-    --text-secondary: 210 40% 90%;
-    --text-muted: 215 16% 65%;
+    /* Text colors - Soft white, readable */
+    --text-primary: 220 15% 92%;
+    --text-secondary: 220 12% 82%;
+    --text-muted: 220 10% 68%;
     
-    /* Card and surface colors - Dark mode */
-    --card: 218 100% 3%;
-    --card-foreground: 0 0% 100%;
-    --surface-glass: 255 255 255 / 0.05;
-    --surface-glass-hover: 255 255 255 / 0.08;
+    /* Card and surface colors - Warm blue-gray tones */
+    --card: 220 22% 24%;
+    --card-foreground: 220 15% 92%;
+    --surface-glass: 255 255 255 / 0.06;
+    --surface-glass-hover: 255 255 255 / 0.1;
     
-    --popover: 218 100% 3%;
-    --popover-foreground: 0 0% 100%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 215 28% 17%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 215 28% 17%;
-    --muted-foreground: 215 16% 65%;
-    --accent-foreground: 0 0% 100%;
-    --border: 262 83% 67% / 0.2;
-    --input: 215 28% 17%;
+    --popover: 220 22% 24%;
+    --popover-foreground: 220 15% 92%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 220 20% 28%;
+    --secondary-foreground: 220 15% 92%;
+    --muted: 220 20% 28%;
+    --muted-foreground: 220 10% 68%;
+    --accent-foreground: 0 0% 98%;
     
-    /* Glass morphism - Dark mode */
-    --glass-bg: rgba(255, 255, 255, 0.05);
-    --glass-border: rgba(139, 92, 246, 0.2);
+    /* Neural Blue borders - Bright cyan-blue */
+    --border: 200 70% 55% / 0.2;
+    --input: 220 20% 28%;
+    
+    /* Glass morphism - Neural Blue accents */
+    --glass-bg: rgba(255, 255, 255, 0.06);
+    --glass-border: rgba(59, 130, 246, 0.25);
   }
 
   /* Improved Light Mode Overrides */
@@ -181,7 +185,7 @@
     
     /* Light mode glass morphism */
     --glass-bg: rgba(255, 255, 255, 0.8);
-    --glass-border: rgba(139, 92, 246, 0.15);
+    --glass-border: rgba(59, 130, 246, 0.2);
   }
 }
 
@@ -217,8 +221,8 @@
 
   :root:not(.dark) .glass-card:hover {
     background: rgba(255, 255, 255, 0.95);
-    border-color: rgba(139, 92, 246, 0.3);
-    box-shadow: 0 8px 32px rgba(139, 92, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.3);
+    box-shadow: 0 8px 32px rgba(59, 130, 246, 0.15);
     transform: translateY(-2px);
   }
 
@@ -276,9 +280,9 @@
     transform: translateY(-2px);
   }
 
-  /* Ensure no green colors in hover states */
+  /* Smooth teal hover states */
   .glass-card:hover {
-    background: rgba(139, 92, 246, 0.1) !important;
+    background: rgba(94, 234, 212, 0.1) !important;
   }
 
   .btn-primary {
