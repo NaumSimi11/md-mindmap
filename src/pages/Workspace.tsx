@@ -17,6 +17,7 @@ import { useScrollSpy } from '@/hooks/useScrollSpy';
 import { PresentationWizardModal, type GenerationSettings } from '@/components/presentation/PresentationWizardModal';
 import { PresentationLoadingScreen } from '@/components/presentation/PresentationLoadingScreen';
 import { safePresentationService, type ProgressUpdate } from '@/services/presentation/SafePresentationService';
+import { DEMO_PRESENTATION } from '@/data/demoPresentation';
 
 // Import document editors
 import { WYSIWYGEditor } from '@/components/editor/WYSIWYGEditor';
@@ -250,6 +251,28 @@ export default function Workspace() {
   const handleNewDocument = () => {
     console.log('🆕 Opening new document modal...');
     setShowNewDocModal(true);
+  };
+
+  // Load demo presentation with all beautiful blocks
+  const handleLoadDemoPresentation = async () => {
+    console.log('🎨 Loading demo presentation...');
+    
+    try {
+      // Save demo presentation to workspace
+      const doc = await workspaceService.createDocument(
+        'presentation', 
+        'Beautiful Blocks Showcase', 
+        JSON.stringify(DEMO_PRESENTATION)
+      );
+      
+      console.log('✅ Demo presentation created:', doc.id);
+      
+      // Navigate to presentation editor
+      navigate(`/workspace/doc/${doc.id}/slides`);
+    } catch (error) {
+      console.error('❌ Failed to load demo:', error);
+      alert('Failed to load demo presentation');
+    }
   };
 
   // Generate presentation from editor
@@ -548,7 +571,7 @@ export default function Workspace() {
             )}
 
             {/* Quick Actions */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
               <button
                 onClick={handleNewDocument}
                 className="p-6 rounded-lg border border-border hover:border-primary bg-card hover:bg-card/80 transition-all text-left group"
@@ -588,6 +611,19 @@ export default function Workspace() {
                 </div>
                 <p className="text-sm text-muted-foreground">
                   Create content with AI assistance
+                </p>
+              </button>
+
+              <button
+                onClick={handleLoadDemoPresentation}
+                className="p-6 rounded-lg border-2 border-indigo-500/50 hover:border-indigo-500 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 hover:from-indigo-500/30 hover:to-purple-500/30 transition-all text-left group"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-xl">✨</span>
+                  <h3 className="font-bold text-indigo-300">Blocks Demo</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  See all 10 beautiful components
                 </p>
               </button>
             </div>
@@ -697,6 +733,7 @@ export default function Workspace() {
           onNewDocument={handleNewDocument}
           currentDocumentId={documentId}
           contextFolders={contextFolders}
+          onLoadDemo={handleLoadDemoPresentation}
           onContextFoldersChange={setContextFolders}
           onInsertContent={handleInsertContent}
           collapsed={sidebarCollapsed}

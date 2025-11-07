@@ -57,9 +57,9 @@ export function PresentationSidebar({
   };
 
   return (
-    <div className="w-72 border-r border-border bg-card flex flex-col">
-      {/* Header */}
-      <div className="p-4 border-b border-border">
+    <div className="w-72 border-r border-border bg-card flex flex-col h-full overflow-hidden">
+      {/* Header - Fixed */}
+      <div className="p-4 border-b border-border flex-shrink-0">
         <div className="flex items-center justify-between mb-2">
           <h3 className="font-semibold text-sm">Slides</h3>
           <span className="text-xs text-muted-foreground">{slides.length} total</span>
@@ -74,8 +74,8 @@ export function PresentationSidebar({
         </Button>
       </div>
 
-      {/* Slide List */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+      {/* Slide List - Scrollable */}
+      <div className="flex-1 overflow-y-auto p-2 space-y-2" style={{ overflowY: 'auto', maxHeight: '100%' }}>
         {slides.map((slide, index) => (
           <div
             key={slide.id}

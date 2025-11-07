@@ -6,12 +6,15 @@
 import { memo, useState } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Plus, Edit2, Trash2, Sparkles } from 'lucide-react';
+import { Icon } from '@iconify/react';
 
 export interface MindNodeData {
   label: string;
   description?: string;
   status?: string;
   priority?: string;
+  statusIcon?: string; // Iconify icon ID (e.g., 'tabler:check', 'mdi:check-circle')
+  showStatusIcon?: boolean; // Show/hide status icon
   onAddChild?: (nodeId: string) => void;
   onDelete?: (nodeId: string) => void;
   onAIEnhance?: (nodeId: string) => void;
@@ -155,10 +158,14 @@ function Studio2MindNode({ data, id, selected }: NodeProps<MindNodeData>) {
         </div>
       )}
 
-      {/* Status indicator */}
-      {data.status && (
+      {/* Status indicator - Configurable icon */}
+      {data.status && data.showStatusIcon !== false && (
         <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-400 rounded-full border-2 border-white flex items-center justify-center">
-          <span className="text-[10px]">✓</span>
+          {data.statusIcon ? (
+            <Icon icon={data.statusIcon} width={12} height={12} color="white" />
+          ) : (
+            <span className="text-[10px]">✓</span>
+          )}
         </div>
       )}
 

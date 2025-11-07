@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Icon } from '@iconify/react';
+import IconPickerModal from '@/components/mindmap/IconPickerModal';
 
 interface Studio2SidebarProps {
   selectedNode: Node | null;
@@ -36,7 +37,14 @@ export default function Studio2Sidebar({ selectedNode, selectedEdge, onClose, on
     conditional: false,
     relationships: false,
     timeCost: false,
+    nodeStyling: true, // Default expanded
+    status: true, // Default expanded
+    priority: false,
+    pmFields: false, // Owner, dates, etc.
   });
+  
+  // Icon picker modal state
+  const [showIconPicker, setShowIconPicker] = useState(false);
   
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -44,19 +52,22 @@ export default function Studio2Sidebar({ selectedNode, selectedEdge, onClose, on
   
   // Form data for node editor (must be declared even if not used for edges)
   const [formData, setFormData] = useState({
-    label: selectedNode?.data.label || '',
-    title: selectedNode?.data.title || '', // For icon/aws nodes
-    description: selectedNode?.data.description || '',
-    status: selectedNode?.data.status || 'todo',
-    priority: selectedNode?.data.priority || 'medium',
-    owner: selectedNode?.data.owner || '',
-    startDate: selectedNode?.data.startDate || '',
-    endDate: selectedNode?.data.endDate || '',
-    estimate: selectedNode?.data.estimate || '',
-    progress: selectedNode?.data.progress || 0,
-    tags: selectedNode?.data.tags || '',
-    color: selectedNode?.data.color || 'indigo', // Node color
-    shape: selectedNode?.data.shape || 'rounded-full', // Node shape
+    label: selectedNode?.data?.label || '',
+    title: selectedNode?.data?.title || '', // For icon/aws nodes
+    description: selectedNode?.data?.description || '',
+    status: selectedNode?.data?.status || 'todo',
+    priority: selectedNode?.data?.priority || 'medium',
+    owner: selectedNode?.data?.owner || '',
+    startDate: selectedNode?.data?.startDate || '',
+    endDate: selectedNode?.data?.endDate || '',
+    estimate: selectedNode?.data?.estimate || '',
+    progress: selectedNode?.data?.progress || 0,
+    tags: selectedNode?.data?.tags || '',
+    color: selectedNode?.data?.color || 'indigo', // Node color
+    shape: selectedNode?.data?.shape || 'rounded-full', // Node shape
+    statusIcon: selectedNode?.data?.statusIcon || '', // Status icon (Iconify ID)
+    showStatusIcon: selectedNode?.data?.showStatusIcon !== false, // Show status icon (default true)
+    icon: (selectedNode?.data as any)?.icon || '', // Milestone icon (Iconify ID)
   });
   
   // Sync edge label when selectedEdge changes
@@ -68,7 +79,7 @@ export default function Studio2Sidebar({ selectedNode, selectedEdge, onClose, on
   
   // Sync form data when selectedNode changes
   useEffect(() => {
-    if (selectedNode) {
+    if (selectedNode && selectedNode.data) {
       setFormData({
         label: selectedNode.data.label || '',
         title: selectedNode.data.title || '',
@@ -83,6 +94,9 @@ export default function Studio2Sidebar({ selectedNode, selectedEdge, onClose, on
         tags: selectedNode.data.tags || '',
         color: selectedNode.data.color || 'indigo',
         shape: selectedNode.data.shape || 'rounded-full',
+        statusIcon: selectedNode.data.statusIcon || '',
+        showStatusIcon: selectedNode.data.showStatusIcon !== false,
+        icon: (selectedNode.data as any)?.icon || '', // Milestone icon
       });
     }
   }, [selectedNode?.id]);
@@ -519,23 +533,8 @@ export default function Studio2Sidebar({ selectedNode, selectedEdge, onClose, on
   const isMilestone = selectedNode.type === 'milestone';
   const isIconNode = selectedNode.type === 'icon' || selectedNode.type === 'aws';
 
-  // Quick icon insert palette
-  const quickIcons = [
-    { title: 'Docker', icon: 'simple-icons:docker', color: '#2496ed' },
-    { title: 'Kubernetes', icon: 'simple-icons:kubernetes', color: '#326ce5' },
-    { title: 'GitHub', icon: 'simple-icons:github' },
-    { title: 'GitLab', icon: 'simple-icons:gitlab', color: '#fc6d26' },
-    { title: 'Nginx', icon: 'simple-icons:nginx', color: '#009639' },
-    { title: 'Redis', icon: 'simple-icons:redis', color: '#D82C20' },
-    { title: 'Postgres', icon: 'simple-icons:postgresql', color: '#4169e1' },
-    { title: 'Server', icon: 'tabler:server' },
-    { title: 'Database', icon: 'tabler:database' },
-    { title: 'Shield', icon: 'tabler:shield' },
-    { title: 'Globe', icon: 'tabler:world' },
-    { title: 'Queue', icon: 'tabler:arrows-shuffle' },
-  ];
-
   return (
+    <>
     <div className="fixed right-0 top-0 h-screen w-96 bg-card border-l border-border shadow-2xl z-50 flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-border bg-gradient-to-r from-indigo-500 to-indigo-600 text-white">
@@ -559,25 +558,6 @@ export default function Studio2Sidebar({ selectedNode, selectedEdge, onClose, on
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Quick: Add Icon Nodes */}
-        {onAddIconNode && !isIconNode && (
-          <div className="rounded-lg border border-border p-3">
-            <div className="text-xs font-semibold mb-2">Quick Add Icons</div>
-            <div className="grid grid-cols-4 gap-2">
-              {quickIcons.map((item) => (
-                <button
-                  key={item.icon}
-                  className="flex flex-col items-center gap-1 p-2 rounded hover:bg-muted cursor-pointer"
-                  onClick={() => onAddIconNode(item.title, item.icon, item.color)}
-                  title={item.title}
-                >
-                  <Icon icon={item.icon} width={20} height={20} color={item.color || 'currentColor'} />
-                  <span className="text-[9px] text-center leading-tight line-clamp-1">{item.title}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
         {/* Label / Title */}
         <div>
           <Label className="flex items-center gap-2 mb-2">
@@ -586,10 +566,59 @@ export default function Studio2Sidebar({ selectedNode, selectedEdge, onClose, on
           </Label>
           <Input
             value={isIconNode ? formData.title : formData.label}
-            onChange={(e) => handleChange(isIconNode ? 'title' : 'label', e.target.value)}
+            onChange={(e) => {
+              handleChange(isIconNode ? 'title' : 'label', e.target.value);
+              onUpdate(selectedNode.id, { ...formData, [isIconNode ? 'title' : 'label']: e.target.value });
+            }}
             placeholder={isMilestone ? 'Enter milestone name' : isIconNode ? 'Enter icon title' : 'Enter node label'}
           />
         </div>
+
+        {/* Milestone Icon Selection */}
+        {isMilestone && (
+          <div>
+            <Label className="flex items-center gap-2 mb-2">
+              <Tag className="h-3 w-3" />
+              Milestone Icon
+            </Label>
+            <div className="space-y-2">
+              {/* Current icon preview */}
+              {formData.icon && (
+                <div className="flex items-center gap-2 p-2 bg-muted rounded">
+                  <div className="w-6 h-6 bg-indigo-500 rounded-full flex items-center justify-center">
+                    <Icon icon={formData.icon} width={14} height={14} color="white" />
+                  </div>
+                  <span className="text-xs text-muted-foreground flex-1">
+                    {formData.icon}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0"
+                    onClick={() => {
+                      handleChange('icon', '');
+                      onUpdate(selectedNode.id, { ...formData, icon: '' });
+                    }}
+                    title="Clear Icon"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
+              
+              {/* Browse All Icons Button */}
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full"
+                onClick={() => setShowIconPicker(true)}
+              >
+                <Icon icon="tabler:search" className="h-4 w-4 mr-2" />
+                {formData.icon ? 'Change Icon' : 'Select Icon'}
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Description */}
         <div>
@@ -606,14 +635,24 @@ export default function Studio2Sidebar({ selectedNode, selectedEdge, onClose, on
           />
         </div>
 
-        {/* Node Styling (only for mindNode type) */}
+        {/* Node Styling (only for mindNode type) - Collapsible */}
         {!isMilestone && !isIconNode && (
           <>
             <Separator />
-            <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
-              <Label className="mb-3 block font-bold text-base flex items-center gap-2">
-                🎨 Node Styling
-              </Label>
+            <div>
+              <button
+                onClick={() => toggleSection('nodeStyling')}
+                className="w-full flex items-center justify-between mb-2 hover:bg-muted p-2 rounded transition-colors"
+              >
+                <Label className="cursor-pointer font-bold text-base flex items-center gap-2">
+                  🎨 Node Styling
+                </Label>
+                <span className="text-sm text-muted-foreground">
+                  {expandedSections.nodeStyling ? '▼' : '▶'}
+                </span>
+              </button>
+              {expandedSections.nodeStyling && (
+                <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
               
               {/* Node Color */}
               <div className="mb-4">
@@ -681,6 +720,8 @@ export default function Studio2Sidebar({ selectedNode, selectedEdge, onClose, on
                   ))}
                 </div>
               </div>
+                </div>
+              )}
             </div>
             <Separator />
           </>
@@ -688,13 +729,44 @@ export default function Studio2Sidebar({ selectedNode, selectedEdge, onClose, on
 
         <Separator />
 
-        {/* Status */}
-        <div>
-          <Label className="flex items-center gap-2 mb-2">
-            <Flag className="h-3 w-3" />
-            Status
-          </Label>
-          <Select value={formData.status} onValueChange={(v) => handleChange('status', v)}>
+        {/* Status - Collapsible (only for non-milestone nodes) */}
+        {!isMilestone && (
+          <div>
+            <button
+              onClick={() => toggleSection('status')}
+              className="w-full flex items-center justify-between mb-2 hover:bg-muted p-2 rounded transition-colors"
+            >
+              <Label className="cursor-pointer flex items-center gap-2">
+                <Flag className="h-3 w-3" />
+                Status
+              </Label>
+              <span className="text-sm text-muted-foreground">
+                {expandedSections.status ? '▼' : '▶'}
+              </span>
+            </button>
+            {expandedSections.status && (
+              <div>
+          <Select value={formData.status} onValueChange={(v) => {
+            handleChange('status', v);
+            // Auto-set default icon based on status if no icon set
+            if (!formData.statusIcon) {
+              const defaultIcons: Record<string, string> = {
+                'todo': 'tabler:circle',
+                'in-progress': 'tabler:clock',
+                'review': 'tabler:eye',
+                'done': 'tabler:check',
+                'blocked': 'tabler:ban',
+              };
+              if (defaultIcons[v]) {
+                handleChange('statusIcon', defaultIcons[v]);
+                onUpdate(selectedNode.id, { ...formData, status: v, statusIcon: defaultIcons[v] });
+              } else {
+                onUpdate(selectedNode.id, { ...formData, status: v });
+              }
+            } else {
+              onUpdate(selectedNode.id, { ...formData, status: v });
+            }
+          }}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -706,14 +778,87 @@ export default function Studio2Sidebar({ selectedNode, selectedEdge, onClose, on
               <SelectItem value="blocked">🚫 Blocked</SelectItem>
             </SelectContent>
           </Select>
-        </div>
+          
+          {/* Status Icon Configuration */}
+          {formData.status && (
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-muted-foreground">Status Icon</Label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.showStatusIcon}
+                    onChange={(e) => {
+                      handleChange('showStatusIcon', e.target.checked);
+                      onUpdate(selectedNode.id, { ...formData, showStatusIcon: e.target.checked });
+                    }}
+                    className="w-4 h-4 cursor-pointer accent-primary"
+                  />
+                  <span className="text-xs">Show Icon</span>
+                </label>
+              </div>
+              
+              {formData.showStatusIcon && (
+                <div className="space-y-2">
+                  {/* Current icon preview */}
+                  {formData.statusIcon && (
+                    <div className="flex items-center gap-2 p-2 bg-muted rounded">
+                      <div className="w-6 h-6 bg-green-400 rounded-full flex items-center justify-center">
+                        <Icon icon={formData.statusIcon} width={14} height={14} color="white" />
+                      </div>
+                      <span className="text-xs text-muted-foreground flex-1">
+                        {formData.statusIcon}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 w-6 p-0"
+                        onClick={() => {
+                          handleChange('statusIcon', '');
+                          onUpdate(selectedNode.id, { ...formData, statusIcon: '' });
+                        }}
+                        title="Clear Icon"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+                  
+                  {/* Browse All Icons Button */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setShowIconPicker(true)}
+                  >
+                    <Icon icon="tabler:search" className="h-4 w-4 mr-2" />
+                    Browse All Icons
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+            </div>
+          )}
+          </div>
+        )}
 
-        {/* Priority */}
+        {/* Priority - Collapsible */}
         <div>
-          <Label className="flex items-center gap-2 mb-2">
-            <Flag className="h-3 w-3" />
-            Priority
-          </Label>
+          <button
+            onClick={() => toggleSection('priority')}
+            className="w-full flex items-center justify-between mb-2 hover:bg-muted p-2 rounded transition-colors"
+          >
+            <Label className="cursor-pointer flex items-center gap-2">
+              <Flag className="h-3 w-3" />
+              Priority
+            </Label>
+            <span className="text-sm text-muted-foreground">
+              {expandedSections.priority ? '▼' : '▶'}
+            </span>
+          </button>
+          {expandedSections.priority && (
+            <div>
           <Select value={formData.priority} onValueChange={(v) => handleChange('priority', v)}>
             <SelectTrigger>
               <SelectValue />
@@ -725,11 +870,29 @@ export default function Studio2Sidebar({ selectedNode, selectedEdge, onClose, on
               <SelectItem value="critical">🔴 Critical</SelectItem>
             </SelectContent>
           </Select>
+            </div>
+          )}
         </div>
 
         <Separator />
 
-        {/* Owner */}
+        {/* PM Fields - Collapsible */}
+        <div>
+          <button
+            onClick={() => toggleSection('pmFields')}
+            className="w-full flex items-center justify-between mb-2 hover:bg-muted p-2 rounded transition-colors"
+          >
+            <Label className="cursor-pointer flex items-center gap-2">
+              <User className="h-3 w-3" />
+              Project Management Fields
+            </Label>
+            <span className="text-sm text-muted-foreground">
+              {expandedSections.pmFields ? '▼' : '▶'}
+            </span>
+          </button>
+          {expandedSections.pmFields && (
+            <div className="space-y-4">
+              {/* Owner */}
         <div>
           <Label className="flex items-center gap-2 mb-2">
             <User className="h-3 w-3" />
@@ -817,27 +980,30 @@ export default function Studio2Sidebar({ selectedNode, selectedEdge, onClose, on
           />
         </div>
 
-        {/* Milestone-specific: Grouped Nodes */}
-        {isMilestone && selectedNode.data.groupedNodeIds && (
-          <>
-            <Separator />
-            <div>
-              <Label className="mb-2 block">📦 Grouped Nodes ({selectedNode.data.groupedNodeIds.length})</Label>
-              <div className="bg-muted/50 rounded-lg p-3 space-y-1">
-                {selectedNode.data.groupedNodeIds.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic">No nodes in this milestone</p>
-                ) : (
-                  selectedNode.data.groupedNodeIds.map((nodeId: string) => (
-                    <div key={nodeId} className="text-xs bg-background px-2 py-1 rounded flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-indigo-500" />
-                      <span className="font-mono">{nodeId}</span>
+              {/* Milestone-specific: Grouped Nodes */}
+              {isMilestone && selectedNode.data.groupedNodeIds && (
+                <>
+                  <Separator />
+                  <div>
+                    <Label className="mb-2 block">📦 Grouped Nodes ({selectedNode.data.groupedNodeIds.length})</Label>
+                    <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+                      {selectedNode.data.groupedNodeIds.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic">No nodes in this milestone</p>
+                      ) : (
+                        selectedNode.data.groupedNodeIds.map((nodeId: string) => (
+                          <div key={nodeId} className="text-xs bg-background px-2 py-1 rounded flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-indigo-500" />
+                            <span className="font-mono">{nodeId}</span>
+                          </div>
+                        ))
+                      )}
                     </div>
-                  ))
-                )}
-              </div>
+                  </div>
+                </>
+              )}
             </div>
-          </>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Footer */}
@@ -850,5 +1016,25 @@ export default function Studio2Sidebar({ selectedNode, selectedEdge, onClose, on
         </Button>
       </div>
     </div>
+    
+    {/* Icon Picker Modal */}
+    <IconPickerModal
+      isOpen={showIconPicker}
+      onClose={() => setShowIconPicker(false)}
+      onSelectIcon={(title, icon, color) => {
+        // Check if this is for milestone icon or status icon
+        if (isMilestone) {
+          // Update milestone icon
+          handleChange('icon', icon);
+          onUpdate(selectedNode.id, { ...formData, icon });
+        } else {
+          // Update status icon
+          handleChange('statusIcon', icon);
+          onUpdate(selectedNode.id, { ...formData, statusIcon: icon });
+        }
+        setShowIconPicker(false);
+      }}
+    />
+    </>
   );
 }

@@ -8,8 +8,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { diagramTemplates, DiagramTemplate } from './DiagramTemplates';
-import { Sparkles, Info, Eye, EyeOff } from 'lucide-react';
+import { Sparkles, Info, Eye, EyeOff, Palette, Layout, CheckCircle2 } from 'lucide-react';
 import mermaid from 'mermaid';
 import { AIAssistantModal } from './AIAssistantModal';
 
@@ -30,6 +32,9 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
   const [editableCode, setEditableCode] = useState<string>('');
   const [showPreview, setShowPreview] = useState<boolean>(false); // Collapsed by default
   const [showAIModal, setShowAIModal] = useState<boolean>(false);
+  const [detectedConfig, setDetectedConfig] = useState<{ theme?: string; layout?: string } | null>(null);
+  const [selectedTheme, setSelectedTheme] = useState<string>('default');
+  const [selectedLayout, setSelectedLayout] = useState<string>('dagre');
   const previewRef = useRef<HTMLDivElement>(null);
   
   // Initialize mermaid with LARGE default size
@@ -49,6 +54,46 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
     });
   }, []);
   
+  // Detect config block in pasted/edited code
+  useEffect(() => {
+    const detectConfig = () => {
+      // Check for config block (YAML frontmatter style)
+      const configRegex = /^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/;
+      const match = editableCode.match(configRegex);
+      
+      if (match) {
+        const configBlock = match[1];
+        const diagramCode = match[2].trim();
+        
+        // Extract theme
+        const themeMatch = configBlock.match(/theme:\s*(\w+)/);
+        const theme = themeMatch ? themeMatch[1] : undefined;
+        
+        // Extract layout
+        const layoutMatch = configBlock.match(/layout:\s*(\w+)/);
+        const layout = layoutMatch ? layoutMatch[1] : undefined;
+        
+        if (theme || layout) {
+          console.log('🎨 Config detected:', { theme, layout });
+          setDetectedConfig({ theme, layout });
+          
+          // Set selectors to detected values
+          if (theme) setSelectedTheme(theme);
+          if (layout) setSelectedLayout(layout);
+          
+          // Update code to remove config block
+          setEditableCode(diagramCode);
+        }
+      } else {
+        setDetectedConfig(null);
+      }
+    };
+    
+    if (editableCode) {
+      detectConfig();
+    }
+  }, [editableCode]);
+  
   // Update editable code when template changes
   useEffect(() => {
     if (selectedTemplate) {
@@ -66,8 +111,22 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
             previewRef.current.innerHTML = '';
           }
           
+          // Apply selected theme/layout to preview
+          let previewCode = editableCode;
+          if (selectedTheme !== 'default' || selectedLayout !== 'dagre') {
+            const initConfig: any = {};
+            if (selectedTheme !== 'default') {
+              initConfig.theme = selectedTheme;
+            }
+            if (selectedLayout !== 'dagre') {
+              initConfig.flowchart = { layout: selectedLayout };
+            }
+            const initBlock = `%%{init: ${JSON.stringify(initConfig)}}%%`;
+            previewCode = `${initBlock}\n${editableCode}`;
+          }
+          
           const id = `mermaid-preview-${Date.now()}`;
-          const { svg } = await mermaid.render(id, editableCode);
+          const { svg } = await mermaid.render(id, previewCode);
           
           if (previewRef.current) {
             // Wrap SVG in a container for better sizing
@@ -118,12 +177,31 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
       const timeoutId = setTimeout(renderDiagram, 300);
       return () => clearTimeout(timeoutId);
     }
-  }, [editableCode, showPreview]);
+  }, [editableCode, showPreview, selectedTheme, selectedLayout]);
 
 
   const handleInsert = () => {
     if (editableCode.trim()) {
-      onInsert(editableCode);
+      // Build init block with selected theme/layout
+      let finalCode = editableCode;
+      
+      if (selectedTheme !== 'default' || selectedLayout !== 'dagre') {
+        const initConfig: any = {};
+        
+        if (selectedTheme !== 'default') {
+          initConfig.theme = selectedTheme;
+        }
+        
+        if (selectedLayout !== 'dagre') {
+          initConfig.flowchart = { layout: selectedLayout };
+        }
+        
+        const initBlock = `%%{init: ${JSON.stringify(initConfig)}}%%`;
+        finalCode = `${initBlock}\n${editableCode}`;
+        console.log('✅ Applying config:', initConfig);
+      }
+      
+      onInsert(finalCode);
       onClose();
     }
   };
@@ -143,8 +221,27 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
         <DialogHeader className="px-6 py-4 border-b">
           <DialogTitle>Insert Diagram</DialogTitle>
           <p className="text-sm text-muted-foreground mt-1">
-            Choose from popular diagram types
+            Choose from popular diagram types or paste your own Mermaid code
           </p>
+          
+          {/* Config Detected Notice */}
+          {detectedConfig && (
+            <div className="mt-3 flex items-start gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+              <CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-green-600 dark:text-green-400">
+                  Config block detected!
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Found theme: <span className="font-mono">{detectedConfig.theme || 'default'}</span>
+                  {detectedConfig.layout && (
+                    <>, layout: <span className="font-mono">{detectedConfig.layout}</span></>
+                  )}
+                  . You can customize below.
+                </p>
+              </div>
+            </div>
+          )}
           
           {/* Selected Text Notice */}
           {selectedText && (
@@ -157,6 +254,48 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
                 <p className="text-xs text-muted-foreground mt-1">
                   AI can generate diagram from: "{selectedText.slice(0, 50)}{selectedText.length > 50 ? '...' : ''}"
                 </p>
+              </div>
+            </div>
+          )}
+          
+          {/* Theme & Layout Selectors */}
+          {selectedTemplate && (
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              {/* Theme Selector */}
+              <div className="space-y-1.5">
+                <Label className="text-xs flex items-center gap-1.5">
+                  <Palette className="w-3.5 h-3.5" />
+                  Theme
+                </Label>
+                <Select value={selectedTheme} onValueChange={setSelectedTheme}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Default</SelectItem>
+                    <SelectItem value="dark">Dark</SelectItem>
+                    <SelectItem value="forest">Forest</SelectItem>
+                    <SelectItem value="neutral">Neutral</SelectItem>
+                    <SelectItem value="base">Base</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Layout Selector */}
+              <div className="space-y-1.5">
+                <Label className="text-xs flex items-center gap-1.5">
+                  <Layout className="w-3.5 h-3.5" />
+                  Layout
+                </Label>
+                <Select value={selectedLayout} onValueChange={setSelectedLayout}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="dagre">Dagre (Top-Down)</SelectItem>
+                    <SelectItem value="elk">ELK (Hierarchical)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           )}

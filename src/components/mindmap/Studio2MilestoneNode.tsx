@@ -4,19 +4,32 @@
  */
 
 import { memo } from 'react';
-import { NodeProps, NodeResizer } from '@xyflow/react';
+import { NodeProps, NodeResizer, useReactFlow } from '@xyflow/react';
 import { Folder, Maximize2, Trash2 } from 'lucide-react';
+import { Icon } from '@iconify/react';
 
 export interface MilestoneNodeData {
   label: string;
   description?: string;
   groupedNodeIds?: string[];
+  icon?: string; // Iconify icon ID (e.g., 'tabler:folder', 'mdi:folder-star')
   onUngroup?: (milestoneId: string) => void;
   onDelete?: (milestoneId: string) => void;
 }
 
 function Studio2MilestoneNode({ data, id, selected }: NodeProps<MilestoneNodeData>) {
   const nodeCount = data.groupedNodeIds?.length || 0;
+  const { getNode } = useReactFlow();
+  const currentNode = getNode(id);
+  
+  // Check if this milestone is nested (has a parent milestone)
+  const hasParentMilestone = currentNode && (currentNode as any).parentId;
+  const parentNode = hasParentMilestone ? getNode((currentNode as any).parentId) : null;
+  const isNested = parentNode?.type === 'milestone';
+  
+  // Adjust styling for nested milestones
+  const opacity = isNested ? 0.6 : 0.3; // Less opacity when nested
+  const blurAmount = isNested ? 'none' : 'blur(4px)'; // No blur when nested to prevent stacking blur
 
   return (
     <>
@@ -40,18 +53,24 @@ function Studio2MilestoneNode({ data, id, selected }: NodeProps<MilestoneNodeDat
         className={`
           relative w-full h-full
           rounded-xl border-2 border-dashed
-          bg-indigo-50/30 backdrop-blur-sm
           transition-all duration-200
-          ${selected ? 'border-indigo-500 shadow-xl' : 'border-indigo-300 shadow-md'}
+          ${selected ? 'border-indigo-500 shadow-xl' : isNested ? 'border-indigo-400' : 'border-indigo-300 shadow-md'}
         `}
         style={{
           minWidth: '200px',
           minHeight: '150px',
+          backgroundColor: `rgba(99, 102, 241, ${opacity})`,
+          backdropFilter: blurAmount,
+          WebkitBackdropFilter: blurAmount,
         }}
       >
         {/* Header Badge */}
         <div className="absolute -top-3 left-4 flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white px-3 py-1 rounded-full shadow-lg text-xs font-semibold">
-          <Folder className="h-3 w-3" />
+          {data.icon ? (
+            <Icon icon={data.icon} width={12} height={12} />
+          ) : (
+            <Folder className="h-3 w-3" />
+          )}
           <span>{data.label}</span>
           <div className="flex items-center gap-1 ml-1 px-1.5 py-0.5 bg-white/20 rounded-full">
             <span>{nodeCount}</span>

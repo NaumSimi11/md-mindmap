@@ -1,13 +1,19 @@
-# 🏗️ Backend Implementation Plan (FastAPI + PostgreSQL + S3)
+# 🏗️ Backend Implementation Plan (FastAPI + AWS)
 
 **Goal**: Minimal, reliable backend to add multi‑device sync, optional AI proxy, and secure storage without breaking current client‑side UX.
 
+**Decision**: AWS-Heavy Stack ✅
+
 - Language/Framework: Python 3.12, FastAPI
-- DB: PostgreSQL (SQLAlchemy 2.x + Alembic)
-- Object Storage: S3 (or Cloudflare R2/S3 compatible)
-- Auth: JWT (email+password) + OAuth later (Authlib)
-- Deployment: Render/Railway/Fly (API) + Neon/Supabase (Postgres) + AWS S3/R2
-- Observability: OpenAPI, logging, metrics (Prometheus), Sentry (optional)
+- Compute: AWS ECS Fargate (containerized)
+- API: AWS API Gateway + Application Load Balancer
+- DB: AWS RDS PostgreSQL (SQLAlchemy 2.x + Alembic)
+- Object Storage: AWS S3
+- CDN: AWS CloudFront
+- Auth: AWS Cognito (managed service)
+- Secrets: AWS Secrets Manager
+- Monitoring: AWS CloudWatch
+- Observability: OpenAPI, CloudWatch logs/metrics
 
 ---
 
@@ -208,13 +214,27 @@ backend/
 
 ---
 
-## 🚀 Deployment
-- API: Render/Railway/Fly.io (buildpack or Docker)
-- DB: Neon/Supabase Postgres
-- S3: AWS S3 / Cloudflare R2
-- Secrets: environment variables (managed in provider)
-- HTTPS: Provider managed (or Caddy in Fly)
-- Migrations on release: `alembic upgrade head`
+## 🚀 Deployment (AWS)
+
+### **Infrastructure:**
+- **Compute**: AWS ECS Fargate (serverless containers)
+- **API**: AWS API Gateway + Application Load Balancer
+- **Database**: AWS RDS PostgreSQL (managed)
+- **Storage**: AWS S3 (with CloudFront CDN)
+- **Auth**: AWS Cognito (managed user pool)
+- **Secrets**: AWS Secrets Manager
+- **Monitoring**: AWS CloudWatch (logs, metrics, alarms)
+- **CI/CD**: GitHub Actions + AWS ECR + ECS Deploy
+
+### **Setup:**
+- VPC with private subnets (RDS) and public subnets (ALB)
+- Security groups: Least privilege access
+- SSL/TLS: ACM certificates
+- Migrations: Run on ECS task startup (`alembic upgrade head`)
+
+**Cost**: $21-50/month (first year with free tier), $35-70/month after
+
+**See**: `docs/AWS_BACKEND_PLAN.md` for complete AWS architecture and setup guide.
 
 ---
 

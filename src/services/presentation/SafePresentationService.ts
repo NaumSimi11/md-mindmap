@@ -8,8 +8,10 @@
  * - Rate limit protection
  */
 
-import { presentationGenerator, type Presentation, type GenerateOptions } from './PresentationGenerator';
+import { presentationGenerator, type Presentation, type GenerateOptions, type PresentationTheme } from './PresentationGenerator';
 import { getTheme } from './PresentationThemes';
+import { getBeautifulTheme, getAllBeautifulThemes } from './BeautifulThemes';
+import type { BeautifulTheme } from './BeautifulThemeSystem';
 import type { Node, Edge } from '@xyflow/react';
 import type { GenerationSettings } from '@/components/presentation/PresentationWizardModal';
 
@@ -46,9 +48,11 @@ export class SafePresentationService {
       this.updateProgress('validate', 0, 4, 'Validating settings...');
       this.validateSettings(settings);
 
-      // Step 2: Get theme
+      // Step 2: Get theme (support both old and beautiful themes)
       this.updateProgress('theme', 1, 4, 'Applying theme...');
-      const theme = getTheme(settings.theme);
+      const theme = this.getThemeForGeneration(settings.theme);
+      const beautifulThemeIds = getAllBeautifulThemes().map(t => t.id);
+      const isBeautifulTheme = beautifulThemeIds.includes(settings.theme);
 
       // Step 3: Generate presentation with custom options
       this.updateProgress('generate', 2, 4, 'Generating presentation...');
@@ -68,8 +72,24 @@ export class SafePresentationService {
         options
       );
 
+      // Store the original theme ID in metadata for later detection
+      if (isBeautifulTheme) {
+        (presentation.theme as any).id = settings.theme;
+        (presentation.metadata as any).themeId = settings.theme;
+        console.log('🎨 Stored beautiful theme ID in metadata:', settings.theme);
+      } else {
+        console.log('⚠️ Theme is not a beautiful theme:', settings.theme);
+      }
+
       // Step 4: Complete
       this.updateProgress('complete', 4, 4, 'Presentation generated successfully!');
+      
+      console.log('✅ Presentation generated with theme:', {
+        themeName: presentation.theme.name,
+        themeId: (presentation.theme as any).id,
+        metadataThemeId: (presentation.metadata as any).themeId,
+        isBeautiful: isBeautifulTheme,
+      });
 
       return presentation;
     } catch (error: any) {
@@ -110,6 +130,49 @@ export class SafePresentationService {
     if (settings.slideCount < 3 || settings.slideCount > 20) {
       throw new Error('Slide count must be between 3 and 20.');
     }
+  }
+
+  /**
+   * Get theme for generation (supports both old and beautiful themes)
+   */
+  private getThemeForGeneration(themeId: string): PresentationTheme {
+    // Check if it's a beautiful theme ID
+    const beautifulThemeIds = getAllBeautifulThemes().map(t => t.id);
+    
+    if (beautifulThemeIds.includes(themeId)) {
+      // It's a beautiful theme - convert to old format for now
+      // TODO: Update Presentation type to support BeautifulTheme
+      const beautifulTheme = getBeautifulTheme(themeId);
+      const oldTheme = this.convertBeautifulToOldTheme(beautifulTheme);
+      // Store the original ID for later detection
+      (oldTheme as any).id = themeId;
+      return oldTheme;
+    }
+    
+    // It's an old theme ID - use as-is
+    return getTheme(themeId);
+  }
+  
+  /**
+   * Convert BeautifulTheme to old PresentationTheme format
+   * This is temporary until we fully migrate to BeautifulTheme
+   */
+  private convertBeautifulToOldTheme(beautifulTheme: BeautifulTheme): PresentationTheme {
+    return {
+      name: beautifulTheme.name,
+      colors: {
+        primary: beautifulTheme.colors.primary.main,
+        secondary: beautifulTheme.colors.secondary.main,
+        background: beautifulTheme.colors.background.default,
+        text: beautifulTheme.colors.text.primary,
+        accent: beautifulTheme.colors.primary.light,
+      },
+      fonts: {
+        heading: beautifulTheme.typography.heading.family,
+        body: beautifulTheme.typography.body.family,
+      },
+      spacing: beautifulTheme.spacingMode || 'normal',
+    };
   }
 
   /**

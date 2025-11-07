@@ -9,7 +9,8 @@
  * - API call estimation
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { unsplashService } from '@/services/media/UnsplashService';
 import {
   Dialog,
   DialogContent,
@@ -28,8 +29,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Sparkles, AlertCircle, Crown, Zap } from 'lucide-react';
+import { Sparkles, AlertCircle, Crown, Zap, Palette } from 'lucide-react';
 import { getGuestCredits } from '@/lib/guestCredits';
+import { getAllBeautifulThemes, getBeautifulTheme } from '@/services/presentation/BeautifulThemes';
+import type { BeautifulTheme } from '@/services/presentation/BeautifulThemeSystem';
 
 interface PresentationWizardModalProps {
   open: boolean;
@@ -40,19 +43,13 @@ interface PresentationWizardModalProps {
 
 export interface GenerationSettings {
   slideCount: number;
-  theme: string;
+  theme: string; // Beautiful theme ID
   background: 'gradient' | 'solid' | 'image';
   generateNotes: boolean;
 }
 
-const THEMES = [
-  { id: 'modern', name: 'Modern', description: 'Purple gradient, clean' },
-  { id: 'professional', name: 'Professional', description: 'Navy blue, corporate' },
-  { id: 'minimal', name: 'Minimal', description: 'Black & white, simple' },
-  { id: 'dark', name: 'Dark', description: 'Dark with gold accents' },
-  { id: 'vibrant', name: 'Vibrant', description: 'Pink/purple, energetic' },
-  { id: 'corporate', name: 'Corporate', description: 'Green, business' },
-];
+// Get beautiful themes
+const BEAUTIFUL_THEMES = getAllBeautifulThemes();
 
 export function PresentationWizardModal({
   open,
@@ -61,9 +58,37 @@ export function PresentationWizardModal({
   isGenerating = false,
 }: PresentationWizardModalProps) {
   const [slideCount, setSlideCount] = useState(6);
-  const [theme, setTheme] = useState('modern');
+  const [theme, setTheme] = useState(BEAUTIFUL_THEMES[0]?.id || 'night-sky');
   const [background, setBackground] = useState<'gradient' | 'solid' | 'image'>('gradient');
   const [generateNotes, setGenerateNotes] = useState(true);
+  const [themePreviewImages, setThemePreviewImages] = useState<Record<string, string>>({});
+  
+  const selectedTheme = getBeautifulTheme(theme);
+  
+  // Load theme preview images
+  useEffect(() => {
+    if (open) {
+      loadThemePreviewImages();
+    }
+  }, [open]);
+  
+  const loadThemePreviewImages = async () => {
+    const previews: Record<string, string> = {};
+    
+    // Load one image per theme for preview
+    for (const themeObj of BEAUTIFUL_THEMES.slice(0, 6)) { // Limit to avoid too many requests
+      try {
+        const images = await unsplashService.getThemedImages(themeObj.id);
+        if (images.length > 0) {
+          previews[themeObj.id] = images[0].thumbnail;
+        }
+      } catch (error) {
+        console.error(`Error loading preview for ${themeObj.id}:`, error);
+      }
+    }
+    
+    setThemePreviewImages(previews);
+  };
 
   const { remaining, total } = getGuestCredits();
 
@@ -89,7 +114,7 @@ export function PresentationWizardModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-2xl">
             <Sparkles className="w-6 h-6 text-primary" />
@@ -100,7 +125,7 @@ export function PresentationWizardModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div className="space-y-6 py-4 overflow-y-auto flex-1 min-h-0">
           {/* Slide Count */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -166,24 +191,146 @@ export function PresentationWizardModal({
             </div>
           </div>
 
-          {/* Theme Selection */}
+          {/* Beautiful Theme Selection */}
           <div className="space-y-3">
-            <Label className="text-base font-semibold">Theme</Label>
-            <Select value={theme} onValueChange={setTheme}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a theme" />
-              </SelectTrigger>
-              <SelectContent>
-                {THEMES.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{t.name}</span>
-                      <span className="text-xs text-muted-foreground">{t.description}</span>
+            <Label className="text-base font-semibold flex items-center gap-2">
+              <Palette className="w-4 h-4" />
+              Choose a Template
+            </Label>
+            
+            {/* Theme Preview Cards - Gamma-style grid */}
+            <div className="grid grid-cols-3 gap-4">
+              {BEAUTIFUL_THEMES.map((t) => {
+                const isSelected = theme === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setTheme(t.id)}
+                    className={`group relative rounded-xl border-2 transition-all text-left overflow-hidden ${
+                      isSelected
+                        ? 'border-primary shadow-lg scale-105'
+                        : 'border-border hover:border-primary/50 hover:shadow-md'
+                    }`}
+                    style={{
+                      backgroundColor: isSelected ? 'rgba(var(--primary-rgb), 0.05)' : undefined,
+                    }}
+                  >
+                    {/* Template Preview Card */}
+                    <div
+                      className="w-full aspect-[16/10] rounded-t-lg relative overflow-hidden"
+                      style={{
+                        background: t.colors.background.default,
+                        boxShadow: isSelected ? t.visual.shadows.lg : t.visual.shadows.sm,
+                      }}
+                    >
+                      {/* Background image if loaded */}
+                      {themePreviewImages[t.id] && (
+                        <img
+                          src={themePreviewImages[t.id]}
+                          alt={t.name}
+                          className="absolute inset-0 w-full h-full object-cover opacity-30"
+                        />
+                      )}
+                      
+                      {/* Decorative gradient overlay */}
+                      <div
+                        className="absolute inset-0 opacity-30"
+                        style={{
+                          background: t.colors.gradients.primary,
+                        }}
+                      />
+                      
+                      {/* Sample content preview */}
+                      <div className="absolute inset-0 p-4 flex flex-col justify-between z-10">
+                        {/* Title preview */}
+                        <div
+                          className="text-sm font-bold drop-shadow-lg"
+                          style={{
+                            color: t.colors.text.primary,
+                            fontSize: '0.875rem',
+                            lineHeight: '1.2',
+                          }}
+                        >
+                          Title
+                        </div>
+                        
+                        {/* Body preview */}
+                        <div
+                          className="text-xs opacity-80 drop-shadow-lg"
+                          style={{
+                            color: t.colors.text.secondary,
+                            fontSize: '0.75rem',
+                            lineHeight: '1.4',
+                          }}
+                        >
+                          Body & <span style={{ color: t.colors.primary.main, textDecoration: 'underline' }}>link</span>
+                        </div>
+                      </div>
+                      
+                      {/* Glow effect for dark themes */}
+                      {(t.id === 'alien' || t.id === 'velvet-tides' || t.id === 'aurora' || t.id === 'night-sky') && (
+                        <div
+                          className="absolute right-0 top-0 w-1/3 h-full opacity-40"
+                          style={{
+                            background: `radial-gradient(circle, ${t.colors.primary.main} 0%, transparent 70%)`,
+                          }}
+                        />
+                      )}
                     </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                    
+                    {/* Template Name */}
+                    <div className="p-3 bg-background">
+                      <p className="text-sm font-semibold text-center">{t.name}</p>
+                    </div>
+                    
+                    {/* Selected indicator */}
+                    {isSelected && (
+                      <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
+                        <svg className="w-3 h-3 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            
+            {/* Selected Theme Details */}
+            {selectedTheme && (
+              <div className="p-3 rounded-lg border bg-muted/50">
+                <div className="flex items-start gap-3">
+                  <div
+                    className="w-12 h-12 rounded flex-shrink-0"
+                    style={{
+                      background: selectedTheme.colors.background.default,
+                    }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold">{selectedTheme.name}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {selectedTheme.description}
+                    </p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="flex items-center gap-1">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ background: selectedTheme.colors.primary.main }}
+                        />
+                        <span className="text-xs text-muted-foreground">Primary</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ background: selectedTheme.colors.secondary.main }}
+                        />
+                        <span className="text-xs text-muted-foreground">Secondary</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Background Options */}
@@ -270,7 +417,7 @@ export function PresentationWizardModal({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center justify-between pt-4 border-t">
+        <div className="flex items-center justify-between pt-4 border-t flex-shrink-0">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}

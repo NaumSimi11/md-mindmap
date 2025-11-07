@@ -43,18 +43,14 @@ import { GistNode } from './extensions/GistNode';
 import { EnhancedBlockquote } from './extensions/EnhancedBlockquote';
 import { FootnoteReference, FootnoteDefinition, FootnotesSection } from './extensions/FootnoteExtension';
 import { TOCNode } from './extensions/TOCNode';
-import { FontAwesomeIcon } from './extensions/FontAwesomeIcon';
 import { ResizableImageNodeView } from './extensions/ResizableImageNodeView';
 import { FloatingToolbar } from './FloatingToolbar';
 import { LinkHoverToolbar } from './LinkHoverToolbar';
 import { KeyboardShortcutsPanel } from './KeyboardShortcutsPanel';
-import { IconPickerModal } from './IconPickerModal';
 import { EditorContextMenu } from './EditorContextMenu';
 import { DiagramInsertMenu } from './DiagramInsertMenu';
 import { SlashCommandExtension, slashCommandSuggestion } from './SlashCommandExtension';
 import { FormatDropdown } from './FormatDropdown';
-import { FontFamilyDropdown } from './FontFamilyDropdown';
-import { FontSizeDropdown } from './FontSizeDropdown';
 import { AISettingsDropdown } from './AISettingsDropdown';
 import { InlineDocumentTitle } from './InlineDocumentTitle';
 import { GhostTextExtension } from './extensions/GhostTextExtension';
@@ -68,6 +64,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { usePlatform } from '@/contexts/PlatformContext';
 import { storageService } from '@/services/storage/StorageService';
+import { useToast } from '@/components/ui/use-toast';
 import {
   Dialog,
   DialogContent,
@@ -98,6 +95,7 @@ import {
   Save,
   Share,
   Download,
+  Upload,
   Undo,
   Redo,
   Library,
@@ -110,7 +108,6 @@ import {
   GitBranch,
   BarChart,
   Keyboard,
-  Sparkles as IconsIcon,
   FolderOpen,
 } from 'lucide-react';
 import {
@@ -671,87 +668,7 @@ md.renderer.rules.toc_placeholder = () => {
   return '<div data-toc="true" data-toc-placeholder="true"></div>';
 };
 
-// 🎨 FontAwesome icons - Parse :fa-icon-name: or :fa-solid-icon-name:color
-// Supports color syntax: :fa-check:green or :fa-check:#00ff00
-md.inline.ruler.after('link', 'fontawesome_icon', (state, silent) => {
-  const start = state.pos;
-  const max = state.posMax;
-  
-  // Check for :fa-
-  if (start + 4 > max) return false;
-  if (state.src.charCodeAt(start) !== 0x3A /* : */) return false;
-  if (state.src.slice(start, start + 4) !== ':fa-') return false;
-  
-  // Find closing :
-  let end = start + 4;
-  while (end < max && state.src.charCodeAt(end) !== 0x3A /* : */) {
-    end++;
-  }
-  
-  if (end >= max) return false;
-  
-  // Extract icon name
-  const fullIconName = state.src.slice(start + 4, end);
-  let style = 'solid';
-  let iconName = fullIconName;
-  let color = null;
-  
-  // Check for style prefix (e.g., :fa-brands-github:, :fa-regular-heart:)
-  if (fullIconName.startsWith('solid-')) {
-    style = 'solid';
-    iconName = fullIconName.slice(6);
-  } else if (fullIconName.startsWith('regular-')) {
-    style = 'regular';
-    iconName = fullIconName.slice(8);
-  } else if (fullIconName.startsWith('brands-')) {
-    style = 'brands';
-    iconName = fullIconName.slice(7);
-  }
-  
-  // Check for optional color after closing :
-  // Syntax: :fa-check:green or :fa-check:#00ff00 or :fa-check:[red]
-  const colorStart = end + 1;
-  if (colorStart < max) {
-    // Check for color name or hex
-    const colorMatch = state.src.slice(colorStart).match(/^([\w-]+|#[\da-fA-F]{3,6}|\[[\w#-]+\])/);
-    if (colorMatch) {
-      color = colorMatch[1].replace(/[\[\]]/g, ''); // Remove brackets if present
-      end = colorStart + colorMatch[0].length - 1; // Update end position
-    }
-  }
-  
-  if (!silent) {
-    const token = state.push('fontawesome_icon', '', 0);
-    token.content = iconName;
-    token.meta = { style, color };
-  }
-  
-  state.pos = end + 1;
-  return true;
-});
-
-// Render FontAwesome icon with optional color
-md.renderer.rules.fontawesome_icon = (tokens, idx) => {
-  const icon = tokens[idx].content;
-  const style = tokens[idx].meta?.style || 'solid';
-  const color = tokens[idx].meta?.color;
-  const prefix = style === 'brands' ? 'fab' : style === 'regular' ? 'far' : 'fas';
-  
-  let colorAttr = '';
-  let colorStyle = '';
-  
-  if (color) {
-    // If hex color, use style attribute
-    if (color.startsWith('#')) {
-      colorStyle = ` style="color: ${color};"`;
-    } else {
-      // Use data-color attribute for named colors (handled by CSS)
-      colorAttr = ` data-color="${color}"`;
-    }
-  }
-  
-  return `<i class="${prefix} fa-${icon}" data-fa-icon="${icon}" data-fa-style="${style}"${colorAttr}${colorStyle} aria-hidden="true"></i>`;
-};
+// FontAwesome icons removed - causing issues with mode switching
 
 // 📝 Footnote support - Parse [^1] references and [^1]: definitions
 // Parse footnote references [^1]
@@ -989,23 +906,7 @@ turndownService.addRule('toc', {
   }
 });
 
-// 🎨 Add custom rule for FontAwesome icons
-turndownService.addRule('fontawesomeIcon', {
-  filter: (node) => {
-    return node.nodeName === 'I' && node.getAttribute('data-fa-icon');
-  },
-  replacement: (content, node: any) => {
-    const icon = node.getAttribute('data-fa-icon');
-    const style = node.getAttribute('data-fa-style') || 'solid';
-    
-    // Format as :fa-style-icon: or just :fa-icon: for solid
-    if (style === 'solid') {
-      return `:fa-${icon}:`;
-    } else {
-      return `:fa-${style}-${icon}:`;
-    }
-  }
-});
+// FontAwesome icons removed - causing issues with mode switching
 
 // 📝 Add custom rules for footnotes
 turndownService.addRule('footnoteReference', {
@@ -1302,16 +1203,6 @@ const jsonToMarkdown = (json: any): string => {
         // Table of Contents placeholder
         return '\n\n[TOC]\n\n';
       
-      case 'fontawesomeIcon':
-        // FontAwesome icon - format as :fa-icon:
-        const faIcon = node.attrs?.icon || node.marks?.[0]?.attrs?.icon;
-        const faStyle = node.attrs?.style || node.marks?.[0]?.attrs?.style || 'solid';
-        if (faStyle === 'solid') {
-          return `:fa-${faIcon}:`;
-        } else {
-          return `:fa-${faStyle}-${faIcon}:`;
-        }
-      
       case 'codeBlock':
         const codeContent = node.content?.map((n: any) => n.text || '').join('') || '';
         const lang = node.attrs?.language || '';
@@ -1392,11 +1283,11 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
   const [title, setTitle] = useState(documentTitle);
   const [showAIModal, setShowAIModal] = useState(false);
   const [showDiagramMenu, setShowDiagramMenu] = useState(false);
-  const [showIconPicker, setShowIconPicker] = useState(false);
   const [showMindmapChoiceModal, setShowMindmapChoiceModal] = useState(false);
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
   const [aiSuggestionsEnabled, setAiSuggestionsEnabled] = useState(false);
   const [aiAutocompleteEnabled, setAiAutocompleteEnabled] = useState(true); // Enabled by default!
+  const { toast } = useToast();
   // File open/insert helpers
   const fileInputRef = useRef<HTMLInputElement>(null);
   const openReplaceNextRef = useRef<boolean>(false);
@@ -1405,6 +1296,9 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
   const [editorMode, setEditorMode] = useState<'wysiwyg' | 'markdown'>('wysiwyg');
   const [markdownContent, setMarkdownContent] = useState('');
   const markdownTextareaRef = useRef<HTMLTextAreaElement>(null);
+  // Store cursor position when switching modes
+  // Store text content before cursor for better position mapping
+  const savedCursorTextRef = useRef<string | null>(null);
   
   // Mutable ref for AI hints that the extension can access
   const aiHintsEnabledRef = useRef({ enabled: false });
@@ -1674,8 +1568,6 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
       FootnotesSection,
       // 📑 Table of Contents
       TOCNode,
-      // 🎨 FontAwesome Icons
-      FontAwesomeIcon,
       MermaidNode,
       SlashCommandExtension.configure({
         suggestion: slashCommandSuggestion(
@@ -1990,30 +1882,64 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
     console.log('  Current mode:', editorMode);
     
     if (editorMode === 'wysiwyg') {
-      // Switching to Markdown - use JSON conversion for better mermaid handling
+      // Switching to Markdown - save text before cursor and convert content
       console.log('  ➡️  WYSIWYG → Markdown');
+      
+      // Save text content before cursor for better position mapping
+      const cursorPos = editor.state.selection.from;
+      const textBeforeCursor = editor.state.doc.textBetween(0, cursorPos);
+      savedCursorTextRef.current = textBeforeCursor;
+      console.log('  📍 Saved text before cursor:', textBeforeCursor.substring(Math.max(0, textBeforeCursor.length - 50)));
+      
       const markdown = htmlToMarkdown('', editor);
       console.log('  📝 Converted to markdown, length:', markdown.length);
       console.log('  📝 Preview:', markdown.substring(0, 200));
       setMarkdownContent(markdown);
       setEditorMode('markdown');
+      
+      // Set cursor position in markdown textarea after a short delay
+      setTimeout(() => {
+        if (markdownTextareaRef.current && savedCursorTextRef.current !== null) {
+          // Find the text in markdown and set cursor there
+          const markdownText = markdownTextareaRef.current.value;
+          const searchText = savedCursorTextRef.current;
+          // Try to find the text, or use approximate position
+          let markdownPos = markdownText.indexOf(searchText);
+          if (markdownPos === -1) {
+            // Fallback: use approximate position based on text length
+            markdownPos = Math.min(cursorPos, markdownText.length);
+          } else {
+            markdownPos += searchText.length;
+          }
+          markdownTextareaRef.current.setSelectionRange(markdownPos, markdownPos);
+          markdownTextareaRef.current.focus();
+          console.log('  📍 Set markdown cursor position:', markdownPos);
+        }
+      }, 50);
     } else {
-      // Switching to WYSIWYG - parse markdown and insert content with mermaid support
+      // Switching to WYSIWYG - save text before cursor in markdown and restore in WYSIWYG
       console.log('  ➡️  Markdown → WYSIWYG');
+      
+      // Save text content before cursor in markdown mode
+      if (markdownTextareaRef.current) {
+        const cursorPos = markdownTextareaRef.current.selectionStart;
+        savedCursorTextRef.current = markdownContent.substring(0, cursorPos);
+        console.log('  📍 Saved markdown text before cursor:', savedCursorTextRef.current.substring(Math.max(0, savedCursorTextRef.current.length - 50)));
+      }
+      
       console.log('  📝 markdownContent length:', markdownContent.length);
       console.log('  📝 markdownContent preview:', markdownContent.substring(0, 200));
       console.log('  🔍 Contains mermaid?', markdownContent.includes('```mermaid'));
       
       parseAndInsertMarkdown(markdownContent);
-      // Ensure nodeviews mount before allowing further updates
-      setTimeout(() => editor?.commands.focus(), 50);
       setEditorMode('wysiwyg');
       // DON'T call onContentChange here - content hasn't changed, just the view mode
     }
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   };
   
-  // Parse markdown and insert into editor (handles mermaid blocks specially)
+
+  // Parse markdown and insert into editor (handles mermaid blocks and FontAwesome icons specially)
   const parseAndInsertMarkdown = (markdown: string) => {
     console.log('\n╔════════════════════════════════════════╗');
     console.log('║  PARSE AND INSERT MARKDOWN            ║');
@@ -2095,6 +2021,7 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
       } else {
         console.log('📄 MARKDOWN:', part.substring(0, 40) + '...');
         const html = markdownToHtml(part);
+        // Insert HTML content - TipTap will parse it
         editor.chain().insertContent(html).run();
       }
     });
@@ -2104,14 +2031,54 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
     console.log('  Editor HTML:', editor.getHTML().substring(0, 300));
     console.log('  Editor JSON:', JSON.stringify(editor.getJSON(), null, 2).substring(0, 500));
     
-      // Force a re-render to ensure mermaid diagrams display
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          editor.commands.focus();
-          isProgrammaticUpdate.current = false;
-          console.log('✅ hydration + focus complete');
-        }, 30);
-      });
+    // Restore cursor position after content is inserted
+    if (savedCursorTextRef.current !== null) {
+      const searchText = savedCursorTextRef.current;
+      // Wait for content to be fully inserted and rendered
+      setTimeout(() => {
+        // Find the text in the editor and set cursor there
+        const docText = editor.state.doc.textContent;
+        let foundPos = docText.indexOf(searchText);
+        
+        if (foundPos === -1) {
+          // If exact match not found, try to find a substring
+          // Use the last part of the saved text
+          const searchLength = Math.min(50, searchText.length);
+          const searchSubstring = searchText.substring(searchText.length - searchLength);
+          foundPos = docText.indexOf(searchSubstring);
+          if (foundPos !== -1) {
+            foundPos += searchSubstring.length;
+          }
+        } else {
+          foundPos += searchText.length;
+        }
+        
+        if (foundPos === -1) {
+          // Fallback: set cursor at the beginning
+          foundPos = 0;
+          console.log('📍 Could not find saved text, setting cursor at start');
+        } else {
+          // Ensure position is within document bounds
+          const docSize = editor.state.doc.content.size;
+          foundPos = Math.min(foundPos, Math.max(0, docSize - 1));
+          console.log('📍 Restored cursor position:', foundPos, '(searched for:', searchText.substring(Math.max(0, searchText.length - 30)), ')');
+        }
+        
+        // Set cursor position - don't force scroll, let browser handle it naturally
+        editor.commands.setTextSelection(foundPos);
+        editor.commands.focus();
+        savedCursorTextRef.current = null;
+      }, 200);
+    }
+    
+    // Force a re-render to ensure mermaid diagrams display
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        isProgrammaticUpdate.current = false;
+        console.log('✅ hydration complete');
+        // Don't auto-focus here - let cursor restoration handle it
+      }, 50);
+    });
   };
   
   // Handle markdown textarea changes
@@ -2177,10 +2144,38 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
     if (!file) return;
 
     try {
+      // Validate file type
       const ext = getFileExtension(file.name);
+      const validExtensions = ['.md', '.markdown', '.txt', '.html', '.htm'];
+      if (!validExtensions.some(validExt => file.name.toLowerCase().endsWith(validExt))) {
+        toast({
+          title: 'Invalid file type',
+          description: 'Please select a .md, .txt, or .html file.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       const text = await file.text();
+      
+      if (!text || text.trim().length === 0) {
+        toast({
+          title: 'Empty file',
+          description: 'The selected file is empty.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       const html = fileTextToHtml(text, ext);
-      if (!html) return;
+      if (!html) {
+        toast({
+          title: 'Failed to parse file',
+          description: 'Could not read the file content.',
+          variant: 'destructive',
+        });
+        return;
+      }
 
       if (openReplaceNextRef.current) {
         // Replace entire document
@@ -2194,13 +2189,25 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
           const md = htmlToMarkdown('', editor);
           onContentChange?.(md);
         });
+        toast({
+          title: 'File imported',
+          description: `Replaced document with "${file.name}"`,
+        });
       } else {
         // Insert at cursor
         editor.chain().focus().insertContent(html).run();
+        toast({
+          title: 'File inserted',
+          description: `Inserted content from "${file.name}"`,
+        });
       }
     } catch (err) {
       console.error('Failed to open file:', err);
-      alert('Failed to open file. Please try another file.');
+      toast({
+        title: 'Import failed',
+        description: err instanceof Error ? err.message : 'Failed to open file. Please try another file.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -2266,17 +2273,43 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
   };
 
   const exportAsMarkdown = () => {
-    // TODO: Implement proper HTML to Markdown conversion
-    const html = editor.getHTML();
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title.replace(/\s+/g, '_')}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    try {
+      // Convert editor content to markdown
+      const markdown = htmlToMarkdown('', editor);
+      
+      if (!markdown || markdown.trim().length === 0) {
+        toast({
+          title: 'Nothing to export',
+          description: 'The document is empty.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Create blob and download
+      const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const sanitizedTitle = title.trim() || 'Untitled Document';
+      a.download = `${sanitizedTitle.replace(/[^\w\s-]/g, '').replace(/\s+/g, '_')}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: 'Export successful',
+        description: `Downloaded "${sanitizedTitle}.md"`,
+      });
+    } catch (err) {
+      console.error('Failed to export markdown:', err);
+      toast({
+        title: 'Export failed',
+        description: err instanceof Error ? err.message : 'Failed to export document.',
+        variant: 'destructive',
+      });
+    }
   };
 
   // Context menu handlers
@@ -2379,7 +2412,7 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
         <div className="flex items-center justify-between w-full">
           {/* Left: Compact Toolbar */}
           <div className="flex items-center gap-2">
-            {/* Unified Format Dropdown */}
+            {/* Unified Format Dropdown (includes Font Family & Size) */}
             <FormatDropdown
               editor={editor}
               onInsertTable={insertTable}
@@ -2389,12 +2422,6 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
               onAutoFormatAll={handleAutoFormatAll}
               onAIFormat={handleAIFormat}
             />
-
-            {/* Font Family Dropdown */}
-            <FontFamilyDropdown editor={editor} />
-
-            {/* Font Size Dropdown */}
-            <FontSizeDropdown editor={editor} />
 
             <Separator orientation="vertical" className="h-6 mx-1" />
 
@@ -2451,17 +2478,6 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
               }}
             />
 
-            {            /* Icon Picker */}
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setShowIconPicker(true)}
-              title="Insert Icon"
-              className="gap-1"
-            >
-              <IconsIcon className="h-4 w-4" />
-            </Button>
-            
             {/* Keyboard Shortcuts */}
             <Button
               size="sm"
@@ -2512,7 +2528,6 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
 
           {/* Right: Document Actions */}
           <div className="flex items-center gap-3">
-
             {/* Actions Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -2520,16 +2535,41 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
                   <MoreVertical className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="w-64">
+                {/* Import Section */}
+                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                  Import Document
+                </div>
                 <DropdownMenuItem onClick={() => triggerOpenFile(false)}>
-                  <FolderOpen className="h-4 w-4 mr-2" />
-                  Insert from file…
+                  <Upload className="h-4 w-4 mr-2" />
+                  <div className="flex flex-col">
+                    <span>Insert from file</span>
+                    <span className="text-xs text-muted-foreground">Add content after current document</span>
+                  </div>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => triggerOpenFile(true)}>
                   <FolderOpen className="h-4 w-4 mr-2" />
-                  Open file… (replace document)
+                  <div className="flex flex-col">
+                    <span>Replace document</span>
+                    <span className="text-xs text-muted-foreground">Open file and replace all content</span>
+                  </div>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
+                
+                {/* Export Section */}
+                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                  Export Document
+                </div>
+                <DropdownMenuItem onClick={exportAsMarkdown}>
+                  <Download className="h-4 w-4 mr-2" />
+                  <div className="flex flex-col">
+                    <span>Export as Markdown</span>
+                    <span className="text-xs text-muted-foreground">Download as .md file</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                
+                {/* Other Actions */}
                 <DropdownMenuItem>
                   <Save className="h-4 w-4 mr-2" />
                   Save
@@ -2538,11 +2578,6 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
                 <DropdownMenuItem>
                   <Share className="h-4 w-4 mr-2" />
                   Share
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={exportAsMarkdown}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Export
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -2653,22 +2688,6 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
         onOpenChange={setShowKeyboardShortcuts}
       />
       
-      {/* Icon Picker Modal */}
-      <IconPickerModal
-        isOpen={showIconPicker}
-        onClose={() => setShowIconPicker(false)}
-        onSelectIcon={(iconName, style) => {
-          if (!editor) return;
-          
-          // 🔧 FIX: Use the proper command to insert as a node
-          editor
-            .chain()
-            .focus()
-            .insertFontAwesomeIcon(iconName, style)
-            .insertContent(' ') // Add space after icon
-            .run();
-        }}
-      />
 
       {/* Hidden file input for Open/Insert */}
       <input

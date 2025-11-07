@@ -3,7 +3,7 @@
  * Production-ready mindmap editor using @xyflow/react
  */
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   ReactFlow,
@@ -40,6 +40,8 @@ import { PresentationLoadingScreen } from "@/components/presentation/Presentatio
 import { workspaceService } from "@/services/workspace/WorkspaceService";
 import Studio2MindNode from "@/components/mindmap/Studio2MindNode";
 import Studio2MilestoneNode from "@/components/mindmap/Studio2MilestoneNode";
+import SimpleMindNode from "@/components/mindmap/SimpleMindNode";
+import BorderOnlyMindNode from "@/components/mindmap/BorderOnlyMindNode";
 import Studio2Sidebar from "@/components/mindmap/Studio2Sidebar";
 import Studio2ExportModal from "@/components/mindmap/Studio2ExportModal";
 import Studio2TemplateModal from "@/components/mindmap/Studio2TemplateModal";
@@ -60,13 +62,7 @@ import { mindmapExporter } from "@/services/mindmap/MindmapExporter";
 import AwsNode from "@/components/diagram/nodes/AwsNode";
 import IconNode from "@/components/diagram/nodes/IconNode";
 
-// Custom node types
-const nodeTypes = {
-  mindNode: Studio2MindNode,
-  milestone: Studio2MilestoneNode,
-  aws: AwsNode,
-  icon: IconNode,
-};
+// Custom node types - will be dynamically set based on nodeStyle preference
 
 // Initial nodes and edges
 const getInitialNodes = (): Node[] => [
@@ -104,6 +100,26 @@ function MindmapStudio2Content() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [currentLayout, setCurrentLayout] = useState<string>('manual');
   const [edgeType, setEdgeType] = useState<'smoothstep' | 'bezier' | 'straight' | 'step'>('bezier');
+  const [nodeStyle, setNodeStyle] = useState<'gradient' | 'simple' | 'border-only'>('gradient'); // Node style preference
+  
+  // Dynamic node types based on style preference
+  const nodeTypes = useMemo(() => {
+    let mindNodeComponent;
+    if (nodeStyle === 'simple') {
+      mindNodeComponent = SimpleMindNode;
+    } else if (nodeStyle === 'border-only') {
+      mindNodeComponent = BorderOnlyMindNode;
+    } else {
+      mindNodeComponent = Studio2MindNode; // gradient (default)
+    }
+    
+    return {
+      mindNode: mindNodeComponent,
+      milestone: Studio2MilestoneNode, // Keep milestone as-is for now
+      aws: AwsNode,
+      icon: IconNode,
+    } as any; // Type assertion needed for React Flow's strict typing
+  }, [nodeStyle]);
   
   // Quick AWS insert (research phase)
   const addAwsNode = (title: string, icon: string) => {
@@ -217,6 +233,92 @@ function MindmapStudio2Content() {
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]
   );
+
+  // Track previous milestone positions to detect movement
+  const previousMilestonePositions = useRef<Map<string, { x: number; y: number }>>(new Map());
+
+  // Handle node drag - ensure nested milestones move with their parent
+  const onNodeDrag = useCallback((_event: React.MouseEvent, draggedNode: Node) => {
+    // If this is a milestone being dragged, check if it has child milestones
+    if (draggedNode.type === 'milestone') {
+      // Store previous position for comparison
+      const prevPos = previousMilestonePositions.current.get(draggedNode.id);
+      
+      if (prevPos) {
+        const deltaX = draggedNode.position.x - prevPos.x;
+        const deltaY = draggedNode.position.y - prevPos.y;
+        
+        // If milestone moved, ensure all its child milestones also move
+        if (deltaX !== 0 || deltaY !== 0) {
+          // Find all child milestones (milestones that have this milestone as parent)
+          const childMilestones = nodes.filter(n => 
+            n.type === 'milestone' && 
+            (n as any).parentId === draggedNode.id
+          );
+          
+          // Update child milestone positions to move with parent
+          if (childMilestones.length > 0) {
+            setNodes((currentNodes) => {
+              return currentNodes.map(node => {
+                if (childMilestones.some(cm => cm.id === node.id)) {
+                  // Update position to move with parent milestone
+                  // Since positions are relative to parent, we need to update them
+                  return {
+                    ...node,
+                    position: {
+                      x: node.position.x + deltaX,
+                      y: node.position.y + deltaY,
+                    }
+                  };
+                }
+                return node;
+              });
+            });
+          }
+        }
+      }
+      
+      // Update stored position
+      previousMilestonePositions.current.set(draggedNode.id, {
+        x: draggedNode.position.x,
+        y: draggedNode.position.y,
+      });
+    }
+  }, [nodes, setNodes]);
+
+  // Handle node drag stop - ensure positions are synced
+  const onNodeDragStop = useCallback((_event: React.MouseEvent, draggedNode: Node) => {
+    // After drag stops, ensure all nested milestones are properly positioned
+    if (draggedNode.type === 'milestone') {
+      // Update stored position
+      previousMilestonePositions.current.set(draggedNode.id, {
+        x: draggedNode.position.x,
+        y: draggedNode.position.y,
+      });
+      
+      // Force React Flow to recalculate nested milestone positions
+      // This ensures React Flow's internal positioning is correct
+      setNodes((currentNodes) => {
+        return currentNodes.map(node => {
+          // If node is a nested milestone (has parentId), ensure it's properly positioned
+          if (node.type === 'milestone' && (node as any).parentId) {
+            const parentId = (node as any).parentId;
+            const parent = currentNodes.find(n => n.id === parentId);
+            
+            if (parent) {
+              // Ensure position is relative to parent
+              // React Flow should handle this, but we'll ensure it's correct
+              return {
+                ...node,
+                position: { ...node.position } // Create new object to trigger update
+              };
+            }
+          }
+          return node;
+        });
+      });
+    }
+  }, [setNodes]);
 
   // Handle AI Enhance button click (show proactive suggestion)
   const handleAIEnhanceClick = useCallback((nodeId: string, executeCommand: (cmd: string) => void) => {
@@ -520,7 +622,57 @@ function MindmapStudio2Content() {
     }
   }, []);
 
-  // Create milestone from selected nodes
+  // Helper: Get all child nodes recursively (for nested milestones)
+  const getAllChildNodes = useCallback((parentId: string, allNodes: Node[]): Node[] => {
+    const directChildren = allNodes.filter(n => (n as any).parentId === parentId);
+    const nestedChildren: Node[] = [];
+    
+    directChildren.forEach(child => {
+      nestedChildren.push(child);
+      // If child is a milestone, get its children too
+      if (child.type === 'milestone') {
+        nestedChildren.push(...getAllChildNodes(child.id, allNodes));
+      }
+    });
+    
+    return nestedChildren;
+  }, []);
+
+  // Helper: Calculate absolute position (accounting for parent milestones)
+  const getAbsolutePosition = useCallback((node: Node, allNodes: Node[]): { x: number; y: number } => {
+    let x = node.position.x;
+    let y = node.position.y;
+    let currentParentId = (node as any).parentId;
+    
+    // Walk up the parent chain to get absolute position
+    while (currentParentId) {
+      const parent = allNodes.find(n => n.id === currentParentId);
+      if (!parent) break;
+      x += parent.position.x;
+      y += parent.position.y;
+      currentParentId = (parent as any).parentId;
+    }
+    
+    return { x, y };
+  }, []);
+
+  // Helper: Calculate milestone depth (for z-index)
+  const getMilestoneDepth = useCallback((milestoneId: string, allNodes: Node[]): number => {
+    let depth = 0;
+    let currentParentId = (allNodes.find(n => n.id === milestoneId) as any)?.parentId;
+    
+    while (currentParentId) {
+      const parent = allNodes.find(n => n.id === currentParentId);
+      if (parent?.type === 'milestone') {
+        depth++;
+      }
+      currentParentId = (parent as any)?.parentId;
+    }
+    
+    return depth;
+  }, []);
+
+  // Create milestone from selected nodes (supports nested milestones!)
   const createMilestone = useCallback(() => {
     console.log('🟢 CREATE MILESTONE CALLED:', {
       selectedNodeIds,
@@ -528,28 +680,67 @@ function MindmapStudio2Content() {
     });
 
     if (selectedNodeIds.length < 2) {
-      alert('Please select at least 2 nodes to create a milestone');
+      alert('Please select at least 2 nodes/milestones to create a milestone');
       return;
     }
 
     const selectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
     
+    // Collect all nodes to include (nodes + all children of selected milestones)
+    const allNodesToGroup: Node[] = [];
+    const processedMilestones = new Set<string>();
+    
+    selectedNodes.forEach(node => {
+      allNodesToGroup.push(node);
+      
+      // If selected node is a milestone, include all its children
+      if (node.type === 'milestone' && !processedMilestones.has(node.id)) {
+        processedMilestones.add(node.id);
+        const childNodes = getAllChildNodes(node.id, nodes);
+        allNodesToGroup.push(...childNodes);
+        console.log(`🟢 Milestone ${node.id} has ${childNodes.length} children`);
+      }
+    });
+    
+    // Remove duplicates
+    const uniqueNodesToGroup = Array.from(new Map(allNodesToGroup.map(n => [n.id, n])).values());
+    
     console.log('🟢 SELECTED NODES:', selectedNodes.map(n => ({
       id: n.id,
       type: n.type,
       position: n.position,
-      hasParent: !!n.parentNode,
+      hasParent: !!(n as any).parentId,
     })));
     
-    // Calculate bounding box
-    const minX = Math.min(...selectedNodes.map(n => n.position.x)) - 30;
-    const minY = Math.min(...selectedNodes.map(n => n.position.y)) - 30;
-    const maxX = Math.max(...selectedNodes.map(n => n.position.x + 150)) + 30;
-    const maxY = Math.max(...selectedNodes.map(n => n.position.y + 50)) + 30;
+    console.log('🟢 ALL NODES TO GROUP (including children):', uniqueNodesToGroup.length);
+    
+    // Calculate bounding box using absolute positions
+    const absolutePositions = uniqueNodesToGroup.map(node => {
+      const absPos = getAbsolutePosition(node, nodes);
+      return {
+        node,
+        absX: absPos.x,
+        absY: absPos.y,
+        width: (node.style as any)?.width || 150,
+        height: (node.style as any)?.height || 50,
+      };
+    });
+    
+    const minX = Math.min(...absolutePositions.map(p => p.absX)) - 30;
+    const minY = Math.min(...absolutePositions.map(p => p.absY)) - 30;
+    const maxX = Math.max(...absolutePositions.map(p => p.absX + p.width)) + 30;
+    const maxY = Math.max(...absolutePositions.map(p => p.absY + p.height)) + 30;
 
     console.log('🟢 BOUNDING BOX:', { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY });
 
     const milestoneId = `milestone-${Date.now()}`;
+    
+    // Calculate depth for z-index (nested milestones need lower z-index)
+    const maxDepth = Math.max(...selectedNodes
+      .filter(n => n.type === 'milestone')
+      .map(n => getMilestoneDepth(n.id, nodes)), 0);
+    const milestoneDepth = maxDepth + 1;
+    const milestoneZIndex = -(milestoneDepth + 1); // Deeper nesting = lower z-index
 
     // Create milestone node
     const milestoneNode: Node = {
@@ -557,14 +748,14 @@ function MindmapStudio2Content() {
       type: 'milestone',
       position: { x: minX, y: minY },
       draggable: true, // Milestone is draggable
-      zIndex: -1, // CRITICAL: Milestone must be BEHIND children
+      zIndex: milestoneZIndex, // Dynamic z-index based on nesting depth
       style: {
         width: maxX - minX,
         height: maxY - minY,
       },
       data: {
         label: `Milestone ${nodes.filter(n => n.type === 'milestone').length + 1}`,
-        groupedNodeIds: selectedNodeIds,
+        groupedNodeIds: uniqueNodesToGroup.map(n => n.id), // Include all nodes (selected + children)
         // Callbacks will be injected by useEffect
       },
     };
@@ -573,29 +764,48 @@ function MindmapStudio2Content() {
       id: milestoneId,
       position: milestoneNode.position,
       size: milestoneNode.style,
-      groupedNodeIds: selectedNodeIds,
+      groupedNodeIds: uniqueNodesToGroup.map(n => n.id),
+      selectedCount: selectedNodeIds.length,
+      totalGroupedCount: uniqueNodesToGroup.length,
     });
 
-    // Set selected nodes as children of milestone (React Flow parent feature!)
+    // Set selected nodes AND milestones as children of new milestone
+    // Also update z-index for nested milestones
     const updatedNodes = nodes.map(node => {
-      if (selectedNodeIds.includes(node.id)) {
+      // Check if this node should be grouped (directly selected or child of selected milestone)
+      const shouldGroup = uniqueNodesToGroup.some(n => n.id === node.id);
+      
+      if (shouldGroup) {
+        // Get absolute position before grouping
+        const absPos = getAbsolutePosition(node, nodes);
+        
+        // Calculate relative position within new milestone
         const newPosition = {
-          x: node.position.x - minX,
-          y: node.position.y - minY,
+          x: absPos.x - minX,
+          y: absPos.y - minY,
         };
-        console.log(`🟢 CONVERTING NODE ${node.id}:`, {
-          oldAbsolutePosition: node.position,
+        
+        // If node is a milestone, also update its z-index to be above parent
+        let updatedZIndex = node.zIndex;
+        if (node.type === 'milestone') {
+          const childDepth = getMilestoneDepth(node.id, nodes);
+          updatedZIndex = -(childDepth + 2); // Child milestone should be above parent
+        }
+        
+        console.log(`🟢 CONVERTING NODE ${node.id} (${node.type}):`, {
+          oldAbsolutePosition: absPos,
           newRelativePosition: newPosition,
           milestonePosition: { x: minX, y: minY },
-          calculation: `(${node.position.x} - ${minX}, ${node.position.y} - ${minY})`,
-          parentId: milestoneId, // FIXED: parentId not parentNode
-          extent: 'parent',
+          oldZIndex: node.zIndex,
+          newZIndex: updatedZIndex,
         });
+        
         return {
           ...node,
           parentId: milestoneId, // CRITICAL: React Flow uses 'parentId' not 'parentNode'!
           extent: 'parent' as const,
           position: newPosition,
+          zIndex: updatedZIndex,
           expandParent: true, // Ensure parent expands to fit children
           draggable: true, // Child is draggable within parent
         };
@@ -605,7 +815,7 @@ function MindmapStudio2Content() {
 
     console.log('🟢 FINAL NODES:', {
       totalNodes: updatedNodes.length + 1,
-      milestoneChildren: updatedNodes.filter(n => n.parentNode === milestoneId).length,
+      milestoneChildren: updatedNodes.filter(n => (n as any).parentId === milestoneId).length,
       milestone: milestoneNode,
     });
 
@@ -629,8 +839,34 @@ function MindmapStudio2Content() {
     // The milestone must be rendered BEFORE children can reference it as parent
     setNodes(finalNodesArray);
     setSelectedNodeIds([]);
-    console.log(`✅ Milestone created! Nodes: ${finalNodesArray.length}, Children: ${updatedNodes.filter(n => n.parentNode === milestoneId).length}`);
-  }, [selectedNodeIds, nodes, setNodes]);
+    
+    // Initialize position tracking for all milestones
+    finalNodesArray.forEach(node => {
+      if (node.type === 'milestone') {
+        previousMilestonePositions.current.set(node.id, {
+          x: node.position.x,
+          y: node.position.y,
+        });
+      }
+    });
+    
+    console.log(`✅ Milestone created! Nodes: ${finalNodesArray.length}, Children: ${updatedNodes.filter(n => (n as any).parentId === milestoneId).length}`);
+  }, [selectedNodeIds, nodes, setNodes, getAllChildNodes, getAbsolutePosition, getMilestoneDepth]);
+
+  // Initialize position tracking for all milestones when nodes change
+  useEffect(() => {
+    nodes.forEach(node => {
+      if (node.type === 'milestone') {
+        const currentPos = previousMilestonePositions.current.get(node.id);
+        if (!currentPos || currentPos.x !== node.position.x || currentPos.y !== node.position.y) {
+          previousMilestonePositions.current.set(node.id, {
+            x: node.position.x,
+            y: node.position.y,
+          });
+        }
+      }
+    });
+  }, [nodes]);
 
   // Ungroup milestone
   const ungroupMilestone = useCallback((milestoneId: string) => {
@@ -664,11 +900,11 @@ function MindmapStudio2Content() {
     if (!confirm('Delete this milestone and all grouped nodes?')) return;
 
     // Remove milestone and all child nodes
-    const updatedNodes = nodes.filter(n => n.id !== milestoneId && n.parentNode !== milestoneId);
+    const updatedNodes = nodes.filter(n => n.id !== milestoneId && (n as any).parentId !== milestoneId);
     const updatedEdges = edges.filter(e => {
       const sourceNode = nodes.find(n => n.id === e.source);
       const targetNode = nodes.find(n => n.id === e.target);
-      return sourceNode?.parentNode !== milestoneId && targetNode?.parentNode !== milestoneId;
+      return (sourceNode as any)?.parentId !== milestoneId && (targetNode as any)?.parentId !== milestoneId;
     });
 
     setNodes(updatedNodes);
@@ -2397,16 +2633,33 @@ Examples:
             Group {selectedNodeIds.length > 0 && `(${selectedNodeIds.length})`}
           </Button>
           
-          {/* Style Dropdown */}
+          {/* Node Style Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="sm" variant="outline" className="hover:bg-muted">
                 <Palette className="h-4 w-4 mr-2"/>
-                Style
+                Node Style
                 <ChevronDown className="h-3 w-3 ml-2 opacity-50" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuLabel>Node Style</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => setNodeStyle('gradient')}>
+                <span className={nodeStyle === 'gradient' ? 'font-bold' : ''}>
+                  🎨 Gradient (Default)
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setNodeStyle('simple')}>
+                <span className={nodeStyle === 'simple' ? 'font-bold' : ''}>
+                  ⚡ Simple (Lightweight)
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setNodeStyle('border-only')}>
+                <span className={nodeStyle === 'border-only' ? 'font-bold' : ''}>
+                  🔲 Border Only (Clean)
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuLabel>Edge Type</DropdownMenuLabel>
               <DropdownMenuItem onClick={() => setEdgeType('smoothstep')}>
                 <span className={edgeType === 'smoothstep' ? 'font-bold' : ''}>Smooth Step</span>
@@ -2532,7 +2785,9 @@ Examples:
           onConnect={onConnect}
           onSelectionChange={onSelectionChange}
           onNodeDoubleClick={onNodeDoubleClick}
-          nodeTypes={nodeTypes}
+          onNodeDrag={onNodeDrag}
+          onNodeDragStop={onNodeDragStop}
+          nodeTypes={nodeTypes as any}
           fitView
           multiSelectionKeyCode="Shift"
           proOptions={{ hideAttribution: true }}

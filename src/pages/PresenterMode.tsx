@@ -15,6 +15,10 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { SlideRenderer } from '@/components/presentation/SlideRenderer';
+import { BeautifulSlideRenderer } from '@/components/presentation/BeautifulSlideRenderer';
+import { getBeautifulTheme, getAllBeautifulThemes } from '@/services/presentation/BeautifulThemes';
+import { convertToBeautifulTheme } from '@/services/presentation/ThemeConverter';
+import type { BeautifulTheme } from '@/services/presentation/BeautifulThemeSystem';
 import { workspaceService } from '@/services/workspace/WorkspaceService';
 import type { Presentation, Slide } from '@/services/presentation/PresentationGenerator';
 
@@ -158,11 +162,50 @@ export default function PresenterMode() {
       <div className="flex-1 flex items-center justify-center p-8">
         {currentSlide && (
           <div className="w-full max-w-7xl">
-            <SlideRenderer
-              slide={currentSlide}
-              theme={presentation.theme}
-              isEditing={false}
-            />
+            {(() => {
+              // Check if we should use beautiful renderer
+              const beautifulThemeIds = getAllBeautifulThemes().map(t => t.id);
+              
+              // Try multiple ways to detect the theme ID
+              const themeIdFromMetadata = (presentation.metadata as any)?.themeId;
+              const themeIdFromTheme = (presentation.theme as any)?.id;
+              const themeIdFromName = presentation.theme.name?.toLowerCase().replace(/\s+/g, '-');
+              
+              // Priority: metadata > theme.id > name conversion
+              const themeId = themeIdFromMetadata || themeIdFromTheme || themeIdFromName;
+              
+              // Try to get beautiful theme
+              let beautifulTheme: BeautifulTheme | null = null;
+              try {
+                if (themeId && beautifulThemeIds.includes(themeId)) {
+                  beautifulTheme = getBeautifulTheme(themeId);
+                } else {
+                  // Try to convert old theme to beautiful theme
+                  beautifulTheme = convertToBeautifulTheme(presentation.theme);
+                }
+              } catch (e) {
+                console.warn('Could not get beautiful theme, using old renderer:', e);
+              }
+              
+              if (beautifulTheme) {
+                return (
+                  <BeautifulSlideRenderer
+                    slide={currentSlide}
+                    theme={beautifulTheme}
+                    isEditing={false}
+                  />
+                );
+              }
+              
+              // Fallback to old renderer
+              return (
+                <SlideRenderer
+                  slide={currentSlide}
+                  theme={presentation.theme}
+                  isEditing={false}
+                />
+              );
+            })()}
           </div>
         )}
       </div>

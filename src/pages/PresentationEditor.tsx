@@ -24,10 +24,23 @@ import {
   Play,
   Save,
   FileDown,
+  Layout,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { presentationGenerator, type Presentation, type Slide } from '@/services/presentation/PresentationGenerator';
 import { SlideRenderer } from '@/components/presentation/SlideRenderer';
+import { BeautifulSlideRenderer } from '@/components/presentation/BeautifulSlideRenderer';
+import { getBeautifulTheme, getAllBeautifulThemes } from '@/services/presentation/BeautifulThemes';
+import { convertToBeautifulTheme } from '@/services/presentation/ThemeConverter';
+import type { BeautifulTheme } from '@/services/presentation/BeautifulThemeSystem';
 import { PresentationSidebar } from '@/components/presentation/PresentationSidebar';
+import { LayoutSelectorModal } from '@/components/presentation/LayoutSelectorModal';
+import { ImageSearchModal } from '@/components/presentation/ImageSearchModal';
+import { FloatingToolbar } from '@/components/presentation/FloatingToolbar';
+import { BlockTransformer, type BlockType, type Block } from '@/services/presentation/BlockSystem';
+import { BlockSelectorModal } from '@/components/presentation/BlockSelectorModal';
+import { SlideLayoutModal } from '@/components/presentation/SlideLayoutModal';
+import { createDemoBlock } from '@/utils/blockDemoData';
 
 export default function PresentationEditor() {
   const { presentationId } = useParams<{ presentationId: string }>();
@@ -38,6 +51,11 @@ export default function PresentationEditor() {
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showLayoutSelector, setShowLayoutSelector] = useState(false);
+  const [showSlideLayoutModal, setShowSlideLayoutModal] = useState(false);
+  const [showBlockSelector, setShowBlockSelector] = useState(false);
+  const [showImageSearch, setShowImageSearch] = useState(false);
+  const [showSpeakerNotes, setShowSpeakerNotes] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Determine the actual presentation ID from URL
@@ -62,6 +80,16 @@ export default function PresentationEditor() {
   useEffect(() => {
     loadOrGeneratePresentation();
   }, [actualId]);
+
+  // Update browser title with presentation name
+  useEffect(() => {
+    if (presentation) {
+      document.title = `${presentation.title} - Presentation Editor`;
+    }
+    return () => {
+      document.title = 'MD Creator';
+    };
+  }, [presentation]);
 
   const loadOrGeneratePresentation = async () => {
     try {
@@ -264,8 +292,63 @@ export default function PresentationEditor() {
       slides: updatedSlides,
     };
 
+    console.log('🔄 Updating slide:', updatedSlide.id, updatedSlide);
     setPresentation(updatedPresentation);
     savePresentationToStorage(updatedPresentation);
+  };
+
+  // Add a new block to the current slide
+  const handleAddBlock = (blockType: BlockType) => {
+    if (!presentation) return;
+
+    const currentSlide = presentation.slides[currentSlideIndex];
+    if (!currentSlide) return;
+
+    // Create a new block with demo data
+    const newBlock: Block = createDemoBlock(blockType);
+
+    // Add block to slide
+    const updatedSlide: Slide = {
+      ...currentSlide,
+      layout: blockType, // Set layout to match block type
+      content: {
+        ...currentSlide.content,
+        blocks: [...(currentSlide.content.blocks || []), newBlock],
+      },
+    };
+
+    handleUpdateSlide(updatedSlide);
+    console.log('✅ Added block:', blockType, newBlock);
+  };
+
+  // Add image to current slide
+  const handleAddImage = (imageUrl: string) => {
+    console.log('🖼️ handleAddImage called with:', imageUrl);
+    if (!presentation) {
+      console.error('❌ No presentation!');
+      return;
+    }
+
+    const currentSlide = presentation.slides[currentSlideIndex];
+    if (!currentSlide) {
+      console.error('❌ No current slide!');
+      return;
+    }
+
+    console.log('📝 Current slide before:', currentSlide);
+
+    // Add image to slide content
+    const updatedSlide: Slide = {
+      ...currentSlide,
+      content: {
+        ...currentSlide.content,
+        image: imageUrl,
+      },
+    };
+
+    console.log('📝 Updated slide:', updatedSlide);
+    handleUpdateSlide(updatedSlide);
+    console.log('✅ Image added successfully!');
   };
 
   const handlePresent = () => {
@@ -353,109 +436,176 @@ export default function PresentationEditor() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-background">
-      {/* Header */}
-      <div className="border-b border-border bg-card px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={handleBackToEditor}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-          <div className="h-6 w-px bg-border" />
-          <div>
-            <h1 className="text-lg font-semibold">{presentation.title}</h1>
-            <p className="text-xs text-muted-foreground">
-              {presentation.slides.length} slides • {presentation.theme.name} theme
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleSave}>
-            <Save className="h-4 w-4 mr-2" />
-            Save
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExport}>
-            <FileDown className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Button 
-            size="sm" 
-            className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white"
-            onClick={handlePresent}
-          >
-            <Play className="h-4 w-4 mr-2" />
-            Present
-          </Button>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar: Slide List */}
-        <PresentationSidebar
-          slides={presentation.slides}
-          currentIndex={currentSlideIndex}
-          theme={presentation.theme}
-          onSlideSelect={setCurrentSlideIndex}
-          onAddSlide={handleAddSlide}
-          onDeleteSlide={handleDeleteSlide}
-          onDuplicateSlide={handleDuplicateSlide}
+    <div className="h-screen w-screen flex bg-background" style={{ overflow: 'hidden', position: 'fixed', inset: 0 }}>
+      {/* Main Content - FULL SCREEN */}
+      <div className="flex-1 flex relative" style={{ overflow: 'hidden', height: '100vh', width: '100%' }}>
+        {/* Floating Toolbar with ALL actions */}
+        <FloatingToolbar
+          onLayoutClick={() => setShowSlideLayoutModal(true)}
+          onImageClick={() => setShowImageSearch(true)}
+          onPresentClick={handlePresent}
+          onAIClick={() => {
+            // TODO: Add AI assistant
+            alert('AI Assistant coming soon!');
+          }}
+          onBackClick={handleBackToEditor}
+          onSaveClick={handleSave}
+          onExportClick={handleExport}
+          onPreviousSlide={() => setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))}
+          onNextSlide={() => setCurrentSlideIndex(Math.min((presentation?.slides.length || 1) - 1, currentSlideIndex + 1))}
+          onSpeakerNotesClick={() => setShowSpeakerNotes(true)}
+          canGoPrevious={currentSlideIndex > 0}
+          canGoNext={currentSlideIndex < (presentation?.slides.length || 1) - 1}
         />
 
-        {/* Main Canvas: Current Slide */}
-        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50">
+
+        {/* Sidebar: Slide List - Fixed height with its own scrollbar */}
+        <div className="flex-shrink-0" style={{ height: '100%' }}>
+          <PresentationSidebar
+            slides={presentation.slides}
+            currentIndex={currentSlideIndex}
+            theme={presentation.theme}
+            onSlideSelect={setCurrentSlideIndex}
+            onAddSlide={handleAddSlide}
+            onDeleteSlide={handleDeleteSlide}
+            onDuplicateSlide={handleDuplicateSlide}
+          />
+        </div>
+
+        {/* Main Canvas: Current Slide - FULL SPACE */}
+        <div 
+          className="flex-1 flex items-center justify-center"
+          style={{
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            backgroundSize: '400% 400%',
+            animation: 'gradient 15s ease infinite',
+            height: '100vh',
+            width: '100%',
+            overflow: 'hidden',
+            padding: '2.5rem',
+            position: 'relative',
+          }}
+        >
+          <style>{`
+            @keyframes gradient {
+              0% { background-position: 0% 50%; }
+              50% { background-position: 100% 50%; }
+              100% { background-position: 0% 50%; }
+            }
+            
+            /* NO SCROLLBARS AT ALL */
+            body, html {
+              overflow: hidden !important;
+              height: 100vh !important;
+              width: 100vw !important;
+            }
+          `}</style>
           {currentSlide ? (
-            <div className="w-full max-w-5xl">
-              {/* Slide Number */}
-              <div className="text-sm text-muted-foreground mb-4 text-center">
-                Slide {currentSlideIndex + 1} of {presentation.slides.length}
+            <div 
+              className="transform transition-all duration-500"
+              style={{
+                filter: 'drop-shadow(0 25px 50px rgba(0, 0, 0, 0.15))',
+                width: '100%',
+                height: '100%',
+                maxWidth: '100%',
+                maxHeight: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+              }}
+            >
+              {/* Slide Number - Fixed position at top center */}
+              <div 
+                className="fixed top-6 left-1/2 -translate-x-1/2 z-40 text-sm text-center font-medium backdrop-blur-md py-2 px-6 rounded-full"
+                style={{
+                  color: 'white',
+                  background: 'rgba(0, 0, 0, 0.6)',
+                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                }}
+              >
+                ✨ Slide {currentSlideIndex + 1} of {presentation.slides.length}
               </div>
 
-              {/* Slide Renderer */}
-              <SlideRenderer
-                slide={currentSlide}
-                theme={presentation.theme}
-                isEditing={true}
-                onUpdate={handleUpdateSlide}
-              />
-
-              {/* Navigation */}
-              <div className="flex items-center justify-center gap-4 mt-6">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))}
-                  disabled={currentSlideIndex === 0}
-                >
-                  ← Previous
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  {currentSlideIndex + 1} / {presentation.slides.length}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setCurrentSlideIndex(
-                      Math.min(presentation.slides.length - 1, currentSlideIndex + 1)
-                    )
+              {/* Slide Renderer Container - FULL SIZE with 16:9 ratio */}
+              <div style={{ 
+                width: '100%', 
+                height: '100%', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+              }}>
+                <div style={{
+                  width: '100%',
+                  height: '100%',
+                  aspectRatio: '16/9',
+                  maxHeight: '100%',
+                  maxWidth: '100%',
+                }}>
+                {(() => {
+                // Check if we should use beautiful renderer
+                const beautifulThemeIds = getAllBeautifulThemes().map(t => t.id);
+                
+                // Try multiple ways to detect the theme ID
+                const themeIdFromMetadata = (presentation.metadata as any)?.themeId;
+                const themeIdFromTheme = (presentation.theme as any)?.id;
+                const themeIdFromName = presentation.theme.name?.toLowerCase().replace(/\s+/g, '-');
+                
+                // Priority: metadata > theme.id > name conversion
+                const themeId = themeIdFromMetadata || themeIdFromTheme || themeIdFromName;
+                
+                console.log('🎨 Theme Detection:', {
+                  themeIdFromMetadata,
+                  themeIdFromTheme,
+                  themeIdFromName,
+                  finalThemeId: themeId,
+                  themeName: presentation.theme.name,
+                  beautifulThemeIds,
+                  isBeautiful: themeId && beautifulThemeIds.includes(themeId),
+                });
+                
+                // Try to get beautiful theme
+                let beautifulTheme: BeautifulTheme | null = null;
+                try {
+                  if (themeId && beautifulThemeIds.includes(themeId)) {
+                    beautifulTheme = getBeautifulTheme(themeId);
+                    console.log('✅ Using beautiful theme by ID:', beautifulTheme.name);
+                  } else {
+                    // ALWAYS convert to beautiful theme - even old themes get upgraded!
+                    beautifulTheme = convertToBeautifulTheme(presentation.theme);
+                    console.log('✅ Converted to beautiful theme:', beautifulTheme.name);
                   }
-                  disabled={currentSlideIndex === presentation.slides.length - 1}
-                >
-                  Next →
-                </Button>
+                } catch (e) {
+                  console.error('❌ Could not get beautiful theme:', e);
+                }
+                
+                // ALWAYS use BeautifulSlideRenderer - it's better!
+                if (beautifulTheme) {
+                  return (
+                    <BeautifulSlideRenderer
+                      slide={currentSlide}
+                      theme={beautifulTheme}
+                      isEditing={true}
+                      onUpdate={handleUpdateSlide}
+                    />
+                  );
+                }
+                
+                // Fallback to old renderer (shouldn't happen, but just in case)
+                console.warn('⚠️ Falling back to old renderer - this should not happen!');
+                return (
+                  <SlideRenderer
+                    slide={currentSlide}
+                    theme={presentation.theme}
+                    isEditing={true}
+                    onUpdate={handleUpdateSlide}
+                  />
+                );
+              })()}
+                </div>
               </div>
 
-              {/* Speaker Notes */}
-              {currentSlide.speakerNotes && (
-                <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <p className="text-xs font-semibold text-yellow-900 mb-1">
-                    📝 Speaker Notes:
-                  </p>
-                  <p className="text-sm text-yellow-800">{currentSlide.speakerNotes}</p>
-                </div>
-              )}
             </div>
           ) : (
             <div className="text-center text-muted-foreground">No slide selected</div>
@@ -475,6 +625,131 @@ export default function PresentationEditor() {
           </div>
         </div>
       )}
+
+      {/* Speaker Notes Modal */}
+      {showSpeakerNotes && currentSlide && (
+        <div 
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm"
+          onClick={() => setShowSpeakerNotes(false)}
+        >
+          <div 
+            className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-2xl p-8 max-w-2xl w-full mx-4 shadow-2xl border-2 border-amber-200"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              boxShadow: '0 25px 50px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(251, 191, 36, 0.2)',
+            }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-amber-400 rounded-xl flex items-center justify-center text-2xl shadow-lg">
+                  📝
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-amber-900">Speaker Notes</h3>
+                  <p className="text-sm text-amber-700">Slide {currentSlideIndex + 1} of {presentation?.slides.length}</p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowSpeakerNotes(false)}
+                className="hover:bg-amber-200 text-amber-900"
+              >
+                ✕ Close
+              </Button>
+            </div>
+            
+            {currentSlide.speakerNotes ? (
+              <div className="bg-white rounded-xl p-6 border border-amber-200 shadow-inner">
+                <p className="text-base text-gray-800 leading-relaxed whitespace-pre-wrap">
+                  {currentSlide.speakerNotes}
+                </p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl p-6 border border-amber-200 shadow-inner text-center">
+                <p className="text-gray-400 italic">No speaker notes for this slide</p>
+                <p className="text-sm text-gray-500 mt-2">Add notes to help guide your presentation!</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Slide Layout Modal - Image position, columns, etc. */}
+      <SlideLayoutModal
+        isOpen={showSlideLayoutModal}
+        onClose={() => setShowSlideLayoutModal(false)}
+        onSelect={(layoutId) => {
+          console.log('🎨 Selected layout:', layoutId);
+          // Apply layout to current slide
+          if (presentation && currentSlide) {
+            const updatedSlide: Slide = {
+              ...currentSlide,
+              layout: layoutId as any,
+            };
+            handleUpdateSlide(updatedSlide);
+          }
+        }}
+      />
+
+      {/* Block Selector Modal - Add beautiful blocks */}
+      <BlockSelectorModal
+        isOpen={showBlockSelector}
+        onClose={() => setShowBlockSelector(false)}
+        onSelect={(blockType) => {
+          handleAddBlock(blockType);
+        }}
+      />
+
+      {/* Layout Selector Modal */}
+      <LayoutSelectorModal
+        open={showLayoutSelector}
+        onOpenChange={setShowLayoutSelector}
+        onLayoutSelect={(layoutType) => {
+          if (currentSlide && presentation) {
+            // Transform current slide to new layout
+            const block = {
+              id: `block-${currentSlide.id}`,
+              type: currentSlide.layout as BlockType,
+              content: {
+                text: currentSlide.content.body,
+                heading: currentSlide.content.title,
+                bullets: currentSlide.content.bullets,
+              },
+              order: 0,
+            };
+            
+            const transformed = BlockTransformer.transform(block, layoutType);
+            
+            // Update slide
+            const updatedSlides = [...presentation.slides];
+            updatedSlides[currentSlideIndex] = {
+              ...currentSlide,
+              layout: layoutType as any,
+              content: {
+                ...currentSlide.content,
+                ...transformed.content,
+              },
+            };
+            
+            setPresentation({
+              ...presentation,
+              slides: updatedSlides,
+            });
+          }
+          setShowLayoutSelector(false);
+        }}
+        targetBlockId={currentSlide?.id}
+      />
+
+      {/* Image Search Modal */}
+      <ImageSearchModal
+        open={showImageSearch}
+        onOpenChange={setShowImageSearch}
+        onImageSelect={handleAddImage}
+        context={currentSlide?.content.body || currentSlide?.content.title}
+        themeName={presentation?.theme.name}
+      />
     </div>
   );
 }

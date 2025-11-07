@@ -65,6 +65,9 @@ interface AdaptiveSidebarProps {
   
   // Editor integration
   onInsertContent?: (content: string) => void;
+  
+  // Demo
+  onLoadDemo?: () => void;
 }
 
 export function AdaptiveSidebar({
@@ -81,6 +84,7 @@ export function AdaptiveSidebar({
   collapsed = false,
   onToggleCollapse,
   onInsertContent,
+  onLoadDemo,
 }: AdaptiveSidebarProps) {
   const [activeTab, setActiveTab] = useState<'documents' | 'outline' | 'context'>('outline');
 
@@ -137,6 +141,7 @@ export function AdaptiveSidebar({
             <WorkspaceSidebar
               onDocumentSelect={onDocumentSelect}
               currentDocumentId={currentDocumentId}
+              onLoadDemo={onLoadDemo}
             />
           </TabsContent>
 
@@ -214,6 +219,7 @@ export function AdaptiveSidebar({
         <WorkspaceSidebar
           onDocumentSelect={onDocumentSelect}
           currentDocumentId={currentDocumentId}
+          onLoadDemo={onLoadDemo}
         />
       )}
     </div>

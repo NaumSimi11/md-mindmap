@@ -44,11 +44,13 @@ import { NewDocumentModal } from './NewDocumentModal';
 interface WorkspaceSidebarProps {
   onDocumentSelect: (documentId: string) => void;
   currentDocumentId?: string;
+  onLoadDemo?: () => void;
 }
 
 export function WorkspaceSidebar({
   onDocumentSelect,
   currentDocumentId,
+  onLoadDemo,
 }: WorkspaceSidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [workspace, setWorkspace] = useState(workspaceService.getCurrentWorkspace());
@@ -166,22 +168,36 @@ export function WorkspaceSidebar({
         </div>
 
         {/* New Buttons */}
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            className="flex-1"
-            onClick={() => setShowNewDocModal(true)}
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            New Doc
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleCreateFolder}
-          >
-            <FolderPlus className="h-4 w-4" />
-          </Button>
+        <div className="flex flex-col gap-2">
+          {/* DEMO BUTTON - BIG AND OBVIOUS */}
+          {onLoadDemo && (
+            <Button
+              size="sm"
+              className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-bold"
+              onClick={onLoadDemo}
+            >
+              <span className="mr-2">✨</span>
+              BLOCKS DEMO
+            </Button>
+          )}
+          
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              className="flex-1"
+              onClick={() => setShowNewDocModal(true)}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              New Doc
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleCreateFolder}
+            >
+              <FolderPlus className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
