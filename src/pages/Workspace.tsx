@@ -49,17 +49,17 @@ export default function Workspace() {
   const [showNewDocModal, setShowNewDocModal] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
-  
+
   // State to track LIVE editor content (not stored content)
   const [liveEditorContent, setLiveEditorContent] = useState<string>('');
-  
+
   // Editor instance ref for direct content insertion
   const editorInstanceRef = React.useRef<any>(null);
   const editorContainerRef = useRef<HTMLElement>(null);
-  
+
   // 🔧 Ref to prevent overlapping scroll operations
   const isScrollingRef = useRef(false);
-  
+
   // ScrollSpy for active heading detection - DISABLED for now to prevent loops
   // TODO: Re-enable after fixing container detection
   const activeHeadingText = null;
@@ -68,7 +68,7 @@ export default function Workspace() {
   //   offset: 150,
   //   throttle: 100,
   // });
-  
+
   // Set up editor container ref for ScrollSpy - DISABLED
   // useEffect(() => {
   //   // Find the editor's scrollable container after a short delay to ensure it's mounted
@@ -85,14 +85,14 @@ export default function Workspace() {
 
   //   return () => clearTimeout(timer);
   // }, [viewMode, documentId]); // Re-run when switching documents or views
-  
+
   // Context folders state
   const [contextFolders, setContextFolders] = useState<Array<any>>([]);
-  
+
   // Mindmap generation state
   const [isGeneratingMindmap, setIsGeneratingMindmap] = useState(false);
   const [mindmapProgress, setMindmapProgress] = useState(0);
-  
+
   // Presentation wizard & progress
   const [showPresentationWizard, setShowPresentationWizard] = useState(false);
   const [showPresentationProgress, setShowPresentationProgress] = useState(false);
@@ -133,7 +133,7 @@ export default function Workspace() {
         e.preventDefault();
         setShowQuickSwitcher(true);
       }
-      
+
       // Cmd/Ctrl+Shift+F for Focus Mode
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
         e.preventDefault();
@@ -155,10 +155,10 @@ export default function Workspace() {
 
       // Use LIVE content if available (most recent), otherwise use stored content
       const contentToUse = liveEditorContent || currentDocument.content;
-      
-      console.log('🧠 Mindmap mode detected:', { 
-        mode, 
-        type, 
+
+      console.log('🧠 Mindmap mode detected:', {
+        mode,
+        type,
         contentLength: contentToUse.length,
         hasLiveContent: !!liveEditorContent,
         preview: contentToUse.substring(0, 200)
@@ -178,7 +178,7 @@ export default function Workspace() {
   // Generate mindmap from content
   const generateMindmap = async (content: string, type: 'mindmap' | 'flowchart' | 'orgchart') => {
     console.log('🚀 Starting mindmap generation:', { type, contentLength: content.length });
-    
+
     setIsGeneratingMindmap(true);
     setMindmapProgress(0);
 
@@ -191,7 +191,7 @@ export default function Workspace() {
       console.log('🧠 Generating mindmap data...');
       const generator = new MindmapGenerator();
       const mindmapData = generator.generateFromHeadings(content);
-      
+
       setMindmapProgress(60);
       await new Promise(resolve => setTimeout(resolve, 500));
 
@@ -218,11 +218,11 @@ export default function Workspace() {
 
       // Wait a moment to show 100%, then close loading screen
       await new Promise(resolve => setTimeout(resolve, 500));
-      
+
       // Clear URL params and show the mindmap
       const newUrl = location.pathname; // Remove query params
       navigate(newUrl, { replace: true });
-      
+
       setIsGeneratingMindmap(false);
       setMindmapProgress(0);
     } catch (error) {
@@ -257,17 +257,17 @@ export default function Workspace() {
   // Load demo presentation with all beautiful blocks
   const handleLoadDemoPresentation = async () => {
     console.log('🎨 Loading demo presentation...');
-    
+
     try {
       // Save demo presentation to workspace
       const doc = await workspaceService.createDocument(
-        'presentation', 
-        'Beautiful Blocks Showcase', 
+        'presentation',
+        'Beautiful Blocks Showcase',
         JSON.stringify(DEMO_PRESENTATION)
       );
-      
+
       console.log('✅ Demo presentation created:', doc.id);
-      
+
       // Navigate to presentation editor
       navigate(`/workspace/doc/${doc.id}/slides`);
     } catch (error) {
@@ -279,28 +279,28 @@ export default function Workspace() {
   // Generate presentation from editor
   const handleGeneratePresentation = async (settings: GenerationSettings) => {
     console.log('🎬 Generating presentation from editor with settings:', settings);
-    
+
     if (!currentDocument) return;
-    
+
     // 🔧 CLEAR OLD SESSION KEYS (from old Editor.tsx flow)
     localStorage.removeItem('presentation-session');
-    const oldKeys = Object.keys(localStorage).filter(key => 
-      key.startsWith('editor-pres-session-') || 
+    const oldKeys = Object.keys(localStorage).filter(key =>
+      key.startsWith('editor-pres-session-') ||
       key.startsWith('mindmap-pres-session-')
     );
     oldKeys.forEach(key => localStorage.removeItem(key));
     console.log('🧹 Cleared old session keys:', oldKeys.length);
-    
+
     // Close wizard, show progress
     setShowPresentationWizard(false);
     setShowPresentationProgress(true);
     setPresentationProgress(null);
     setPresentationError(null);
-    
+
     try {
       const editorContent = liveEditorContent || currentDocument.content;
       console.log('📝 Editor content length:', editorContent.length);
-      
+
       console.log('🤖 Calling safe presentation service...');
       const presentation = await safePresentationService.generateSafely(
         editorContent,
@@ -312,18 +312,18 @@ export default function Workspace() {
           setPresentationProgress(progress);
         }
       );
-      
+
       console.log('✅ Presentation generated:', presentation);
-      
+
       // Save presentation to workspace
       console.log('💾 Saving presentation to workspace...');
       const doc = await workspaceService.createDocument(
-        'presentation', 
-        `${currentDocument.title} - Presentation`, 
+        'presentation',
+        `${currentDocument.title} - Presentation`,
         JSON.stringify(presentation)
       );
       console.log('✅ Presentation saved:', doc.id);
-      
+
       // Wait a moment to show success, then navigate
       setTimeout(() => {
         setShowPresentationProgress(false);
@@ -332,7 +332,7 @@ export default function Workspace() {
     } catch (error: any) {
       console.error('❌ Failed to generate presentation:', error);
       setPresentationError(error.message || 'Failed to generate presentation');
-      
+
       // Auto-close error after 5 seconds
       setTimeout(() => {
         setShowPresentationProgress(false);
@@ -345,7 +345,7 @@ export default function Workspace() {
     console.log('✅ Document created:', docId);
     handleDocumentSelect(docId);
   };
-  
+
   // Handle content insertion from context files
   const handleInsertContent = (content: string) => {
     if (editorInstanceRef.current) {
@@ -362,7 +362,7 @@ export default function Workspace() {
   // Callback to receive live content updates from editors
   const handleContentChange = (content: string) => {
     setLiveEditorContent(content);
-    
+
     // CRITICAL: Save to document!
     if (currentDocument) {
       // Only update if content actually changed to prevent infinite loop
@@ -374,159 +374,118 @@ export default function Workspace() {
     }
   };
 
-  // Helper function to scroll editor to specific text
-  const scrollToTextInEditor = (searchText: string) => {
+  // Helper function to scroll editor to specific heading by index
+  const scrollToHeading = (headingIndex: number) => {
     // 🔧 FIX: Prevent overlapping scroll operations (race condition fix!)
     if (isScrollingRef.current) {
       console.log('⏸️ Already scrolling, ignoring click');
       return;
     }
-    
+
     if (!editorInstanceRef.current) {
       console.warn('⚠️ Editor instance not available');
       return;
     }
 
     const editor = editorInstanceRef.current;
-    console.log('🔍 Searching for:', searchText);
-    
+    console.log('🔍 Scrolling to heading index:', headingIndex);
+
     // Set scrolling flag
     isScrollingRef.current = true;
-    
+
     try {
       const { state } = editor;
       const { doc } = state;
-      let found = false;
-      let targetPos = 0;
-      
-      // Clean search text for better matching
-      const cleanSearch = searchText.trim().toLowerCase();
+      let currentHeadingIndex = 0;
+      let targetPos = -1;
 
-      // 🔧 FIX: Only search heading nodes for better precision
+      // Find the Nth heading node
       doc.descendants((node, pos) => {
-        if (found) return false;
-        
-        // ONLY check heading nodes (outline items are always headings)
+        if (targetPos !== -1) return false;
+
         if (node.type.name === 'heading') {
-          const nodeText = node.textContent.trim().toLowerCase();
-          
-          // Try exact match first
-          if (nodeText === cleanSearch) {
+          if (currentHeadingIndex === headingIndex) {
             targetPos = pos;
-            found = true;
-            console.log('✅ Found exact heading match:', node.textContent, 'at position:', targetPos);
+            console.log('✅ Found target heading at position:', targetPos, 'Text:', node.textContent);
             return false;
           }
-          
-          // If not exact, try if search text is contained in heading
-          // But make sure it's a significant match (not just "a" matching "Chapter A")
-          if (cleanSearch.length > 3 && nodeText.includes(cleanSearch)) {
-            targetPos = pos;
-            found = true;
-            console.log('✅ Found heading containing:', cleanSearch, 'Full text:', node.textContent, 'at position:', targetPos);
-            return false;
-          }
+          currentHeadingIndex++;
         }
       });
 
-      if (found) {  // 🔧 FIX: Allow targetPos = 0 (valid for first heading!)
+      if (targetPos !== -1) {
         console.log('📍 Scrolling to position:', targetPos);
-        
-        // 🔧 FIX: More reliable scroll approach
+
         setTimeout(() => {
           try {
             // Focus editor first
             editor.commands.focus();
-            
+
             // Get the DOM node at the target position
             const domNode = editor.view.domAtPos(targetPos);
-            let element = domNode.node.nodeType === Node.ELEMENT_NODE 
-              ? (domNode.node as HTMLElement) 
+            let element = domNode.node.nodeType === Node.ELEMENT_NODE
+              ? (domNode.node as HTMLElement)
               : domNode.node.parentElement;
-            
-            // 🔧 FIX: Find the actual heading element - check CURRENT/CHILDREN first, not parents!
+
+            // Find the actual heading element
             if (element) {
               let headingElement: HTMLElement | null = null;
-              
+
               // Strategy 1: Check if current element IS a heading
-              if (element.tagName?.match(/^H[1-6]$/)) {
-                headingElement = element;
+              if ((element as HTMLElement).tagName?.match(/^H[1-6]$/)) {
+                headingElement = element as HTMLElement;
               }
-              
+
               // Strategy 2: Look for heading in immediate children
               if (!headingElement) {
                 headingElement = element.querySelector('h1, h2, h3, h4, h5, h6');
               }
-              
-              // Strategy 3: Look in siblings (sometimes the text node is separate)
+
+              // Strategy 3: Look in siblings
               if (!headingElement && element.parentElement) {
                 for (const sibling of Array.from(element.parentElement.children)) {
-                  if (sibling.tagName?.match(/^H[1-6]$/)) {
+                  if ((sibling as HTMLElement).tagName?.match(/^H[1-6]$/)) {
                     headingElement = sibling as HTMLElement;
                     break;
                   }
                 }
               }
-              
-              // Strategy 4: Only as last resort, traverse up ONE level
-              if (!headingElement && element.parentElement && element.parentElement.tagName?.match(/^H[1-6]$/)) {
-                headingElement = element.parentElement;
-              }
-              
+
               // Use the heading element if found, otherwise fall back to original
               const targetElement = headingElement || element;
-              console.log('📍 Found element:', targetElement.tagName, targetElement.textContent?.substring(0, 50));
-              
-              // Use native scrollIntoView with center positioning for best results
+
+              // Use native scrollIntoView with top positioning
               targetElement.scrollIntoView({
                 behavior: 'smooth',
-                block: 'center',
+                block: 'start',
                 inline: 'nearest'
               });
-              
-              // Also set cursor position for visual feedback
+
+              // Set cursor position
               editor.commands.setTextSelection(targetPos);
-              
-              console.log('✅ Scroll completed to position:', targetPos);
-              
-              // 🔧 Reset scrolling flag after animation completes (smooth scroll takes ~500ms)
+
+              // Reset scrolling flag
               setTimeout(() => {
                 isScrollingRef.current = false;
                 console.log('🔓 Scroll lock released');
               }, 600);
             } else {
-              console.warn('⚠️ Could not find DOM element for position:', targetPos);
-              isScrollingRef.current = false; // Reset on failure
+              // Fallback to TipTap scroll
+              editor.chain().focus().setTextSelection(targetPos).scrollIntoView().run();
+              setTimeout(() => isScrollingRef.current = false, 600);
             }
           } catch (scrollError) {
             console.error('❌ Scroll error:', scrollError);
-            // Fallback: Try TipTap's built-in scroll
-            try {
-              editor.chain()
-                .focus()
-                .setTextSelection(targetPos)
-                .scrollIntoView()
-                .run();
-              console.log('✅ Used fallback scroll');
-              
-              // Reset flag after fallback
-              setTimeout(() => {
-                isScrollingRef.current = false;
-                console.log('🔓 Scroll lock released (fallback)');
-              }, 600);
-            } catch (fallbackError) {
-              console.error('❌ Fallback scroll also failed:', fallbackError);
-              isScrollingRef.current = false; // Reset on failure
-            }
+            isScrollingRef.current = false;
           }
-        }, 100);
+        }, 50); // Small delay to ensure UI is ready
       } else {
-        console.warn('❌ Could not find text:', searchText);
-        isScrollingRef.current = false; // Reset on not found
+        console.warn('❌ Could not find heading at index:', headingIndex);
+        isScrollingRef.current = false;
       }
     } catch (error) {
-      console.error('❌ Error scrolling to text:', error);
-      isScrollingRef.current = false; // Reset on error
+      console.error('❌ Error scrolling to heading:', error);
+      isScrollingRef.current = false;
     }
   };
 
@@ -572,7 +531,7 @@ export default function Workspace() {
         const type = searchParams.get('type') as 'mindmap' | 'flowchart' | 'orgchart' || 'mindmap';
         return <MindmapLoadingScreen type={type} progress={mindmapProgress} />;
       }
-      
+
       // Show MindmapStudio2
       return <MindmapStudio2 />;
     }
@@ -596,11 +555,11 @@ export default function Workspace() {
         <AdaptiveSidebar
           isEditingDocument={viewMode === 'edit' || viewMode === 'mindmap' || viewMode === 'slides'}
           documentContent={liveEditorContent || currentDocument?.content || ''}
-          onHeadingClick={(text, line) => {
-            console.log('📍 Scroll to:', text, 'at line', line);
-            // Trigger scroll in editor by searching for the text
-            if (editorInstanceRef.current) {
-              scrollToTextInEditor(text);
+          onHeadingClick={(text, line, headingIndex) => {
+            console.log('📍 Scroll to heading index:', headingIndex, 'Text:', text);
+            // Trigger scroll in editor by index (more reliable)
+            if (editorInstanceRef.current && headingIndex !== undefined) {
+              scrollToHeading(headingIndex);
             }
           }}
           currentLine={0}
@@ -616,7 +575,7 @@ export default function Workspace() {
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         />
       )}
-      
+
       {/* Focus Mode Exit Button */}
       {focusMode && (
         <div className="fixed top-4 left-4 z-50 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -638,84 +597,66 @@ export default function Workspace() {
         {/* Top Bar */}
         {!focusMode && (
           <header className="flex items-center justify-between px-6 py-4 bg-card/30 backdrop-blur-sm mb-2">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-glow">MD Creator</h1>
-            {currentDocument && (
-              <>
-                <span className="text-muted-foreground">/</span>
-                <input
-                  type="text"
-                  value={currentDocument.title}
-                  onChange={(e) => {
-                    const newTitle = e.target.value;
-                    setCurrentDocument({ ...currentDocument, title: newTitle });
-                    workspaceService.updateDocument(currentDocument.id, { title: newTitle });
-                  }}
-                  className="text-sm font-medium bg-transparent border-none outline-none focus:ring-0 min-w-[200px] max-w-[400px] hover:bg-muted/30 px-2 py-1 rounded transition-colors"
-                  placeholder="Untitled Document"
-                />
-                
-                {/* View Mode Indicator */}
-                {viewMode && viewMode !== 'home' && (
-                  <>
-                    <span className="text-muted-foreground">/</span>
-                    <span className="text-sm font-medium text-primary px-2 py-1 rounded-md bg-primary/10">
-                      {viewMode === 'edit' && '✍️ Editor'}
-                      {viewMode === 'mindmap' && '🧠 Mindmap'}
-                      {viewMode === 'presentation' && '📊 Presentation'}
-                    </span>
-                  </>
-                )}
-              </>
-            )}
-          </div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold text-glow">MD Creator</h1>
+              {currentDocument && (
+                <>
+                  <span className="text-muted-foreground">/</span>
+                  <input
+                    type="text"
+                    value={currentDocument.title}
+                    onChange={(e) => {
+                      const newTitle = e.target.value;
+                      setCurrentDocument({ ...currentDocument, title: newTitle });
+                      workspaceService.updateDocument(currentDocument.id, { title: newTitle });
+                    }}
+                    className="text-sm font-medium bg-transparent border-none outline-none focus:ring-0 min-w-[200px] max-w-[400px] hover:bg-muted/30 px-2 py-1 rounded transition-colors"
+                    placeholder="Untitled Document"
+                  />
 
-          <div className="flex items-center gap-3">
-            {/* Prepare Presentation - Only show when editing */}
-            {viewMode === 'edit' && currentDocument && (
-              <Button
-                size="sm"
-                className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white hover:scale-105 transition-transform"
-                onClick={() => {
-                  if (!liveEditorContent && !currentDocument.content) {
-                    alert('❌ Please add some content before generating a presentation.');
-                    return;
-                  }
-                  setShowPresentationWizard(true);
-                }}
-              >
-                <PresentationIcon className="h-4 w-4 mr-2" />
-                📊 Prepare Presentation
-              </Button>
-            )}
-            
-            {/* Guest Credits */}
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border border-border/40 text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-red-500/80" />
-                <span>Guest</span>
-              </span>
-              <span className="mx-1 text-border">•</span>
-              <span className="inline-flex items-center gap-1">
-                <span>⚡</span>
-                <span>{remaining}/{total}</span>
-              </span>
+                  {/* View Mode Indicator */}
+                  {viewMode && viewMode !== 'home' && (
+                    <>
+                      <span className="text-muted-foreground">/</span>
+                      <span className="text-sm font-medium text-primary px-2 py-1 rounded-md bg-primary/10">
+                        {viewMode === 'edit' && '✍️ Editor'}
+                        {viewMode === 'mindmap' && '🧠 Mindmap'}
+                        {viewMode === 'presentation' && '📊 Presentation'}
+                      </span>
+                    </>
+                  )}
+                </>
+              )}
             </div>
 
-            {/* Login */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate('/pricing')}
-              className="hidden md:inline-flex"
-            >
-              Log in
-            </Button>
+            <div className="flex items-center gap-3">
+              {/* Guest Credits */}
+              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border border-border/40 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-red-500/80" />
+                  <span>Guest</span>
+                </span>
+                <span className="mx-1 text-border">•</span>
+                <span className="inline-flex items-center gap-1">
+                  <span>⚡</span>
+                  <span>{remaining}/{total}</span>
+                </span>
+              </div>
 
-            {/* Theme Toggle */}
-            <ThemeToggle />
-          </div>
-        </header>
+              {/* Login */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/pricing')}
+                className="hidden md:inline-flex"
+              >
+                Log in
+              </Button>
+
+              {/* Theme Toggle */}
+              <ThemeToggle />
+            </div>
+          </header>
         )}
 
         {/* Main Content */}

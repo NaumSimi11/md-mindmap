@@ -12,11 +12,11 @@ import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import * as XLSX from 'xlsx';
-import { 
-  Plus, 
-  Folder, 
-  FileText, 
-  File, 
+import {
+  Plus,
+  Folder,
+  FileText,
+  File,
   MoreVertical,
   Trash2,
   Upload,
@@ -68,21 +68,21 @@ interface ContextDocumentsProps {
   onInsertContent?: (content: string) => void;
 }
 
-export function ContextDocuments({ 
-  folders: propFolders = [], 
+export function ContextDocuments({
+  folders: propFolders = [],
   onFoldersChange,
   onInsertContent,
 }: ContextDocumentsProps = {}) {
   const { isDesktop } = usePlatform();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [currentUploadFolder, setCurrentUploadFolder] = useState<string | null>(null);
-  const [previewFile, setPreviewFile] = useState<{file: ContextFile, folder: ContextFolder} | null>(null);
+  const [previewFile, setPreviewFile] = useState<{ file: ContextFile, folder: ContextFolder } | null>(null);
   const [isParsingFile, setIsParsingFile] = useState(false);
   const [parsingProgress, setParsingProgress] = useState('');
-  
+
   // Use props if provided, otherwise use default state
   const [localFolders, setLocalFolders] = useState<ContextFolder[]>([]);
-  
+
   const folders = onFoldersChange ? propFolders : localFolders;
   const setFolders = onFoldersChange || setLocalFolders;
 
@@ -107,13 +107,13 @@ export function ContextDocuments({
 
   const handleAddFile = async (folderId: string) => {
     setCurrentUploadFolder(folderId);
-    
+
     if (isDesktop) {
       // Desktop: Use Tauri file picker
       try {
         // @ts-ignore - Tauri types
         const { open } = await import('@tauri-apps/plugin-dialog');
-        
+
         const selected = await open({
           multiple: true,
           filters: [{
@@ -121,7 +121,7 @@ export function ContextDocuments({
             extensions: ['pdf', 'doc', 'docx', 'md', 'txt', 'xlsx', 'xls', 'pptx', 'png', 'jpg', 'jpeg']
           }]
         });
-        
+
         if (selected) {
           const files = Array.isArray(selected) ? selected : [selected];
           for (const filePath of files) {
@@ -143,13 +143,35 @@ export function ContextDocuments({
     const files = event.target.files;
     if (!files || !currentUploadFolder) return;
 
+    const newFiles: ContextFile[] = [];
+    const toastId = toast.loading(`Processing ${files.length} files...`);
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      await addWebFileToFolder(currentUploadFolder, file);
+      try {
+        const processedFile = await processWebFile(file, currentUploadFolder);
+        newFiles.push(processedFile);
+      } catch (error) {
+        console.error(`Failed to process ${file.name}`, error);
+        toast.error(`Failed to process ${file.name}`);
+      }
     }
-    
-    toast.success(`Added ${files.length} file${files.length > 1 ? 's' : ''}`);
-    
+
+    if (newFiles.length > 0) {
+      setFolders(folders.map(folder => {
+        if (folder.id === currentUploadFolder) {
+          return {
+            ...folder,
+            files: [...folder.files, ...newFiles],
+          };
+        }
+        return folder;
+      }));
+      toast.success(`Added ${newFiles.length} file${newFiles.length > 1 ? 's' : ''}`, { id: toastId });
+    } else {
+      toast.dismiss(toastId);
+    }
+
     // Reset input
     event.target.value = '';
   };
@@ -158,7 +180,7 @@ export function ContextDocuments({
     // Desktop: Store file path reference
     const fileName = filePath.split('/').pop() || 'unknown';
     const extension = fileName.split('.').pop()?.toLowerCase() || 'other';
-    
+
     const newFile: ContextFile = {
       id: `${folderId}-${Date.now()}-${Math.random()}`,
       name: fileName,
@@ -178,16 +200,16 @@ export function ContextDocuments({
     }));
   };
 
-  const addWebFileToFolder = async (folderId: string, file: File) => {
+  const processWebFile = async (file: File, folderId: string): Promise<ContextFile> => {
     // Web: Store file metadata and read content for text files
     const extension = file.name.split('.').pop()?.toLowerCase() || 'other';
     const sizeInMB = (file.size / (1024 * 1024)).toFixed(2);
     const fileType = getFileType(extension);
-    
+
     // Read file content based on type
     let content: string | undefined;
     let rawData: any | undefined;
-    
+
     try {
       if (fileType === 'txt' || fileType === 'md') {
         // Parse text files
@@ -195,31 +217,21 @@ export function ContextDocuments({
       } else if (fileType === 'xlsx') {
         // Parse Excel files
         setIsParsingFile(true);
-        setParsingProgress('Starting...');
-        const toastId = toast.loading('Parsing Excel file...', {
-          description: parsingProgress
-        });
-        
+        setParsingProgress(`Parsing ${file.name}...`);
+
         const parsed = await parseExcelFile(file);
         content = parsed.content; // Markdown for AI
         rawData = parsed.rawData; // Structured data for preview
-        
-        toast.success('Excel file parsed successfully!', {
-          id: toastId,
-          description: `${parsed.rawData.sheets.length} sheets loaded`
-        });
-        
+
         setIsParsingFile(false);
         setParsingProgress('');
       }
     } catch (error) {
       console.error('Error processing file:', error);
-      toast.error(`Could not process ${file.name}`);
-      setIsParsingFile(false);
-      setParsingProgress('');
+      throw error;
     }
-    
-    const newFile: ContextFile = {
+
+    return {
       id: `${folderId}-${Date.now()}-${Math.random()}`,
       name: file.name,
       type: fileType,
@@ -228,16 +240,6 @@ export function ContextDocuments({
       content, // Markdown/text for AI
       rawData, // Structured data for preview/selection
     };
-
-    setFolders(folders.map(folder => {
-      if (folder.id === folderId) {
-        return {
-          ...folder,
-          files: [...folder.files, newFile],
-        };
-      }
-      return folder;
-    }));
   };
 
   // Helper to read file as text
@@ -257,15 +259,15 @@ export function ContextDocuments({
   const parseExcelFile = (file: File): Promise<{ content: string; rawData: any }> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      
+
       reader.onload = (e) => {
         try {
           setParsingProgress('Reading file...');
           const data = e.target?.result;
-          
+
           setParsingProgress('Parsing Excel...');
           const workbook = XLSX.read(data, { type: 'binary' });
-          
+
           // Parse all sheets
           const sheets = workbook.SheetNames.map(sheetName => {
             const worksheet = workbook.Sheets[sheetName];
@@ -276,35 +278,35 @@ export function ContextDocuments({
               rowCount: jsonData.length,
             };
           });
-          
+
           setParsingProgress('Converting to markdown...');
           // Convert first sheet to markdown for AI context
           let markdownContent = '';
           if (sheets.length > 0) {
             const firstSheet = sheets[0];
             markdownContent = `# ${file.name}\n\n## Sheet: ${firstSheet.name}\n\n`;
-            
+
             // Convert to markdown table (limit to reasonable size)
             const dataRows = firstSheet.data as any[][];
             if (dataRows.length > 0) {
               const maxRows = Math.min(100, dataRows.length); // Limit for markdown
               const headers = dataRows[0] as string[];
-              
+
               // Create markdown table
               markdownContent += '| ' + headers.join(' | ') + ' |\n';
               markdownContent += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
-              
+
               for (let i = 1; i < maxRows; i++) {
                 const row = dataRows[i] as any[];
                 markdownContent += '| ' + row.join(' | ') + ' |\n';
               }
-              
+
               if (dataRows.length > maxRows) {
                 markdownContent += `\n_... and ${dataRows.length - maxRows} more rows_\n`;
               }
             }
           }
-          
+
           setParsingProgress('Done!');
           resolve({
             content: markdownContent,
@@ -319,7 +321,7 @@ export function ContextDocuments({
           reject(error);
         }
       };
-      
+
       reader.onerror = reject;
       reader.readAsBinaryString(file);
     });
@@ -417,7 +419,7 @@ export function ContextDocuments({
       {/* Info Section */}
       <div className="px-4 py-3 bg-blue-50 dark:bg-blue-950/20 border-b border-blue-200 dark:border-blue-800">
         <p className="text-xs text-blue-700 dark:text-blue-300">
-          <strong>Context Documents</strong> help you organize reference materials for this document. 
+          <strong>Context Documents</strong> help you organize reference materials for this document.
           {isDesktop ? ' Click "Add File" to browse files.' : ' Upload files to reference later.'}
         </p>
       </div>
@@ -453,23 +455,34 @@ export function ContextDocuments({
                   </div>
 
                   {/* Folder Actions */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 flex-shrink-0">
-                        <MoreVertical className="h-3 w-3" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleAddFile(folder.id)}>
-                        <Upload className="h-3 w-3 mr-2" />
-                        Add File
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleDeleteFolder(folder.id)} className="text-red-600">
-                        <Trash2 className="h-3 w-3 mr-2" />
-                        Delete Folder
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={() => handleAddFile(folder.id)}
+                      title="Add File"
+                    >
+                      <Plus className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 flex-shrink-0">
+                          <MoreVertical className="h-3 w-3" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleAddFile(folder.id)}>
+                          <Upload className="h-3 w-3 mr-2" />
+                          Add File
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDeleteFolder(folder.id)} className="text-red-600">
+                          <Trash2 className="h-3 w-3 mr-2" />
+                          Delete Folder
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
 
                 {/* Files in Folder */}
@@ -477,9 +490,9 @@ export function ContextDocuments({
                   {folder.files.length === 0 ? (
                     <div className="px-3 py-4 text-center">
                       <p className="text-xs text-muted-foreground mb-2">No files yet</p>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleAddFile(folder.id)}
                         className="h-7 text-xs"
                       >
@@ -489,19 +502,19 @@ export function ContextDocuments({
                     </div>
                   ) : (
                     folder.files.map(file => (
-                      <div 
+                      <div
                         key={file.id}
                         className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 group"
                       >
                         <span className="text-base flex-shrink-0">{getFileIcon(file.type)}</span>
-                        <button 
+                        <button
                           className="flex-1 min-w-0 text-left"
                           onClick={() => handlePreviewFile(file, folder)}
                         >
                           <p className="text-xs font-medium truncate hover:text-primary">{file.name}</p>
                           <p className="text-xs text-muted-foreground">{file.size}</p>
                         </button>
-                        
+
                         {/* File Actions Dropdown - Always visible */}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -535,7 +548,7 @@ export function ContextDocuments({
                               Use as AI Context
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               onClick={() => handleDeleteFile(folder.id, file.id)}
                               className="text-red-600"
                             >
@@ -557,9 +570,9 @@ export function ContextDocuments({
       {/* Add Folder Button */}
       {folders.length > 0 && (
         <div className="p-3 border-t border-border">
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             onClick={handleAddFolder}
             className="w-full"
           >

@@ -1,7 +1,7 @@
 /* AI configuration for the React app (mdreader-main).
    Loads values from Vite env and exposes a safe config object. */
 
-type ProviderName = 'openai' | 'anthropic';
+type ProviderName = 'openai' | 'anthropic' | 'gemini';
 
 export interface AIProviderConfig {
   apiKey?: string;
@@ -40,6 +40,7 @@ const getNumber = (value: string | undefined, fallback: number): number => {
 
 const OPENAI_API_KEY = env.VITE_OPENAI_API_KEY;
 const ANTHROPIC_API_KEY = env.VITE_ANTHROPIC_API_KEY;
+const GEMINI_API_KEY = env.VITE_GEMINI_API_KEY;
 
 export const AI_CONFIG: AIConfigShape = {
   enabled: getBoolean(env.VITE_AI_ENABLED, false),
@@ -61,6 +62,11 @@ export const AI_CONFIG: AIConfigShape = {
       baseUrl: env.VITE_ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
       defaultModel: env.VITE_ANTHROPIC_MODEL || 'claude-3-sonnet-20240229',
     },
+    gemini: {
+      apiKey: GEMINI_API_KEY,
+      baseUrl: env.VITE_GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta',
+      defaultModel: env.VITE_GEMINI_MODEL || 'gemini-1.5-flash',
+    },
   },
   isValid() {
     if (!this.enabled) return { valid: true, reason: 'AI disabled' };
@@ -79,7 +85,7 @@ export const AI_CONFIG: AIConfigShape = {
     return !!(p && p.apiKey && !p.apiKey.includes('your_') && !p.apiKey.includes('_here'));
   },
   getConfiguredProviders() {
-    return (['openai', 'anthropic'] as ProviderName[]).filter((n) => this.isProviderConfigured(n));
+    return (['openai', 'anthropic', 'gemini'] as ProviderName[]).filter((n) => this.isProviderConfigured(n));
   },
   toSafeString() {
     return {

@@ -16,13 +16,13 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  Plus, 
-  Search, 
-  FileText, 
-  Brain, 
-  Presentation, 
-  Folder, 
+import {
+  Plus,
+  Search,
+  FileText,
+  Brain,
+  Presentation,
+  Folder,
   Star,
   Clock,
   ChevronRight,
@@ -138,10 +138,10 @@ export function WorkspaceSidebar({
   const filteredDocuments = searchQuery
     ? workspaceService.searchDocuments(searchQuery)
     : activeSection === 'recent'
-    ? workspaceService.getRecentDocuments()
-    : activeSection === 'starred'
-    ? workspaceService.getStarredDocuments()
-    : workspace.documents;
+      ? workspaceService.getRecentDocuments()
+      : activeSection === 'starred'
+        ? workspaceService.getStarredDocuments()
+        : workspace.documents;
 
   const rootFolders = workspace.folders.filter(f => f.parentId === null);
 
@@ -169,18 +169,8 @@ export function WorkspaceSidebar({
 
         {/* New Buttons */}
         <div className="flex flex-col gap-2">
-          {/* DEMO BUTTON - BIG AND OBVIOUS */}
-          {onLoadDemo && (
-            <Button
-              size="sm"
-              className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-bold"
-              onClick={onLoadDemo}
-            >
-              <span className="mr-2">✨</span>
-              BLOCKS DEMO
-            </Button>
-          )}
-          
+
+
           <div className="flex gap-2">
             <Button
               size="sm"
@@ -214,32 +204,29 @@ export function WorkspaceSidebar({
       {/* Section Tabs */}
       <div className="flex border-b border-border">
         <button
-          className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
-            activeSection === 'all'
+          className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${activeSection === 'all'
               ? 'text-primary border-b-2 border-primary'
               : 'text-muted-foreground hover:text-foreground'
-          }`}
+            }`}
           onClick={() => setActiveSection('all')}
         >
           All
         </button>
         <button
-          className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
-            activeSection === 'recent'
+          className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${activeSection === 'recent'
               ? 'text-primary border-b-2 border-primary'
               : 'text-muted-foreground hover:text-foreground'
-          }`}
+            }`}
           onClick={() => setActiveSection('recent')}
         >
           <Clock className="h-3 w-3 inline mr-1" />
           Recent
         </button>
         <button
-          className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
-            activeSection === 'starred'
+          className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${activeSection === 'starred'
               ? 'text-primary border-b-2 border-primary'
               : 'text-muted-foreground hover:text-foreground'
-          }`}
+            }`}
           onClick={() => setActiveSection('starred')}
         >
           <Star className="h-3 w-3 inline mr-1" />

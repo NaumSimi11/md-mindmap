@@ -1,0 +1,110 @@
+# 🏗️ The "Perfect Code" Refactoring Architecture
+
+## Vision
+To transform the current monolithic, fragile codebase into a **modular, testable, and scalable** system. We will eliminate duplication, enforce strict separation of concerns, and create a "pixel perfect" code structure where every component has a single, clear purpose.
+
+## 1. 🧠 State Management Strategy (The Brain)
+**Problem:** Prop drilling 5 levels deep, "zombie" re-renders, and tangled state in [WYSIWYGEditor](file:///Users/naum/Desktop/mdreader/mdreader-main/src/components/editor/WYSIWYGEditor.tsx#1277-2813).
+**Solution:** **Zustand** (Lightweight, fast, no boilerplate).
+
+### New Store Structure
+```typescript
+// src/stores/editorStore.ts
+interface EditorState {
+  // UI State
+  isSidebarOpen: boolean;
+  activeModal: 'none' | 'ai' | 'settings' | 'export';
+  
+  // Editor State
+  isEditable: boolean;
+  wordCount: number;
+  currentSection: string | null;
+  
+  // Actions
+  toggleSidebar: () => void;
+  openModal: (modal: EditorState['activeModal']) => void;
+  setEditable: (value: boolean) => void;
+}
+```
+
+## 2. 🧩 Component Architecture (The Body)
+
+### The "God Component" Decomposition
+We will explode [WYSIWYGEditor.tsx](file:///Users/naum/Desktop/mdreader/mdreader-main/src/components/editor/WYSIWYGEditor.tsx) (2800 lines) into atomic, composed parts.
+
+**New Directory Structure:**
+```
+src/components/editor/
+├── core/                  # The engine
+│   ├── EditorProvider.tsx # Context provider for TipTap
+│   ├── EditorCanvas.tsx   # The actual writing area
+│   └── useEditorSetup.ts  # Hook for TipTap configuration
+├── toolbar/               # Controls
+│   ├── FixedToolbar.tsx   # Top bar
+│   ├── FloatingMenu.tsx   # Bubble menu
+│   └── Sidebar.tsx        # Right sidebar (AI)
+├── features/              # Feature modules
+│   ├── ai/                # AI integration
+│   ├── diagrams/          # Mermaid/Charts
+│   └── media/             # Images/Embeds
+└── EditorLayout.tsx       # Main layout component
+```
+
+### Reusable UI Components (The Skin)
+No more one-off modals. We will create a standardized Modal System.
+
+```tsx
+// src/components/ui/dialogs/BaseModal.tsx
+// All modals (AI, Settings, Export) will inherit from this
+<BaseModal 
+  title="AI Assistant" 
+  trigger={<Sparkles />} 
+  content={<AIContent />} 
+/>
+```
+
+## 3. 🔌 Service Layer (The Nervous System)
+Standardize all services to follow the **Singleton Pattern** with strict typing.
+
+**Location:** `src/services/`
+- `ai/` -> `AIService.ts` (Already good, keep refining)
+- `file-system/` -> `ProjectService.ts` (Replace ad-hoc file ops)
+- `state/` -> `StorageService.ts` (Clean up local storage logic)
+
+## 4. 🧹 The Cleanup (The Detox)
+
+### Dead Code Elimination
+- 🗑️ **DELETE** `AISidebarChat.tsx` (Old version)
+- 🗑️ **DELETE** `FloatingSideToolbar.tsx` (Merge into `toolbar/Sidebar.tsx`)
+- 🗑️ **DELETE** `WYSIWYGEditor.tsx` (Replaced by `EditorLayout.tsx`)
+
+### Standardization Rules
+1. **No Magic Strings:** All prompts/configs in `src/config/`.
+2. **Strict Types:** No `any`. Every prop and state must be typed.
+3. **Small Files:** No file > 300 lines. If it's bigger, split it.
+
+## 5. 🚀 Implementation Roadmap
+
+### Step 1: Foundation
+- [ ] Install `zustand`
+- [ ] Create `useEditorStore`
+- [ ] Create `EditorLayout` skeleton
+
+### Step 2: Extraction
+- [ ] Extract `useEditorSetup` hook (TipTap config)
+- [ ] Move extensions to `src/editor/extensions/`
+- [ ] Create `EditorCanvas`
+
+### Step 3: Feature Migration
+- [ ] Move AI Sidebar to `features/ai/`
+- [ ] Move Toolbars to `toolbar/`
+- [ ] Connect everything to `useEditorStore`
+
+### Step 4: Polish
+- [ ] Verify all features work
+- [ ] Delete old files
+- [ ] Run linter & formatter
+
+---
+
+**This plan ensures that we don't just "patch" the code, but rebuild it into a professional-grade software architecture.**

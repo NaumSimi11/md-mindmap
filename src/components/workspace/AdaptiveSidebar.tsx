@@ -20,15 +20,15 @@ interface AdaptiveSidebarProps {
   // Document editing
   isEditingDocument: boolean;
   documentContent?: string;
-  onHeadingClick?: (text: string, line: number) => void;
+  onHeadingClick?: (text: string, line: number, headingIndex?: number) => void;
   currentLine?: number;
   activeHeadingText?: string;
-  
+
   // Workspace navigation
   onDocumentSelect: (documentId: string) => void;
   onNewDocument?: () => void;
   currentDocumentId?: string;
-  
+
   // Context folders
   contextFolders?: Array<{
     id: string;
@@ -58,14 +58,14 @@ interface AdaptiveSidebarProps {
       path?: string;
     }>;
   }>) => void;
-  
+
   // Layout
   collapsed?: boolean;
   onToggleCollapse?: () => void;
-  
+
   // Editor integration
   onInsertContent?: (content: string) => void;
-  
+
   // Demo
   onLoadDemo?: () => void;
 }
@@ -152,27 +152,25 @@ export function AdaptiveSidebar({
                 <Hash className="w-4 h-4 text-muted-foreground" />
                 <h3 className="text-sm font-semibold">Document Outline</h3>
               </div>
-              
+
               {/* Subtabs below header */}
               <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5">
                 <button
                   onClick={() => setActiveTab('outline')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs rounded transition-colors ${
-                    currentTab === 'outline' 
-                      ? 'bg-background font-medium shadow-sm' 
-                      : 'hover:bg-background/50'
-                  }`}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs rounded transition-colors ${currentTab === 'outline'
+                    ? 'bg-background font-medium shadow-sm'
+                    : 'hover:bg-background/50'
+                    }`}
                 >
                   <Hash className="h-3 w-3" />
                   Outline
                 </button>
                 <button
                   onClick={() => setActiveTab('context')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs rounded transition-colors ${
-                    currentTab === 'context' 
-                      ? 'bg-background font-medium shadow-sm' 
-                      : 'hover:bg-background/50'
-                  }`}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs rounded transition-colors ${currentTab === 'context'
+                    ? 'bg-background font-medium shadow-sm'
+                    : 'hover:bg-background/50'
+                    }`}
                 >
                   <FolderOpen className="h-3 w-3" />
                   Context
@@ -194,7 +192,7 @@ export function AdaptiveSidebar({
 
           {/* Tab Content for Context */}
           <TabsContent value="context" className="flex-1 m-0 overflow-hidden">
-            <ContextDocuments 
+            <ContextDocuments
               folders={contextFolders}
               onFoldersChange={onContextFoldersChange}
               onInsertContent={onInsertContent}

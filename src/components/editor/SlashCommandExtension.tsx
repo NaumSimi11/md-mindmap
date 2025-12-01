@@ -139,7 +139,8 @@ export const SlashCommandExtension = Extension.create({
 
 export const createSlashCommands = (
   onInsertDiagram: () => void,
-  onAIAction: (action: string) => void
+  onAIAction: (action: string) => void,
+  onInsertTable: () => void
 ): SlashCommandItem[] => {
   return [
     // BASIC FORMATTING
@@ -232,12 +233,8 @@ export const createSlashCommands = (
       icon: <Table className="w-4 h-4" />,
       category: 'advanced',
       command: ({ editor, range }: any) => {
-        editor
-          .chain()
-          .focus()
-          .deleteRange(range)
-          .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-          .run();
+        editor.chain().focus().deleteRange(range).run();
+        onInsertTable();
       },
     },
     {
@@ -478,11 +475,12 @@ export const createSlashCommands = (
 
 export const slashCommandSuggestion = (
   onInsertDiagram: () => void,
-  onAIAction: (action: string) => void
+  onAIAction: (action: string) => void,
+  onInsertTable: () => void
 ) => {
   return {
     items: ({ query }: { query: string }) => {
-      const commands = createSlashCommands(onInsertDiagram, onAIAction);
+      const commands = createSlashCommands(onInsertDiagram, onAIAction, onInsertTable);
       return commands.filter((item) =>
         item.title.toLowerCase().includes(query.toLowerCase())
       );

@@ -36,51 +36,52 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
   const [selectedTheme, setSelectedTheme] = useState<string>('default');
   const [selectedLayout, setSelectedLayout] = useState<string>('dagre');
   const previewRef = useRef<HTMLDivElement>(null);
-  
+
   // Initialize mermaid with LARGE default size
   useEffect(() => {
     mermaid.initialize({
       startOnLoad: false,
-      theme: 'default',
+      theme: 'base', // 'base' is often more stable than 'default' for custom styling
       securityLevel: 'loose',
       flowchart: {
-        useMaxWidth: true,
+        useMaxWidth: false, // Let us control sizing
         htmlLabels: true,
         curve: 'basis'
       },
       themeVariables: {
-        fontSize: '18px', // Larger font
+        fontSize: '16px',
+        fontFamily: 'inherit',
       }
     });
   }, []);
-  
+
   // Detect config block in pasted/edited code
   useEffect(() => {
     const detectConfig = () => {
       // Check for config block (YAML frontmatter style)
       const configRegex = /^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/;
       const match = editableCode.match(configRegex);
-      
+
       if (match) {
         const configBlock = match[1];
         const diagramCode = match[2].trim();
-        
+
         // Extract theme
         const themeMatch = configBlock.match(/theme:\s*(\w+)/);
         const theme = themeMatch ? themeMatch[1] : undefined;
-        
+
         // Extract layout
         const layoutMatch = configBlock.match(/layout:\s*(\w+)/);
         const layout = layoutMatch ? layoutMatch[1] : undefined;
-        
+
         if (theme || layout) {
           console.log('🎨 Config detected:', { theme, layout });
           setDetectedConfig({ theme, layout });
-          
+
           // Set selectors to detected values
           if (theme) setSelectedTheme(theme);
           if (layout) setSelectedLayout(layout);
-          
+
           // Update code to remove config block
           setEditableCode(diagramCode);
         }
@@ -88,19 +89,19 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
         setDetectedConfig(null);
       }
     };
-    
+
     if (editableCode) {
       detectConfig();
     }
   }, [editableCode]);
-  
+
   // Update editable code when template changes
   useEffect(() => {
     if (selectedTemplate) {
       setEditableCode(selectedTemplate.code);
     }
   }, [selectedTemplate]);
-  
+
   // Render mermaid preview
   useEffect(() => {
     if (showPreview && editableCode.trim() && previewRef.current) {
@@ -110,7 +111,7 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
           if (previewRef.current) {
             previewRef.current.innerHTML = '';
           }
-          
+
           // Apply selected theme/layout to preview
           let previewCode = editableCode;
           if (selectedTheme !== 'default' || selectedLayout !== 'dagre') {
@@ -124,10 +125,10 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
             const initBlock = `%%{init: ${JSON.stringify(initConfig)}}%%`;
             previewCode = `${initBlock}\n${editableCode}`;
           }
-          
+
           const id = `mermaid-preview-${Date.now()}`;
           const { svg } = await mermaid.render(id, previewCode);
-          
+
           if (previewRef.current) {
             // Wrap SVG in a container for better sizing
             previewRef.current.innerHTML = `
@@ -135,29 +136,29 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
                 ${svg}
               </div>
             `;
-            
+
             // Style the SVG to FIT properly in container
             const svgElement = previewRef.current.querySelector('svg');
             if (svgElement) {
               // Get original dimensions
               const originalWidth = svgElement.getAttribute('width');
               const originalHeight = svgElement.getAttribute('height');
-              
+
               // Set viewBox for proper scaling
               if (originalWidth && originalHeight && !svgElement.getAttribute('viewBox')) {
                 svgElement.setAttribute('viewBox', `0 0 ${originalWidth} ${originalHeight}`);
               }
-              
+
               // Remove fixed dimensions
               svgElement.removeAttribute('width');
               svgElement.removeAttribute('height');
-              
+
               // Make it fill container while maintaining aspect ratio
-              svgElement.style.width = '100%';
-              svgElement.style.height = '100%';
+              svgElement.style.width = 'auto';
+              svgElement.style.height = 'auto';
               svgElement.style.maxWidth = '100%';
               svgElement.style.maxHeight = '100%';
-              svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet'); // Fit and center
+              // svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet'); // Let browser handle it naturally with auto size
             }
           }
         } catch (error) {
@@ -172,7 +173,7 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
           }
         }
       };
-      
+
       // Debounce rendering to avoid too many calls
       const timeoutId = setTimeout(renderDiagram, 300);
       return () => clearTimeout(timeoutId);
@@ -184,28 +185,28 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
     if (editableCode.trim()) {
       // Build init block with selected theme/layout
       let finalCode = editableCode;
-      
+
       if (selectedTheme !== 'default' || selectedLayout !== 'dagre') {
         const initConfig: any = {};
-        
+
         if (selectedTheme !== 'default') {
           initConfig.theme = selectedTheme;
         }
-        
+
         if (selectedLayout !== 'dagre') {
           initConfig.flowchart = { layout: selectedLayout };
         }
-        
+
         const initBlock = `%%{init: ${JSON.stringify(initConfig)}}%%`;
         finalCode = `${initBlock}\n${editableCode}`;
         console.log('✅ Applying config:', initConfig);
       }
-      
+
       onInsert(finalCode);
       onClose();
     }
   };
-  
+
   const handleAIHelp = () => {
     setShowAIModal(true);
   };
@@ -217,13 +218,13 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[85vh] p-0">
+      <DialogContent className="max-w-5xl h-[85vh] flex flex-col p-0">
         <DialogHeader className="px-6 py-4 border-b">
           <DialogTitle>Insert Diagram</DialogTitle>
           <p className="text-sm text-muted-foreground mt-1">
             Choose from popular diagram types or paste your own Mermaid code
           </p>
-          
+
           {/* Config Detected Notice */}
           {detectedConfig && (
             <div className="mt-3 flex items-start gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
@@ -242,7 +243,7 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
               </div>
             </div>
           )}
-          
+
           {/* Selected Text Notice */}
           {selectedText && (
             <div className="mt-3 flex items-start gap-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
@@ -257,7 +258,7 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
               </div>
             </div>
           )}
-          
+
           {/* Theme & Layout Selectors */}
           {selectedTemplate && (
             <div className="mt-3 grid grid-cols-2 gap-3">
@@ -280,7 +281,7 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
                   </SelectContent>
                 </Select>
               </div>
-              
+
               {/* Layout Selector */}
               <div className="space-y-1.5">
                 <Label className="text-xs flex items-center gap-1.5">
@@ -301,7 +302,7 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
           )}
         </DialogHeader>
 
-        <div className="flex h-[70vh]">
+        <div className="flex flex-1 overflow-hidden">
           {/* Sidebar - ALL Templates - BIGGER! */}
           <div className="w-[20%] border-r">
             <ScrollArea className="h-full">
@@ -310,11 +311,10 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
                   <button
                     key={template.id}
                     onClick={() => setSelectedTemplate(template)}
-                    className={`p-3 rounded-md border-2 text-left transition-all hover:border-primary hover:bg-accent/50 ${
-                      selectedTemplate?.id === template.id
-                        ? 'border-primary bg-accent'
-                        : 'border-border'
-                    }`}
+                    className={`p-3 rounded-md border-2 text-left transition-all hover:border-primary hover:bg-accent/50 ${selectedTemplate?.id === template.id
+                      ? 'border-primary bg-accent'
+                      : 'border-border'
+                      }`}
                   >
                     <div className="flex items-center gap-2">
                       <span className="text-2xl">{template.icon}</span>
@@ -331,18 +331,20 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
             {selectedTemplate ? (
               <>
                 {/* Code Editor - FULL HEIGHT */}
-                <div className="flex-1 flex flex-col relative">
+                <div className="flex-1 flex flex-col border-b">
                   {/* Code Area */}
-                  <div className={`flex-1 flex flex-col p-4 gap-3 ${showPreview ? 'hidden' : 'flex'}`}>
-                    <Textarea
-                      value={editableCode}
-                      onChange={(e) => setEditableCode(e.target.value)}
-                      className="flex-1 font-mono text-sm resize-none"
-                      placeholder="Edit mermaid diagram code..."
-                    />
-                    
+                  <div className={`flex-1 flex flex-col overflow-hidden ${showPreview ? 'hidden' : 'flex'}`}>
+                    <div className="flex-1 p-4 overflow-auto">
+                      <Textarea
+                        value={editableCode}
+                        onChange={(e) => setEditableCode(e.target.value)}
+                        className="w-full h-full font-mono text-sm resize-none"
+                        placeholder="Edit mermaid diagram code..."
+                      />
+                    </div>
+
                     {/* Bottom Buttons - ALIGNED */}
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 p-4 border-t bg-background">
                       {/* AI Help Button */}
                       <Button
                         onClick={handleAIHelp}
@@ -352,7 +354,7 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
                         <Sparkles className="w-4 h-4 mr-2" />
                         AI Diagram Help
                       </Button>
-                      
+
                       {/* Show Preview Button */}
                       <Button
                         onClick={() => setShowPreview(true)}
@@ -371,9 +373,9 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
                       {/* Scrollable Preview Container */}
                       <div className="flex-1 overflow-auto">
                         <div className="min-h-full p-8 flex items-center justify-center">
-                          <div 
+                          <div
                             ref={previewRef}
-                            className="min-w-[600px] w-full flex items-center justify-center"
+                            className="w-full h-full flex items-center justify-center p-8 overflow-auto"
                           >
                             {!editableCode.trim() ? (
                               <div className="text-sm text-muted-foreground">
@@ -387,7 +389,7 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
                           </div>
                         </div>
                       </div>
-                      
+
                       {/* Bottom Buttons - ALIGNED (Preview Mode) */}
                       <div className="p-4 border-t flex items-center gap-3">
                         {/* AI Help Button */}
@@ -399,7 +401,7 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
                           <Sparkles className="w-4 h-4 mr-2" />
                           AI Diagram Help
                         </Button>
-                        
+
                         {/* Show Code Button */}
                         <Button
                           onClick={() => setShowPreview(false)}
@@ -414,16 +416,7 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
                   )}
                 </div>
 
-                {/* Footer - Insert Button */}
-                <div className="p-4 border-t">
-                  <Button
-                    onClick={handleInsert}
-                    className="w-full"
-                    disabled={!editableCode.trim()}
-                  >
-                    Insert Diagram
-                  </Button>
-                </div>
+
               </>
             ) : (
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
@@ -432,8 +425,19 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
             )}
           </div>
         </div>
+
+        {/* Footer - Insert Button (Outside the flex content area) */}
+        <div className="p-4 border-t bg-background">
+          <Button
+            onClick={handleInsert}
+            className="w-full"
+            disabled={!editableCode.trim() || !selectedTemplate}
+          >
+            Insert Diagram
+          </Button>
+        </div>
       </DialogContent>
-      
+
       {/* AI Assistant Modal */}
       <AIAssistantModal
         isOpen={showAIModal}

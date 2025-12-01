@@ -14,9 +14,9 @@ import { Sparkles, Check, X } from 'lucide-react';
 import { AIEnhanceModal } from '../AIEnhanceModal';
 
 // Initialize mermaid
-mermaid.initialize({ 
-  startOnLoad: false, 
-  securityLevel: 'loose', 
+mermaid.initialize({
+  startOnLoad: false,
+  securityLevel: 'loose',
   theme: 'default',
   themeVariables: {
     background: 'transparent'
@@ -36,18 +36,18 @@ interface MermaidComponentProps {
   selected: boolean;
 }
 
-const MermaidComponent: React.FC<MermaidComponentProps> = ({ 
-  node, 
-  updateAttributes, 
+const MermaidComponent: React.FC<MermaidComponentProps> = ({
+  node,
+  updateAttributes,
   deleteNode,
-  selected 
+  selected
 }) => {
   console.log('🎨 MermaidComponent MOUNTED/UPDATED');
   console.log('  Node attrs:', node.attrs);
   console.log('  Code length:', node.attrs.code?.length || 0);
   console.log('  Code:', node.attrs.code);
   console.log('  Selected:', selected);
-  
+
   const [isEditing, setIsEditing] = useState(false);
   const [editCode, setEditCode] = useState(node.attrs.code);
   const [svgContent, setSvgContent] = useState<string>('');
@@ -63,17 +63,17 @@ const MermaidComponent: React.FC<MermaidComponentProps> = ({
   useEffect(() => {
     console.log('🔄 MermaidComponent useEffect TRIGGERED');
     console.log('  Code:', node.attrs.code);
-    
+
     const renderDiagram = async () => {
       console.log('  🎨 Starting mermaid.render()...');
       try {
         // Generate valid CSS ID (no dots, use integers only)
         const id = `mermaid-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
         console.log('  🆔 Generated ID:', id);
-        
+
         const { svg } = await mermaid.render(id, node.attrs.code);
         console.log('  ✅ Mermaid rendered successfully! SVG length:', svg.length);
-        
+
         setSvgContent(svg);
         setError(null);
       } catch (err: any) {
@@ -161,7 +161,7 @@ const MermaidComponent: React.FC<MermaidComponentProps> = ({
   console.log('  svgContent length:', svgContent.length);
   console.log('  error:', error);
   console.log('  isEditing:', isEditing);
-  
+
   // Apply scale to rendered SVG element
   useEffect(() => {
     const svg = containerRef.current?.querySelector('svg') as SVGSVGElement | null;
@@ -178,10 +178,9 @@ const MermaidComponent: React.FC<MermaidComponentProps> = ({
     <NodeViewWrapper className="mermaid-node">
       <div
         ref={containerRef}
-        className={`relative rounded-md p-2 my-2 transition-all mx-auto ${
-          selected ? 'bg-transparent' : 'bg-transparent'
-        }`}
-        style={{ 
+        className={`relative rounded-md p-2 my-2 transition-all mx-auto ${selected ? 'bg-transparent' : 'bg-transparent'
+          }`}
+        style={{
           minHeight: '100px',
           maxWidth: currentWidth === '100%' ? '100%' : currentWidth,
           width: currentWidth === '100%' ? '100%' : 'auto'
@@ -189,53 +188,53 @@ const MermaidComponent: React.FC<MermaidComponentProps> = ({
       >
         <div ref={diagramWrapperRef} className="relative">
 
-        {/* Diagram or Error Display */}
-        {error ? (
-          <div className="text-center py-8">
-            <div className="text-destructive font-medium mb-2">⚠️ Diagram Error</div>
-            <div className="text-sm text-muted-foreground mb-4">{error}</div>
-            <div className="flex items-center justify-center gap-2">
-              <Button size="sm" onClick={() => setIsEditing(true)}>
-                Edit Diagram
-              </Button>
-              <Button size="sm" variant="outline" onClick={deleteNode}>
-                Delete
-              </Button>
+          {/* Diagram or Error Display */}
+          {error ? (
+            <div className="text-center py-8">
+              <div className="text-destructive font-medium mb-2">⚠️ Diagram Error</div>
+              <div className="text-sm text-muted-foreground mb-4">{error}</div>
+              <div className="flex items-center justify-center gap-2">
+                <Button size="sm" onClick={() => setIsEditing(true)}>
+                  Edit Diagram
+                </Button>
+                <Button size="sm" variant="outline" onClick={deleteNode}>
+                  Delete
+                </Button>
+              </div>
             </div>
-          </div>
-        ) : svgContent ? (
-          <div
-            className="mermaid-svg-container cursor-pointer"
-            onClick={() => setIsEditing(true)}
-            dangerouslySetInnerHTML={{ __html: svgContent }}
-          />
-        ) : (
-          <div className="text-center py-8 text-muted-foreground">
-            Loading diagram...
-          </div>
-        )}
-
-        {/* Inline controls */}
-        {!error && svgContent && (
-          <>
-            <div className="absolute -top-3 right-0 flex items-center gap-1 bg-background/90 backdrop-blur px-1 rounded-md shadow border">
-              <Button size="xs" variant="ghost" onClick={() => setIsEditing(true)} className="h-6 px-2 text-xs">Edit</Button>
-              <Button size="xs" variant="ghost" onClick={() => updateAttributes({ scale: Math.max(((node as any).attrs?.scale ?? 1) - 0.1, 0.25) })} className="h-6 px-2 text-xs">-</Button>
-              <span className="text-[11px] text-muted-foreground px-1">{Math.round(((node as any).attrs?.scale ?? 1) * 100)}%</span>
-              <Button size="xs" variant="ghost" onClick={() => updateAttributes({ scale: Math.min(((node as any).attrs?.scale ?? 1) + 0.1, 3) })} className="h-6 px-2 text-xs">+</Button>
-              <Button size="xs" variant="ghost" onClick={handleFitToWidth} className="h-6 px-2 text-xs">↔ Full Width</Button>
-            </div>
-
-            {/* Drag resize handle */}
+          ) : svgContent ? (
             <div
-              className="absolute top-0 right-0 bottom-0 w-2 cursor-ew-resize hover:bg-primary/20 transition-colors group"
-              onMouseDown={handleResizeStart}
-              style={{ cursor: isResizing ? 'ew-resize' : 'col-resize' }}
-            >
-              <div className="absolute inset-y-0 right-0 w-1 bg-primary/40 group-hover:bg-primary/60 rounded-l" />
+              className="mermaid-svg-container cursor-pointer"
+              onClick={() => setIsEditing(true)}
+              dangerouslySetInnerHTML={{ __html: svgContent }}
+            />
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              Loading diagram...
             </div>
-          </>
-        )}
+          )}
+
+          {/* Inline controls - only show when selected */}
+          {!error && svgContent && selected && (
+            <>
+              <div className="absolute -top-3 right-0 flex items-center gap-1 bg-background/90 backdrop-blur px-1 rounded-md shadow border">
+                <Button size="xs" variant="ghost" onClick={() => setIsEditing(true)} className="h-6 px-2 text-xs">Edit</Button>
+                <Button size="xs" variant="ghost" onClick={() => updateAttributes({ scale: Math.max(((node as any).attrs?.scale ?? 1) - 0.1, 0.25) })} className="h-6 px-2 text-xs">-</Button>
+                <span className="text-[11px] text-muted-foreground px-1">{Math.round(((node as any).attrs?.scale ?? 1) * 100)}%</span>
+                <Button size="xs" variant="ghost" onClick={() => updateAttributes({ scale: Math.min(((node as any).attrs?.scale ?? 1) + 0.1, 3) })} className="h-6 px-2 text-xs">+</Button>
+                <Button size="xs" variant="ghost" onClick={handleFitToWidth} className="h-6 px-2 text-xs">↔ Full Width</Button>
+              </div>
+
+              {/* Drag resize handle - only show when selected */}
+              <div
+                className="absolute top-0 right-0 bottom-0 w-2 cursor-ew-resize hover:bg-primary/20 transition-colors group"
+                onMouseDown={handleResizeStart}
+                style={{ cursor: isResizing ? 'ew-resize' : 'col-resize' }}
+              >
+                <div className="absolute inset-y-0 right-0 w-1 bg-primary/40 group-hover:bg-primary/60 rounded-l" />
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -245,7 +244,7 @@ const MermaidComponent: React.FC<MermaidComponentProps> = ({
           <DialogHeader>
             <DialogTitle>Edit Mermaid Diagram</DialogTitle>
           </DialogHeader>
-          
+
           <div className="space-y-4">
             {/* Code Editor */}
             <div>
@@ -363,11 +362,11 @@ export const MermaidNode = Node.create({
   },
 
   renderHTML({ HTMLAttributes, node }) {
-    return ['div', mergeAttributes(HTMLAttributes, { 
+    return ['div', mergeAttributes(HTMLAttributes, {
       'data-type': 'mermaid',
       'data-code': node.attrs.code,
       'data-scale': node.attrs.scale,
-      'data-width': node.attrs.width 
+      'data-width': node.attrs.width
     })];
   },
 

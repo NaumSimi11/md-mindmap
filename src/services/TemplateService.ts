@@ -36,6 +36,10 @@ export interface TemplateRenderOptions {
   customValues?: Record<string, string>;
 }
 
+/**
+ * @deprecated Use ApplyTemplateUseCase and ITemplateRepository instead.
+ * This class is being replaced by the Domain/Application Layer implementation.
+ */
 class TemplateServiceClass {
   private templates: Map<string, Template> = new Map();
   private customTemplates: Map<string, Template> = new Map();
@@ -80,7 +84,7 @@ class TemplateServiceClass {
     return this.getAllTemplates().filter(template =>
       template.name.toLowerCase().includes(lowerQuery) ||
       template.description.toLowerCase().includes(lowerQuery) ||
-      template.tags.some(tag => tag.toLowerCase().includes(lowerQuery))
+      template.metadata.tags.some(tag => tag.toLowerCase().includes(lowerQuery))
     );
   }
 
@@ -99,9 +103,9 @@ class TemplateServiceClass {
     if (template.variables) {
       template.variables.forEach(variable => {
         const value = options.variables?.[variable.key] ||
-                     options.customValues?.[variable.key] ||
-                     variable.defaultValue ||
-                     `[${variable.label}]`;
+          options.customValues?.[variable.key] ||
+          variable.defaultValue ||
+          `[${variable.label}]`;
 
         // Handle different variable types
         let replacement = value;
@@ -131,7 +135,7 @@ class TemplateServiceClass {
       isCustom: true,
       metadata: {
         author: 'User',
-        tags: template.tags || [],
+        tags: [], // Fixed: tags not available on input
         version: '1.0.0',
         createdAt: new Date().toISOString(),
         lastModified: new Date().toISOString(),
@@ -280,4 +284,4 @@ class TemplateServiceClass {
 export const templateService = new TemplateServiceClass();
 
 // Export types for use in other files
-export type { Template, TemplateVariable, TemplateRenderOptions };
+// export type { Template, TemplateVariable, TemplateRenderOptions };

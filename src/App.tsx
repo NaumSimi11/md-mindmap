@@ -23,6 +23,8 @@ import WorkspaceDemo from "./pages/WorkspaceDemo";
 import AILandingPage from "./pages/AILandingPage";
 import AILandingPageRedesigned from "./pages/AILandingPageRedesigned";
 import Workspace from "./pages/Workspace";
+import Install from "./pages/Install";
+import Support from "./pages/Support";
 
 const queryClient = new QueryClient();
 
@@ -42,21 +44,21 @@ const App = () => (
             <Route path="/" element={<AILandingPage />} />
             <Route path="/landing-redesigned" element={<AILandingPageRedesigned />} />
             <Route path="/old-landing" element={<LandingPage />} />
-            
+
             {/* NEW: Main Workspace (AI Office Suite) */}
             <Route path="/workspace" element={<Workspace />} />
             <Route path="/workspace/doc/:id/edit" element={<Workspace />} />
             <Route path="/workspace/doc/:id/mindmap" element={<Workspace />} />
             <Route path="/workspace/doc/:id/slides" element={<Workspace />} />
             <Route path="/workspace/doc/:id/present" element={<Workspace />} />
-            
+
             {/* Standalone Mindmap Studio */}
             <Route path="/studio2" element={<MindmapStudio2 />} />
-            
+
             {/* OLD: Dashboard - Redirect to Workspace (unified navigation) */}
             <Route path="/dashboard" element={<Navigate to="/workspace" replace />} />
             <Route path="/dashboard/*" element={<Navigate to="/workspace" replace />} />
-            
+
             {/* Legacy dashboard routes - redirect to workspace */}
             <Route path="/dashboard/editor" element={<Navigate to="/workspace" replace />} />
             <Route path="/dashboard/mindmaps" element={<Navigate to="/workspace" replace />} />
@@ -68,57 +70,9 @@ const App = () => (
             <Route path="/workspace-demo" element={<WorkspaceDemo />} />
             <Route path="/presentation/:presentationId/edit" element={<PresentationEditor />} />
             <Route path="/presentation/:presentationId/present" element={<PresenterMode />} />
-            <Route path="/install" element={
-              <div className="min-h-screen bg-dark text-white">
-                {/* Header */}
-                <header className="p-4 border-b border-white/10">
-                  <div className="flex items-center justify-between max-w-4xl mx-auto">
-                    <button className="p-2 rounded-lg hover:bg-white/10 transition-colors">
-                      <span className="sr-only">Toggle menu</span>
-                      <div className="w-6 h-6 flex flex-col justify-center">
-                        <span className="block w-full h-0.5 bg-white mb-1"></span>
-                        <span className="block w-full h-0.5 bg-white mb-1"></span>
-                        <span className="block w-full h-0.5 bg-white"></span>
-                      </div>
-                    </button>
-                    <h1 className="text-xl font-semibold">Install</h1>
-                    <div></div>
-                  </div>
-                </header>
-                
-                {/* Content */}
-                <div className="p-8 max-w-4xl mx-auto">
-                  <h1 className="text-4xl font-bold mb-6">Install MD Creator</h1>
-                  <p className="text-white/70">Installation page coming soon...</p>
-                </div>
-              </div>
-            } />
+            <Route path="/install" element={<Install />} />
             <Route path="/pricing" element={<Pricing />} />
-            <Route path="/support" element={
-              <div className="min-h-screen bg-dark text-white">
-                {/* Header */}
-                <header className="p-4 border-b border-white/10">
-                  <div className="flex items-center justify-between max-w-4xl mx-auto">
-                    <button className="p-2 rounded-lg hover:bg-white/10 transition-colors">
-                      <span className="sr-only">Toggle menu</span>
-                      <div className="w-6 h-6 flex flex-col justify-center">
-                        <span className="block w-full h-0.5 bg-white mb-1"></span>
-                        <span className="block w-full h-0.5 bg-white mb-1"></span>
-                        <span className="block w-full h-0.5 bg-white"></span>
-                      </div>
-                    </button>
-                    <h1 className="text-xl font-semibold">Support</h1>
-                    <div></div>
-                  </div>
-                </header>
-                
-                {/* Content */}
-                <div className="p-8 max-w-4xl mx-auto">
-                  <h1 className="text-4xl font-bold mb-6">Support</h1>
-                  <p className="text-white/70">Support page coming soon...</p>
-                </div>
-              </div>
-            } />
+            <Route path="/support" element={<Support />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

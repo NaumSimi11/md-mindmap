@@ -49,10 +49,10 @@ export default function Studio2AIToolsModal({
   const handleAction = async (type: AIAction['type'], data?: any) => {
     setIsLoading(true);
     setAiResult(null); // Clear previous result
-    
+
     try {
       await onApplyAI({ type, data });
-      
+
       // Set success result based on action type
       switch (type) {
         case 'expand-all':
@@ -172,25 +172,25 @@ export default function Studio2AIToolsModal({
 
               {/* 1. SMART EXPAND ALL */}
               <TabsContent value="expand" className="space-y-4">
-                <div className="bg-gradient-to-r from-purple-50 to-indigo-50 p-4 rounded-lg border border-purple-200">
+                <div className="bg-gradient-to-r from-purple-500/10 to-indigo-500/10 p-4 rounded-lg border border-purple-500/20">
                   <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
-                    <Brain className="h-5 w-5 text-purple-600" />
+                    <Brain className="h-5 w-5 text-purple-500" />
                     🧠 Smart Expand All
                   </h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    AI analyzes your entire mindmap and intelligently adds 2-3 relevant child nodes to EVERY node. 
+                  <p className="text-sm text-muted-foreground mb-4">
+                    AI analyzes your entire mindmap and intelligently adds 2-3 relevant child nodes to EVERY node.
                     Perfect for quickly fleshing out ideas!
                   </p>
-                  <div className="bg-white p-3 rounded border border-gray-200 mb-4">
-                    <p className="text-xs text-gray-500 mb-2">Preview:</p>
+                  <div className="bg-background/50 p-3 rounded border border-border mb-4">
+                    <p className="text-xs text-muted-foreground mb-2">Preview:</p>
                     <ul className="text-sm space-y-1">
                       <li>• 📊 {nodes.length} nodes will be expanded</li>
                       <li>• 🎯 ~{nodes.length * 2.5} new nodes will be created</li>
                       <li>• ⚡ Context-aware suggestions based on existing content</li>
                     </ul>
                   </div>
-                  <Button 
-                    className="w-full bg-gradient-to-r from-purple-500 to-indigo-600 text-white"
+                  <Button
+                    className="w-full bg-gradient-to-r from-purple-500 to-indigo-600 text-white hover:from-purple-600 hover:to-indigo-700"
                     onClick={() => handleAction('expand-all')}
                     disabled={isLoading || nodes.length === 0}
                   >
@@ -211,17 +211,17 @@ export default function Studio2AIToolsModal({
 
               {/* 2. AUTO-CONNECT */}
               <TabsContent value="connect" className="space-y-4">
-                <div className="bg-gradient-to-r from-blue-50 to-cyan-50 p-4 rounded-lg border border-blue-200">
+                <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 p-4 rounded-lg border border-blue-500/20">
                   <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
-                    <Link2 className="h-5 w-5 text-blue-600" />
+                    <Link2 className="h-5 w-5 text-blue-500" />
                     🔗 Auto-Connect
                   </h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    AI discovers hidden relationships between your nodes and automatically creates smart cross-links. 
+                  <p className="text-sm text-muted-foreground mb-4">
+                    AI discovers hidden relationships between your nodes and automatically creates smart cross-links.
                     Reveals insights you might have missed!
                   </p>
-                  <div className="bg-white p-3 rounded border border-gray-200 mb-4">
-                    <p className="text-xs text-gray-500 mb-2">What AI will analyze:</p>
+                  <div className="bg-background/50 p-3 rounded border border-border mb-4">
+                    <p className="text-xs text-muted-foreground mb-2">What AI will analyze:</p>
                     <ul className="text-sm space-y-1">
                       <li>• 🔍 Semantic similarity between nodes</li>
                       <li>• 🎯 Logical dependencies and relationships</li>
@@ -229,8 +229,8 @@ export default function Studio2AIToolsModal({
                       <li>• 📊 Will suggest {Math.min(5, Math.floor(nodes.length / 2))} new connections</li>
                     </ul>
                   </div>
-                  <Button 
-                    className="w-full bg-gradient-to-r from-blue-500 to-cyan-600 text-white"
+                  <Button
+                    className="w-full bg-gradient-to-r from-blue-500 to-cyan-600 text-white hover:from-blue-600 hover:to-cyan-700"
                     onClick={() => handleAction('auto-connect')}
                     disabled={isLoading || nodes.length < 3}
                   >
@@ -251,17 +251,17 @@ export default function Studio2AIToolsModal({
 
               {/* 3. AI REORGANIZE */}
               <TabsContent value="reorganize" className="space-y-4">
-                <div className="bg-gradient-to-r from-orange-50 to-amber-50 p-4 rounded-lg border border-orange-200">
+                <div className="bg-gradient-to-r from-orange-500/10 to-amber-500/10 p-4 rounded-lg border border-orange-500/20">
                   <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
-                    <Wand2 className="h-5 w-5 text-orange-600" />
+                    <Wand2 className="h-5 w-5 text-orange-500" />
                     ✨ AI Reorganize
                   </h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    AI analyzes your mindmap structure and suggests better organization, groupings, and hierarchy. 
+                  <p className="text-sm text-muted-foreground mb-4">
+                    AI analyzes your mindmap structure and suggests better organization, groupings, and hierarchy.
                     Perfect for cleaning up messy brainstorming!
                   </p>
-                  <div className="bg-white p-3 rounded border border-gray-200 mb-4">
-                    <p className="text-xs text-gray-500 mb-2">AI will:</p>
+                  <div className="bg-background/50 p-3 rounded border border-border mb-4">
+                    <p className="text-xs text-muted-foreground mb-2">AI will:</p>
                     <ul className="text-sm space-y-1">
                       <li>• 🏗️ Analyze current structure and content</li>
                       <li>• 🎯 Group related nodes into milestones</li>
@@ -269,8 +269,8 @@ export default function Studio2AIToolsModal({
                       <li>• ✅ Apply best layout for clarity</li>
                     </ul>
                   </div>
-                  <Button 
-                    className="w-full bg-gradient-to-r from-orange-500 to-amber-600 text-white"
+                  <Button
+                    className="w-full bg-gradient-to-r from-orange-500 to-amber-600 text-white hover:from-orange-600 hover:to-amber-700"
                     onClick={() => handleAction('reorganize')}
                     disabled={isLoading || nodes.length < 5}
                   >
@@ -291,12 +291,12 @@ export default function Studio2AIToolsModal({
 
               {/* 5. GOAL-ORIENTED GENERATION */}
               <TabsContent value="goal" className="space-y-4">
-                <div className="bg-gradient-to-r from-pink-50 to-rose-50 p-4 rounded-lg border border-pink-200">
+                <div className="bg-gradient-to-r from-pink-500/10 to-rose-500/10 p-4 rounded-lg border border-pink-500/20">
                   <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
-                    <Target className="h-5 w-5 text-pink-600" />
+                    <Target className="h-5 w-5 text-pink-500" />
                     🎯 Goal-Oriented Generation
                   </h3>
-                  <p className="text-sm text-gray-600 mb-4">
+                  <p className="text-sm text-muted-foreground mb-4">
                     Start from scratch! Describe your goal and AI builds a complete, structured mindmap with tasks, milestones, and dependencies.
                   </p>
                   <div className="space-y-3">
@@ -310,8 +310,8 @@ export default function Studio2AIToolsModal({
                         className="mt-1 min-h-[120px]"
                       />
                     </div>
-                    <div className="bg-white p-3 rounded border border-gray-200">
-                      <p className="text-xs text-gray-500 mb-2">AI will generate:</p>
+                    <div className="bg-background/50 p-3 rounded border border-border">
+                      <p className="text-xs text-muted-foreground mb-2">AI will generate:</p>
                       <ul className="text-sm space-y-1">
                         <li>• 📋 Main phases/milestones</li>
                         <li>• ✅ Detailed tasks and sub-tasks</li>
@@ -319,8 +319,8 @@ export default function Studio2AIToolsModal({
                         <li>• 🎯 Organized in logical hierarchy</li>
                       </ul>
                     </div>
-                    <Button 
-                      className="w-full bg-gradient-to-r from-pink-500 to-rose-600 text-white"
+                    <Button
+                      className="w-full bg-gradient-to-r from-pink-500 to-rose-600 text-white hover:from-pink-600 hover:to-rose-700"
                       onClick={() => handleAction('goal-generate', { goal: goalPrompt })}
                       disabled={isLoading || !goalPrompt.trim()}
                     >
@@ -342,17 +342,17 @@ export default function Studio2AIToolsModal({
 
               {/* 6. QUALITY AUDIT */}
               <TabsContent value="audit" className="space-y-4">
-                <div className="bg-gradient-to-r from-violet-50 to-purple-50 p-4 rounded-lg border border-violet-200">
+                <div className="bg-gradient-to-r from-violet-500/10 to-purple-500/10 p-4 rounded-lg border border-violet-500/20">
                   <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
-                    <Sparkles className="h-5 w-5 text-violet-600" />
+                    <Sparkles className="h-5 w-5 text-violet-500" />
                     📊 Quality Audit
                   </h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Get a comprehensive AI analysis of your mindmap structure, completeness, and quality. 
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Get a comprehensive AI analysis of your mindmap structure, completeness, and quality.
                     Receive actionable suggestions for improvement!
                   </p>
-                  <div className="bg-white p-3 rounded border border-gray-200 mb-4">
-                    <p className="text-xs text-gray-500 mb-2">Audit includes:</p>
+                  <div className="bg-background/50 p-3 rounded border border-border mb-4">
+                    <p className="text-xs text-muted-foreground mb-2">Audit includes:</p>
                     <ul className="text-sm space-y-1">
                       <li>• 🔍 Structure analysis (orphaned nodes, depth, balance)</li>
                       <li>• 💡 Content quality assessment</li>
@@ -361,8 +361,8 @@ export default function Studio2AIToolsModal({
                       <li>• ✅ Specific improvement suggestions</li>
                     </ul>
                   </div>
-                  <Button 
-                    className="w-full bg-gradient-to-r from-violet-500 to-purple-600 text-white"
+                  <Button
+                    className="w-full bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700"
                     onClick={() => handleAction('quality-audit')}
                     disabled={isLoading || nodes.length === 0}
                   >
@@ -401,7 +401,7 @@ export default function Studio2AIToolsModal({
                     </Button>
                   )}
                 </div>
-                
+
                 <ScrollArea className="flex-1 pr-4">
                   {isLoading ? (
                     <div className="flex flex-col items-center justify-center py-12 space-y-4">
@@ -413,24 +413,23 @@ export default function Studio2AIToolsModal({
                   ) : aiResult ? (
                     <div className="space-y-4">
                       {/* Result Header */}
-                      <div className={`p-4 rounded-lg border-2 ${
-                        aiResult.type === 'success' 
-                          ? 'bg-green-50 border-green-200' 
+                      <div className={`p-4 rounded-lg border-2 ${aiResult.type === 'success'
+                          ? 'bg-green-500/10 border-green-500/20'
                           : aiResult.type === 'error'
-                          ? 'bg-red-50 border-red-200'
-                          : 'bg-blue-50 border-blue-200'
-                      }`}>
+                            ? 'bg-red-500/10 border-red-500/20'
+                            : 'bg-blue-500/10 border-blue-500/20'
+                        }`}>
                         <div className="flex items-start gap-3">
                           {aiResult.type === 'success' ? (
-                            <CheckCircle2 className="h-6 w-6 text-green-600 flex-shrink-0 mt-0.5" />
+                            <CheckCircle2 className="h-6 w-6 text-green-500 flex-shrink-0 mt-0.5" />
                           ) : aiResult.type === 'error' ? (
-                            <AlertCircle className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
+                            <AlertCircle className="h-6 w-6 text-red-500 flex-shrink-0 mt-0.5" />
                           ) : (
-                            <Sparkles className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" />
+                            <Sparkles className="h-6 w-6 text-blue-500 flex-shrink-0 mt-0.5" />
                           )}
                           <div className="flex-1 min-w-0">
                             <h4 className="font-semibold text-sm mb-1">{aiResult.title}</h4>
-                            <p className="text-xs text-gray-700">{aiResult.message}</p>
+                            <p className="text-xs text-foreground">{aiResult.message}</p>
                           </div>
                         </div>
                       </div>
@@ -465,8 +464,8 @@ export default function Studio2AIToolsModal({
 
                       {/* Action Hint */}
                       {aiResult.type === 'success' && (
-                        <div className="bg-purple-50 border border-purple-200 p-3 rounded-lg">
-                          <p className="text-xs text-purple-900">
+                        <div className="bg-purple-500/10 border border-purple-500/20 p-3 rounded-lg">
+                          <p className="text-xs text-purple-500">
                             💡 <strong>Tip:</strong> Check your mindmap canvas to see the changes!
                           </p>
                         </div>

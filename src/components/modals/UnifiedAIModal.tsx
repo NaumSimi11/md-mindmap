@@ -10,12 +10,12 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
   DialogTitle,
-  DialogDescription 
+  DialogDescription
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -47,6 +47,8 @@ import {
   ChevronDown,
   ChevronUp,
   X,
+  MessageSquare,
+  List,
 } from 'lucide-react';
 
 interface UnifiedAIModalProps {
@@ -99,8 +101,22 @@ const TEXT_ACTIONS = [
     id: 'brainstorm',
     label: 'Brainstorm',
     icon: <Lightbulb className="w-4 h-4" />,
-    prompt: 'Generate creative ideas and suggestions for: ',
+    prompt: 'Brainstorm creative ideas and angles based on this context:\n\n',
     description: 'Get fresh perspectives',
+  },
+  {
+    id: 'counter-arguments',
+    label: 'Counter-arguments',
+    icon: <MessageSquare className="w-4 h-4" />,
+    prompt: 'Analyze the text and provide strong counter-arguments or alternative viewpoints:\n\n',
+    description: 'Challenge the ideas',
+  },
+  {
+    id: 'examples',
+    label: 'Give Examples',
+    icon: <List className="w-4 h-4" />,
+    prompt: 'Provide concrete examples and analogies to illustrate the concepts in this text:\n\n',
+    description: 'Make it concrete',
   },
   {
     id: 'format',
@@ -172,7 +188,7 @@ export function UnifiedAIModal({
 }: UnifiedAIModalProps) {
   // Active tab
   const [activeTab, setActiveTab] = useState<'text' | 'diagrams'>(defaultTab);
-  
+
   // Common state
   const [prompt, setPrompt] = useState('');
   const [selectedContextIds, setSelectedContextIds] = useState<string[]>([]);
@@ -180,7 +196,7 @@ export function UnifiedAIModal({
   const [contextExpanded, setContextExpanded] = useState(false);
   const [showFilePicker, setShowFilePicker] = useState(false);
   const [filePickerPosition, setFilePickerPosition] = useState({ top: 0, left: 0 });
-  
+
   // Diagram-specific state
   const [selectedDiagramType, setSelectedDiagramType] = useState('flowchart');
   const [includeDocContext, setIncludeDocContext] = useState(true);
@@ -188,10 +204,16 @@ export function UnifiedAIModal({
   const [diagramPreview, setDiagramPreview] = useState('');
   const [diagramError, setDiagramError] = useState('');
   const [showDiagramCode, setShowDiagramCode] = useState(false);
+  const [isRenderingDiagram, setIsRenderingDiagram] = useState(false);
+
+  // Regenerate functionality
+  const [lastPrompt, setLastPrompt] = useState('');
+  const [lastResult, setLastResult] = useState('');
+  const [lastAction, setLastAction] = useState<'text' | 'diagram' | null>(null);
 
   // Word count
-  const wordCount = selectedText 
-    ? selectedText.split(/\s+/).filter(Boolean).length 
+  const wordCount = selectedText
+    ? selectedText.split(/\s+/).filter(Boolean).length
     : documentContent.split(/\s+/).filter(Boolean).length;
 
   // Initialize diagram enhance mode
@@ -242,13 +264,18 @@ export function UnifiedAIModal({
     return `Create a ${selectedDiagramType} diagram based on the document content`;
   };
 
-  // Handle text quick action
-  const handleTextAction = (action: typeof TEXT_ACTIONS[0]) => {
+  // Handle text quick action - NOW AUTO-GENERATES!
+  const handleTextAction = async (action: typeof TEXT_ACTIONS[0]) => {
     let fullPrompt = action.prompt;
     if (selectedText) {
       fullPrompt += selectedText;
     }
     setPrompt(fullPrompt);
+    setLastPrompt(fullPrompt);
+    setLastAction('text');
+
+    // AUTO-GENERATE immediately!
+    await handleGenerateText(fullPrompt);
   };
 
   // Handle @ mention file picker
@@ -257,11 +284,11 @@ export function UnifiedAIModal({
       const textarea = e.currentTarget;
       const rect = textarea.getBoundingClientRect();
       const cursorPos = textarea.selectionStart;
-      
+
       // Estimate position (rough approximation)
       const lineHeight = 20;
       const lines = textarea.value.substring(0, cursorPos).split('\n').length;
-      
+
       setFilePickerPosition({
         top: rect.top + (lines * lineHeight),
         left: rect.left + 10,
@@ -281,7 +308,7 @@ export function UnifiedAIModal({
       const before = prompt.substring(0, cursorPos);
       const after = prompt.substring(cursorPos);
       setPrompt(before + fileRef + ' ' + after);
-      
+
       // Auto-select this file
       if (!selectedContextIds.includes(file.id)) {
         setSelectedContextIds([...selectedContextIds, file.id]);
@@ -293,7 +320,7 @@ export function UnifiedAIModal({
   // Build context string from selected files
   const buildContextString = () => {
     if (selectedContextIds.length === 0) return '';
-    
+
     const selectedFiles = contextFiles.filter(f => selectedContextIds.includes(f.id));
     return selectedFiles
       .map(file => {
@@ -306,8 +333,10 @@ export function UnifiedAIModal({
   };
 
   // Generate text
-  const handleGenerateText = async () => {
-    if (!prompt.trim()) {
+  const handleGenerateText = async (customPrompt?: string) => {
+    const promptToUse = customPrompt || prompt;
+
+    if (!promptToUse.trim()) {
       toast.error('Please enter a prompt');
       return;
     }
@@ -324,11 +353,11 @@ export function UnifiedAIModal({
     try {
       // Build context
       const contextText = buildContextString();
-      
+
       // Build full prompt
-      const fullPrompt = contextText 
-        ? `${contextText}\n\n---\n\nUser Request:\n${prompt}`
-        : prompt;
+      const fullPrompt = contextText
+        ? `${contextText}\n\n---\n\nUser Request:\n${promptToUse}`
+        : promptToUse;
 
       // Call AI
       const result = await aiService.generateContent(fullPrompt, {
@@ -338,6 +367,11 @@ export function UnifiedAIModal({
 
       // Decrement guest credits
       decrementGuestCredits();
+
+      // Save for regeneration
+      setLastPrompt(promptToUse);
+      setLastResult(result);
+      setLastAction('text');
 
       // Insert result
       if (onInsertText) {
@@ -438,7 +472,11 @@ CONSTRAINTS:
 
   // Render Mermaid diagram
   const renderDiagram = async (code: string) => {
+    setIsRenderingDiagram(true);
     try {
+      // Use setTimeout to prevent UI blocking
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       const id = `mermaid-preview-${Date.now()}`;
       const { svg } = await mermaid.render(id, code);
       setDiagramPreview(svg);
@@ -447,6 +485,8 @@ CONSTRAINTS:
       console.error('Mermaid render error:', error);
       setDiagramError(error.message || 'Invalid diagram syntax');
       setDiagramPreview('');
+    } finally {
+      setIsRenderingDiagram(false);
     }
   };
 
@@ -465,16 +505,25 @@ CONSTRAINTS:
     onOpenChange(false);
   };
 
+  // Regenerate last action
+  const handleRegenerate = async () => {
+    if (lastAction === 'text') {
+      await handleGenerateText(lastPrompt);
+    } else if (lastAction === 'diagram') {
+      await handleGenerateDiagram();
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-[95vw] md:max-w-3xl lg:max-w-4xl h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary" />
             AI Assistant
           </DialogTitle>
           <DialogDescription>
-            {selectedText 
+            {selectedText
               ? `Working with ${wordCount} selected words`
               : `Based on your document (${wordCount} words)`}
             {contextFiles.length > 0 && ` • ${contextFiles.length} context files available`}
@@ -589,7 +638,7 @@ CONSTRAINTS:
 
                   {/* File Picker Dropdown */}
                   {showFilePicker && contextFiles.length > 0 && (
-                    <div 
+                    <div
                       className="absolute z-50 bg-popover border rounded-lg shadow-lg p-2 max-h-48 overflow-auto"
                       style={{ top: filePickerPosition.top, left: filePickerPosition.left }}
                     >
@@ -618,8 +667,27 @@ CONSTRAINTS:
                 <Button variant="outline" onClick={() => onOpenChange(false)}>
                   Cancel
                 </Button>
-                <Button 
-                  onClick={handleGenerateText}
+                {lastResult && (
+                  <Button
+                    onClick={handleRegenerate}
+                    disabled={isGenerating}
+                    variant="outline"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Regenerating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        Regenerate
+                      </>
+                    )}
+                  </Button>
+                )}
+                <Button
+                  onClick={() => handleGenerateText()}
                   disabled={isGenerating || !prompt.trim()}
                   className="gradient-primary text-white"
                 >
@@ -710,11 +778,10 @@ CONSTRAINTS:
                         <button
                           key={type.id}
                           onClick={() => setSelectedDiagramType(type.id)}
-                          className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all ${
-                            selectedDiagramType === type.id
-                              ? 'border-primary bg-primary/10'
-                              : 'hover:border-primary hover:bg-primary/5'
-                          }`}
+                          className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all ${selectedDiagramType === type.id
+                            ? 'border-primary bg-primary/10'
+                            : 'hover:border-primary hover:bg-primary/5'
+                            }`}
                           title={type.description}
                         >
                           <Icon className="w-4 h-4 text-primary" />
@@ -752,7 +819,7 @@ CONSTRAINTS:
 
                   {/* File Picker Dropdown */}
                   {showFilePicker && contextFiles.length > 0 && (
-                    <div 
+                    <div
                       className="absolute z-50 bg-popover border rounded-lg shadow-lg p-2 max-h-48 overflow-auto"
                       style={{ top: filePickerPosition.top, left: filePickerPosition.left }}
                     >
@@ -789,8 +856,15 @@ CONSTRAINTS:
                       <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
                         <p className="text-xs text-red-600 dark:text-red-400">{diagramError}</p>
                       </div>
+                    ) : isRenderingDiagram ? (
+                      <div className="bg-white dark:bg-gray-900 rounded-lg p-4 flex items-center justify-center min-h-[200px]">
+                        <div className="flex flex-col items-center gap-2">
+                          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                          <p className="text-sm text-muted-foreground">Rendering diagram...</p>
+                        </div>
+                      </div>
                     ) : diagramPreview ? (
-                      <div 
+                      <div
                         className="bg-white dark:bg-gray-900 rounded-lg p-4 overflow-auto max-h-64"
                         dangerouslySetInnerHTML={{ __html: diagramPreview }}
                       />
@@ -815,8 +889,27 @@ CONSTRAINTS:
                 <Button variant="outline" onClick={() => onOpenChange(false)}>
                   Cancel
                 </Button>
+                {generatedDiagramCode && (
+                  <Button
+                    onClick={handleRegenerate}
+                    disabled={isGenerating}
+                    variant="outline"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Regenerating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        Regenerate
+                      </>
+                    )}
+                  </Button>
+                )}
                 {generatedDiagramCode ? (
-                  <Button 
+                  <Button
                     onClick={handleInsertDiagram}
                     className="bg-green-600 hover:bg-green-700 text-white"
                   >
@@ -824,7 +917,7 @@ CONSTRAINTS:
                     Insert Diagram
                   </Button>
                 ) : (
-                  <Button 
+                  <Button
                     onClick={handleGenerateDiagram}
                     disabled={isGenerating}
                     className="gradient-primary text-white"

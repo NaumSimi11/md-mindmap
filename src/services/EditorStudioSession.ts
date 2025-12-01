@@ -5,6 +5,7 @@
  */
 
 import { Node, Edge } from '@xyflow/react';
+import { useMindmapStore } from "@/stores/mindmapStore";
 
 export interface EditorSession {
   sessionId: string;
@@ -38,7 +39,7 @@ export interface DiagramContext {
 class EditorStudioSessionService {
   private SESSION_KEY = 'editorStudioSession';
   private BACKUP_KEY = 'editorStudioBackup';
-  
+
   /**
    * Editor creates session before opening Studio2
    */
@@ -49,17 +50,29 @@ class EditorStudioSessionService {
       sessionId,
       timestamp: Date.now(),
     };
-    
+
     // Save session
     localStorage.setItem(this.SESSION_KEY, JSON.stringify(session));
-    
+
     // Create backup
     this.createBackup(session);
-    
+
+    // SYNC WITH GLOBAL STORE
+    // If we have diagram data, push it to the store immediately
+    // We use 'default-session' or extract docId if available in the future
+    // For now, we'll use a temporary ID or try to parse it from URL if possible, 
+    // but since this is a service, we might need to pass docId.
+    // For this implementation, we'll assume the Studio will pick up 'default-session' 
+    // if no docId is present, or we can try to infer it.
+
+    // Better approach: The Studio handles the import via 'auto-import' logic 
+    // which we already updated to sync to store. 
+    // BUT, to be safe, let's also init the session here if we can.
+
     console.log('📝 Session created:', sessionId);
     return sessionId;
   }
-  
+
   /**
    * Create backup of session (for recovery)
    */
@@ -70,7 +83,7 @@ class EditorStudioSessionService {
       console.warn('Failed to create session backup:', e);
     }
   }
-  
+
   /**
    * Studio2 reads session
    */
@@ -78,7 +91,7 @@ class EditorStudioSessionService {
     try {
       const data = localStorage.getItem(this.SESSION_KEY);
       if (!data) return null;
-      
+
       const session = JSON.parse(data) as EditorSession;
       console.log('📖 Session loaded:', session.sessionId);
       return session;
@@ -87,7 +100,7 @@ class EditorStudioSessionService {
       return null;
     }
   }
-  
+
   /**
    * Studio2 saves updates back to session
    */
@@ -98,20 +111,20 @@ class EditorStudioSessionService {
         console.error('No session found to update');
         return;
       }
-      
+
       const updatedSession = {
         ...session,
         ...update,
         updatedAt: Date.now(),
       };
-      
+
       localStorage.setItem(this.SESSION_KEY, JSON.stringify(updatedSession));
       console.log('💾 Studio updates saved:', update.sessionId);
     } catch (e) {
       console.error('Failed to save studio update:', e);
     }
   }
-  
+
   /**
    * Editor checks if there are pending updates
    */
@@ -119,7 +132,7 @@ class EditorStudioSessionService {
     const session = this.getSession();
     return !!(session && 'updatedDiagram' in session);
   }
-  
+
   /**
    * Editor retrieves updates from Studio2
    */
@@ -129,7 +142,7 @@ class EditorStudioSessionService {
       if (!session || !('updatedDiagram' in session)) {
         return null;
       }
-      
+
       const updates: StudioUpdate = {
         sessionId: session.sessionId,
         updatedDiagram: (session as any).updatedDiagram,
@@ -139,7 +152,7 @@ class EditorStudioSessionService {
         layout: (session as any).layout || 'manual',
         timestamp: (session as any).updatedAt || session.timestamp,
       };
-      
+
       console.log('✅ Updates retrieved:', updates.sessionId);
       return updates;
     } catch (e) {
@@ -147,7 +160,7 @@ class EditorStudioSessionService {
       return null;
     }
   }
-  
+
   /**
    * Get diagram context (for smart insertion)
    */
@@ -156,11 +169,11 @@ class EditorStudioSessionService {
     if (!session) {
       return { isReplacement: false };
     }
-    
+
     // Check if diagram already exists in document
     const content = session.documentContent;
     const diagram = session.diagramCode;
-    
+
     const diagramIndex = content.indexOf(diagram);
     if (diagramIndex !== -1) {
       return {
@@ -169,10 +182,10 @@ class EditorStudioSessionService {
         isReplacement: true,
       };
     }
-    
+
     return { isReplacement: false };
   }
-  
+
   /**
    * Clear session after successful update
    */
@@ -184,7 +197,7 @@ class EditorStudioSessionService {
       console.error('Failed to clear session:', e);
     }
   }
-  
+
   /**
    * Clear backup
    */
@@ -195,7 +208,7 @@ class EditorStudioSessionService {
       console.error('Failed to clear backup:', e);
     }
   }
-  
+
   /**
    * Restore from backup (in case of failure)
    */
@@ -203,7 +216,7 @@ class EditorStudioSessionService {
     try {
       const data = localStorage.getItem(this.BACKUP_KEY);
       if (!data) return null;
-      
+
       const backup = JSON.parse(data) as EditorSession;
       console.log('🔄 Restored from backup:', backup.sessionId);
       return backup;
@@ -212,7 +225,7 @@ class EditorStudioSessionService {
       return null;
     }
   }
-  
+
   /**
    * Cleanup old sessions (call on app init)
    */
@@ -222,7 +235,7 @@ class EditorStudioSessionService {
       if (session) {
         const AGE_LIMIT = 24 * 60 * 60 * 1000; // 24 hours
         const age = Date.now() - session.timestamp;
-        
+
         if (age > AGE_LIMIT) {
           console.log('🧹 Cleaning up old session (age:', Math.round(age / 1000 / 60), 'minutes)');
           this.clearSession();
@@ -233,7 +246,7 @@ class EditorStudioSessionService {
       console.error('Failed to cleanup sessions:', e);
     }
   }
-  
+
   /**
    * Get session age in milliseconds
    */
@@ -242,18 +255,18 @@ class EditorStudioSessionService {
     if (!session) return 0;
     return Date.now() - session.timestamp;
   }
-  
+
   /**
    * Check if session is still valid
    */
   isSessionValid(): boolean {
     const session = this.getSession();
     if (!session) return false;
-    
+
     const MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours
     return this.getSessionAge() < MAX_AGE;
   }
-  
+
   /**
    * Auto-save draft (call from Studio2 periodically)
    */
@@ -261,21 +274,21 @@ class EditorStudioSessionService {
     try {
       const session = this.getSession();
       if (!session) return;
-      
+
       const draft = {
         sessionId: session.sessionId,
         nodes,
         edges,
         timestamp: Date.now(),
       };
-      
+
       localStorage.setItem(`${this.SESSION_KEY}_draft`, JSON.stringify(draft));
       console.log('💾 Auto-saved draft');
     } catch (e) {
       console.error('Failed to auto-save draft:', e);
     }
   }
-  
+
   /**
    * Load draft (for recovery)
    */
@@ -283,7 +296,7 @@ class EditorStudioSessionService {
     try {
       const data = localStorage.getItem(`${this.SESSION_KEY}_draft`);
       if (!data) return null;
-      
+
       const draft = JSON.parse(data);
       console.log('📖 Loaded draft');
       return { nodes: draft.nodes, edges: draft.edges };
@@ -292,7 +305,7 @@ class EditorStudioSessionService {
       return null;
     }
   }
-  
+
   /**
    * Clear draft
    */
@@ -303,7 +316,7 @@ class EditorStudioSessionService {
       console.error('Failed to clear draft:', e);
     }
   }
-  
+
   /**
    * Store generated mindmap data for auto-import
    */
@@ -315,7 +328,7 @@ class EditorStudioSessionService {
       console.error('Failed to store mindmap data:', e);
     }
   }
-  
+
   /**
    * Get generated mindmap data
    */
@@ -323,7 +336,7 @@ class EditorStudioSessionService {
     try {
       const data = localStorage.getItem('generatedMindmapData');
       if (!data) return null;
-      
+
       const mindmapData = JSON.parse(data);
       console.log('📖 Mindmap data loaded');
       return mindmapData;
@@ -332,7 +345,7 @@ class EditorStudioSessionService {
       return null;
     }
   }
-  
+
   /**
    * Clear generated mindmap data after import
    */

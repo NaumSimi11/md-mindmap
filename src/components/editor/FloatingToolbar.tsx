@@ -16,13 +16,18 @@ import {
   Link as LinkIcon,
   Superscript as SuperIcon,
   Subscript as SubIcon,
+  Sparkles,
 } from 'lucide-react';
+import { useEditorUIStore } from '@/stores/editorUIStore';
 
 interface FloatingToolbarProps {
   editor: Editor;
 }
 
 export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({ editor }) => {
+  const { setShowAIModal } = useEditorUIStore();
+  const { setShowLinkModal } = useEditorUIStore();
+
   if (!editor) return null;
 
   const ButtonIcon = ({
@@ -38,9 +43,8 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({ editor }) => {
   }) => (
     <button
       onClick={onClick}
-      className={`p-2 rounded hover:bg-accent transition-colors ${
-        isActive ? 'bg-accent text-primary' : 'text-foreground'
-      }`}
+      className={`p-2 rounded hover:bg-accent transition-colors ${isActive ? 'bg-accent text-primary' : 'text-foreground'
+        }`}
       title={title}
       type="button"
     >
@@ -54,6 +58,16 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({ editor }) => {
       updateDelay={100}
       className="floating-toolbar bg-popover border border-border rounded-lg shadow-lg p-1 flex items-center gap-0.5"
     >
+      {/* AI Assistant */}
+      <ButtonIcon
+        icon={Sparkles}
+        onClick={() => setShowAIModal(true)}
+        title="AI Assistant"
+        isActive={false}
+      />
+
+      <div className="w-px h-6 bg-border mx-1" />
+
       {/* Basic Formatting */}
       <ButtonIcon
         icon={Bold}
@@ -118,10 +132,7 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({ editor }) => {
       <ButtonIcon
         icon={LinkIcon}
         onClick={() => {
-          const url = window.prompt('Enter URL:');
-          if (url) {
-            editor.chain().focus().setLink({ href: url }).run();
-          }
+          setShowLinkModal(true);
         }}
         isActive={editor.isActive('link')}
         title="Add Link"

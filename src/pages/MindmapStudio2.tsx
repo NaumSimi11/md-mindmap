@@ -24,10 +24,10 @@ import "@xyflow/react/dist/style.css";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
   DropdownMenuLabel,
@@ -70,7 +70,7 @@ const getInitialNodes = (): Node[] => [
     id: '1',
     type: 'mindNode',
     position: { x: 400, y: 300 },
-    data: { 
+    data: {
       label: 'Central Idea',
       // Callbacks will be injected after component mounts
     },
@@ -78,6 +78,11 @@ const getInitialNodes = (): Node[] => [
 ];
 
 const initialEdges: Edge[] = [];
+
+import { useMindmapStore } from "@/stores/mindmapStore";
+import { useDebounce } from "@/hooks/useDebounce"; // Assuming this exists, or I'll implement a simple debounce
+
+// ... imports
 
 export default function MindmapStudio2() {
   return (
@@ -90,18 +95,33 @@ export default function MindmapStudio2() {
 function MindmapStudio2Content() {
   const location = useLocation();
   const navigate = useNavigate();
-  
+
   // Detect if we're in workspace context
   const isInWorkspace = location.pathname.includes('/workspace/doc/');
-  const documentId = isInWorkspace ? location.pathname.split('/')[3] : null;
-  
+  const documentId = isInWorkspace ? location.pathname.split('/')[3] : 'default-session';
+
+  // Store access
+  const { getSession, updateSession, initSession } = useMindmapStore();
+
   const [title, setTitle] = useState("Untitled Mindmap");
-  const [nodes, setNodes, onNodesChange] = useNodesState(getInitialNodes());
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  // Initialize state from store if available, otherwise default
+  const initialSession = getSession(documentId);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialSession?.nodes || getInitialNodes());
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialSession?.edges || initialEdges);
+
+  // Sync back to store (debounced)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      updateSession(documentId, { nodes, edges });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [nodes, edges, documentId, updateSession]);
+
   const [currentLayout, setCurrentLayout] = useState<string>('manual');
   const [edgeType, setEdgeType] = useState<'smoothstep' | 'bezier' | 'straight' | 'step'>('bezier');
   const [nodeStyle, setNodeStyle] = useState<'gradient' | 'simple' | 'border-only'>('gradient'); // Node style preference
-  
+
   // Dynamic node types based on style preference
   const nodeTypes = useMemo(() => {
     let mindNodeComponent;
@@ -112,7 +132,7 @@ function MindmapStudio2Content() {
     } else {
       mindNodeComponent = Studio2MindNode; // gradient (default)
     }
-    
+
     return {
       mindNode: mindNodeComponent,
       milestone: Studio2MilestoneNode, // Keep milestone as-is for now
@@ -120,77 +140,80 @@ function MindmapStudio2Content() {
       icon: IconNode,
     } as any; // Type assertion needed for React Flow's strict typing
   }, [nodeStyle]);
-  
+
   // Quick AWS insert (research phase)
   const addAwsNode = (title: string, icon: string) => {
     const id = `aws-${Date.now()}`;
-    const count = nodes.filter((n)=> n.type === 'aws').length;
+    const count = nodes.filter((n) => n.type === 'aws').length;
     const x = 200 + (count % 4) * 240;
     const y = 200 + Math.floor(count / 4) * 160;
     const newNode: Node = { id, type: 'aws', position: { x, y }, data: { title, icon, status: 'ok' } } as Node;
-    setNodes((ns)=> [...ns, newNode]);
+    setNodes((ns) => [...ns, newNode]);
   };
-  
+
   // Generic Iconify node insert
   const addIconifyNode = (title: string, iconId: string, color?: string) => {
     const id = `icon-${Date.now()}`;
-    const count = nodes.filter((n)=> n.type === 'icon').length;
+    const count = nodes.filter((n) => n.type === 'icon').length;
     const x = 220 + (count % 4) * 240;
     const y = 220 + Math.floor(count / 4) * 160;
     const newNode: Node = { id, type: 'icon', position: { x, y }, data: { title, icon: iconId, color } } as Node;
-    setNodes((ns)=> [...ns, newNode]);
+    setNodes((ns) => [...ns, newNode]);
   };
-  
+
   // Store original document content for smart merge
   const [originalContent, setOriginalContent] = useState<string>('');
-  
+
   // Auto-import generated mindmap data
   useEffect(() => {
     const generatedData = sessionService.getMindmapData();
     if (generatedData) {
       console.log('🎉 Auto-importing generated mindmap:', generatedData);
-      
+
       // IMPORTANT: Store original content for smart merge when going back
       if (generatedData.metadata?.originalContent) {
         setOriginalContent(generatedData.metadata.originalContent);
         console.log('💾 Stored original content for merge');
       }
-      
+
       // Convert mindmap data to React Flow nodes and edges
       const importedNodes: Node[] = generatedData.nodes.map((node: any, index: number) => ({
         id: node.id,
         type: 'mindNode',
         position: { x: 100 + (index % 5) * 200, y: 100 + Math.floor(index / 5) * 150 },
-        data: { 
+        data: {
           label: node.text,
           level: node.level,
           lineNumber: node.lineNumber, // Store original line number
         },
       }));
-      
+
       const importedEdges: Edge[] = generatedData.connections.map((conn: any) => ({
         id: `${conn.from}-${conn.to}`,
         source: conn.from,
         target: conn.to,
         type: 'default',
       }));
-      
+
       // Set nodes and edges
       setNodes(importedNodes);
       setEdges(importedEdges);
-      
+
+      // Update store immediately
+      updateSession(documentId, { nodes: importedNodes, edges: importedEdges });
+
       // Update title if available
       if (generatedData.metadata?.sourceDocument) {
         setTitle(`Generated Mindmap - ${new Date().toLocaleDateString()}`);
       }
-      
+
       // Clear the stored data after import
       sessionService.clearMindmapData();
-      
+
       console.log('✅ Mindmap auto-imported successfully!');
     }
   }, []); // Run only once on mount
-  
+
   // Map UI edge type to React Flow edge type
   const getReactFlowEdgeType = (type: typeof edgeType): string => {
     return type === 'bezier' ? 'default' : type;
@@ -203,7 +226,7 @@ function MindmapStudio2Content() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showAIToolsModal, setShowAIToolsModal] = useState(false);
-  
+
   // Presentation wizard & progress
   const [showPresentationWizard, setShowPresentationWizard] = useState(false);
   const [showPresentationProgress, setShowPresentationProgress] = useState(false);
@@ -223,7 +246,7 @@ function MindmapStudio2Content() {
   const chatInputRef = useRef<HTMLInputElement>(null);
   const chatMessagesRef = useRef<HTMLDivElement>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  
+
   // Proactive suggestions
   const [activeSuggestion, setActiveSuggestion] = useState<Suggestion | null>(null);
   const [suggestionPosition, setSuggestionPosition] = useState({ x: 0, y: 0 });
@@ -243,19 +266,19 @@ function MindmapStudio2Content() {
     if (draggedNode.type === 'milestone') {
       // Store previous position for comparison
       const prevPos = previousMilestonePositions.current.get(draggedNode.id);
-      
+
       if (prevPos) {
         const deltaX = draggedNode.position.x - prevPos.x;
         const deltaY = draggedNode.position.y - prevPos.y;
-        
+
         // If milestone moved, ensure all its child milestones also move
         if (deltaX !== 0 || deltaY !== 0) {
           // Find all child milestones (milestones that have this milestone as parent)
-          const childMilestones = nodes.filter(n => 
-            n.type === 'milestone' && 
+          const childMilestones = nodes.filter(n =>
+            n.type === 'milestone' &&
             (n as any).parentId === draggedNode.id
           );
-          
+
           // Update child milestone positions to move with parent
           if (childMilestones.length > 0) {
             setNodes((currentNodes) => {
@@ -277,7 +300,7 @@ function MindmapStudio2Content() {
           }
         }
       }
-      
+
       // Update stored position
       previousMilestonePositions.current.set(draggedNode.id, {
         x: draggedNode.position.x,
@@ -295,7 +318,7 @@ function MindmapStudio2Content() {
         x: draggedNode.position.x,
         y: draggedNode.position.y,
       });
-      
+
       // Force React Flow to recalculate nested milestone positions
       // This ensures React Flow's internal positioning is correct
       setNodes((currentNodes) => {
@@ -304,7 +327,7 @@ function MindmapStudio2Content() {
           if (node.type === 'milestone' && (node as any).parentId) {
             const parentId = (node as any).parentId;
             const parent = currentNodes.find(n => n.id === parentId);
-            
+
             if (parent) {
               // Ensure position is relative to parent
               // React Flow should handle this, but we'll ensure it's correct
@@ -323,15 +346,15 @@ function MindmapStudio2Content() {
   // Handle AI Enhance button click (show proactive suggestion)
   const handleAIEnhanceClick = useCallback((nodeId: string, executeCommand: (cmd: string) => void) => {
     console.log('⭐ handleAIEnhanceClick called for:', nodeId);
-    
+
     const node = nodes.find(n => n.id === nodeId);
     if (!node) {
       console.error('❌ Node not found:', nodeId);
       return;
     }
-    
+
     console.log('✨ AI Enhance clicked for:', node.data.label);
-    
+
     // Detect suggestions for this node
     console.log('🔍 Detecting suggestions...');
     const suggestion = suggestionDetector.detectForNode(
@@ -345,16 +368,16 @@ function MindmapStudio2Content() {
         setActiveSuggestion(null);
       }
     );
-    
+
     console.log('💡 Suggestion detected:', suggestion);
-    
+
     if (suggestion) {
       // Position suggestion above the node
       // Get node position on screen
       const nodeElement = document.querySelector(`[data-id="${nodeId}"]`) as HTMLElement;
       if (nodeElement) {
         const rect = nodeElement.getBoundingClientRect();
-        
+
         setSuggestionPosition({
           x: rect.left + rect.width / 2,
           y: rect.top - 10,
@@ -366,14 +389,14 @@ function MindmapStudio2Content() {
           y: window.innerHeight / 3,
         });
       }
-      
+
       setActiveSuggestion(suggestion);
       console.log('💡 Showing suggestion:', suggestion.message);
     } else {
       // No suggestions available - show message
-      setChatMessages(prev => [...prev, { 
-        role: 'ai', 
-        content: `💡 No suggestions available for "${node.data.label}" right now. This node looks good!` 
+      setChatMessages(prev => [...prev, {
+        role: 'ai',
+        content: `💡 No suggestions available for "${node.data.label}" right now. This node looks good!`
       }]);
       setShowChatPanel(true);
     }
@@ -392,7 +415,7 @@ function MindmapStudio2Content() {
       id: `node-${Date.now()}`,
       type: 'mindNode',
       position: { x: Math.random() * 400 + 200, y: Math.random() * 400 + 100 },
-      data: { 
+      data: {
         label: 'New Idea',
       },
     };
@@ -403,18 +426,18 @@ function MindmapStudio2Content() {
   const addChildNode = useCallback((parentId: string) => {
     // Generate unique ID ONCE at the top level to share between node and edge
     const childId = `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // CRITICAL: Use functional updates to get CURRENT state, not stale closure values!
     setEdges((currentEdges) => {
       // Count existing children of this parent FROM CURRENT STATE
       const existingChildren = currentEdges.filter(e => e.source === parentId).length;
       const childNumber = existingChildren + 1;
-      
+
       console.log(`🔍 CURRENT EDGES: ${currentEdges.length}, CHILDREN OF ${parentId}: ${existingChildren}`);
-      
+
       // Spread children in a radial/grid pattern (8 directions)
       const angle = (existingChildren * 45); // 0°, 45°, 90°, 135°, 180°, 225°, 270°, 315°
-      
+
       console.log(`🔍 ANGLE: child #${childNumber} → ${existingChildren} × 45° = ${angle}°`);
 
       // For top-down tree: always use bottom → top
@@ -457,11 +480,11 @@ function MindmapStudio2Content() {
         const newNode: Node = {
           id: childId, // Same ID as edge target!
           type: 'mindNode',
-          position: { 
-            x: parent.position.x + offsetX, 
-            y: parent.position.y + offsetY 
+          position: {
+            x: parent.position.x + offsetX,
+            y: parent.position.y + offsetY
           },
-          data: { 
+          data: {
             label: `New Child ${childNumber}`,
           },
         };
@@ -478,7 +501,7 @@ function MindmapStudio2Content() {
   // Delete node
   const deleteNode = useCallback((nodeId: string) => {
     if (!confirm('Delete this node?')) return;
-    
+
     setNodes((nds) => nds.filter((n) => n.id !== nodeId));
     setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
   }, [setNodes, setEdges]);
@@ -497,7 +520,7 @@ function MindmapStudio2Content() {
   // AI Enhancement
   const handleAIEnhance = useCallback(async (nodeId: string) => {
     console.log('🎯 handleAIEnhance called for:', nodeId);
-    
+
     // Trigger proactive suggestion instead of direct enhancement
     // Pass handleChatCommand as a parameter to avoid circular dependency
     handleAIEnhanceClick(nodeId, (command) => {
@@ -515,7 +538,7 @@ function MindmapStudio2Content() {
       }, 0);
     });
   }, [handleAIEnhanceClick]);
-  
+
   // Old direct enhancement function (kept for reference, not used anymore)
   const handleAIEnhanceOld = useCallback(async (nodeId: string) => {
     setAILoading(true);
@@ -539,13 +562,13 @@ function MindmapStudio2Content() {
         nds.map((node) =>
           node.id === nodeId
             ? {
-                ...node,
-                data: {
-                  ...node.data,
-                  label: enhanced.label || node.data.label,
-                  description: enhanced.description || node.data.description,
-                },
-              }
+              ...node,
+              data: {
+                ...node.data,
+                label: enhanced.label || node.data.label,
+                description: enhanced.description || node.data.description,
+              },
+            }
             : node
         )
       );
@@ -585,7 +608,7 @@ function MindmapStudio2Content() {
 
   // Update all edges when edge type or style changes
   useEffect(() => {
-    setEdges((currentEdges) => 
+    setEdges((currentEdges) =>
       currentEdges.map((edge) => ({
         ...edge,
         type: getReactFlowEdgeType(edgeType),
@@ -613,7 +636,7 @@ function MindmapStudio2Content() {
       selectedEdges: params.edges.length,
     });
     setSelectedNodeIds(ids);
-    
+
     // Track selected edge for label editing
     if (params.edges.length === 1) {
       setSelectedEdge(params.edges[0]);
@@ -626,7 +649,7 @@ function MindmapStudio2Content() {
   const getAllChildNodes = useCallback((parentId: string, allNodes: Node[]): Node[] => {
     const directChildren = allNodes.filter(n => (n as any).parentId === parentId);
     const nestedChildren: Node[] = [];
-    
+
     directChildren.forEach(child => {
       nestedChildren.push(child);
       // If child is a milestone, get its children too
@@ -634,7 +657,7 @@ function MindmapStudio2Content() {
         nestedChildren.push(...getAllChildNodes(child.id, allNodes));
       }
     });
-    
+
     return nestedChildren;
   }, []);
 
@@ -643,7 +666,7 @@ function MindmapStudio2Content() {
     let x = node.position.x;
     let y = node.position.y;
     let currentParentId = (node as any).parentId;
-    
+
     // Walk up the parent chain to get absolute position
     while (currentParentId) {
       const parent = allNodes.find(n => n.id === currentParentId);
@@ -652,7 +675,7 @@ function MindmapStudio2Content() {
       y += parent.position.y;
       currentParentId = (parent as any).parentId;
     }
-    
+
     return { x, y };
   }, []);
 
@@ -660,7 +683,7 @@ function MindmapStudio2Content() {
   const getMilestoneDepth = useCallback((milestoneId: string, allNodes: Node[]): number => {
     let depth = 0;
     let currentParentId = (allNodes.find(n => n.id === milestoneId) as any)?.parentId;
-    
+
     while (currentParentId) {
       const parent = allNodes.find(n => n.id === currentParentId);
       if (parent?.type === 'milestone') {
@@ -668,7 +691,7 @@ function MindmapStudio2Content() {
       }
       currentParentId = (parent as any)?.parentId;
     }
-    
+
     return depth;
   }, []);
 
@@ -685,14 +708,14 @@ function MindmapStudio2Content() {
     }
 
     const selectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
-    
+
     // Collect all nodes to include (nodes + all children of selected milestones)
     const allNodesToGroup: Node[] = [];
     const processedMilestones = new Set<string>();
-    
+
     selectedNodes.forEach(node => {
       allNodesToGroup.push(node);
-      
+
       // If selected node is a milestone, include all its children
       if (node.type === 'milestone' && !processedMilestones.has(node.id)) {
         processedMilestones.add(node.id);
@@ -701,19 +724,19 @@ function MindmapStudio2Content() {
         console.log(`🟢 Milestone ${node.id} has ${childNodes.length} children`);
       }
     });
-    
+
     // Remove duplicates
     const uniqueNodesToGroup = Array.from(new Map(allNodesToGroup.map(n => [n.id, n])).values());
-    
+
     console.log('🟢 SELECTED NODES:', selectedNodes.map(n => ({
       id: n.id,
       type: n.type,
       position: n.position,
       hasParent: !!(n as any).parentId,
     })));
-    
+
     console.log('🟢 ALL NODES TO GROUP (including children):', uniqueNodesToGroup.length);
-    
+
     // Calculate bounding box using absolute positions
     const absolutePositions = uniqueNodesToGroup.map(node => {
       const absPos = getAbsolutePosition(node, nodes);
@@ -725,7 +748,7 @@ function MindmapStudio2Content() {
         height: (node.style as any)?.height || 50,
       };
     });
-    
+
     const minX = Math.min(...absolutePositions.map(p => p.absX)) - 30;
     const minY = Math.min(...absolutePositions.map(p => p.absY)) - 30;
     const maxX = Math.max(...absolutePositions.map(p => p.absX + p.width)) + 30;
@@ -734,7 +757,7 @@ function MindmapStudio2Content() {
     console.log('🟢 BOUNDING BOX:', { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY });
 
     const milestoneId = `milestone-${Date.now()}`;
-    
+
     // Calculate depth for z-index (nested milestones need lower z-index)
     const maxDepth = Math.max(...selectedNodes
       .filter(n => n.type === 'milestone')
@@ -774,24 +797,24 @@ function MindmapStudio2Content() {
     const updatedNodes = nodes.map(node => {
       // Check if this node should be grouped (directly selected or child of selected milestone)
       const shouldGroup = uniqueNodesToGroup.some(n => n.id === node.id);
-      
+
       if (shouldGroup) {
         // Get absolute position before grouping
         const absPos = getAbsolutePosition(node, nodes);
-        
+
         // Calculate relative position within new milestone
         const newPosition = {
           x: absPos.x - minX,
           y: absPos.y - minY,
         };
-        
+
         // If node is a milestone, also update its z-index to be above parent
         let updatedZIndex = node.zIndex;
         if (node.type === 'milestone') {
           const childDepth = getMilestoneDepth(node.id, nodes);
           updatedZIndex = -(childDepth + 2); // Child milestone should be above parent
         }
-        
+
         console.log(`🟢 CONVERTING NODE ${node.id} (${node.type}):`, {
           oldAbsolutePosition: absPos,
           newRelativePosition: newPosition,
@@ -799,7 +822,7 @@ function MindmapStudio2Content() {
           oldZIndex: node.zIndex,
           newZIndex: updatedZIndex,
         });
-        
+
         return {
           ...node,
           parentId: milestoneId, // CRITICAL: React Flow uses 'parentId' not 'parentNode'!
@@ -822,7 +845,7 @@ function MindmapStudio2Content() {
     // CRITICAL: Add milestone FIRST, then children!
     // React Flow needs parent to exist before rendering children
     const finalNodesArray = [milestoneNode, ...updatedNodes];
-    
+
     console.log('🟢 FINAL NODES ARRAY ORDER:');
     finalNodesArray.forEach((n, idx) => {
       console.log(`  [${idx}] ${n.type} "${n.data.label || n.id}"`, {
@@ -834,12 +857,12 @@ function MindmapStudio2Content() {
         zIndex: n.zIndex || 0,
       });
     });
-    
+
     // CRITICAL: Set nodes in React Flow
     // The milestone must be rendered BEFORE children can reference it as parent
     setNodes(finalNodesArray);
     setSelectedNodeIds([]);
-    
+
     // Initialize position tracking for all milestones
     finalNodesArray.forEach(node => {
       if (node.type === 'milestone') {
@@ -849,7 +872,7 @@ function MindmapStudio2Content() {
         });
       }
     });
-    
+
     console.log(`✅ Milestone created! Nodes: ${finalNodesArray.length}, Children: ${updatedNodes.filter(n => (n as any).parentId === milestoneId).length}`);
   }, [selectedNodeIds, nodes, setNodes, getAllChildNodes, getAbsolutePosition, getMilestoneDepth]);
 
@@ -934,17 +957,17 @@ function MindmapStudio2Content() {
   // Smart merge: Update headings while preserving content
   const smartMergeNodesWithContent = useCallback((originalContent: string) => {
     console.log('🔄 Smart merging nodes with original content...');
-    
+
     if (!originalContent) {
       // No original content, fallback to simple conversion
       console.log('⚠️ No original content, using simple conversion');
       return convertNodesToMarkdownSimple();
     }
-    
+
     // Parse original content to find headings
     const lines = originalContent.split('\n');
     const headingMap = new Map<string, { lineIndex: number; level: number; text: string }>();
-    
+
     lines.forEach((line, index) => {
       const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
       if (headingMatch) {
@@ -953,14 +976,14 @@ function MindmapStudio2Content() {
         headingMap.set(text, { lineIndex: index, level, text });
       }
     });
-    
+
     console.log(`📋 Found ${headingMap.size} headings in original content`);
-    
+
     // Build node map
     const nodeMap = new Map(nodes.map(n => [n.data.label, n]));
     const updatedLines = [...lines];
     const processedNodes = new Set<string>();
-    
+
     // Update existing headings
     headingMap.forEach((heading, originalText) => {
       const node = nodeMap.get(originalText);
@@ -974,7 +997,7 @@ function MindmapStudio2Content() {
         console.log(`🗑️ Removed: ${originalText}`);
       }
     });
-    
+
     // Add new nodes that weren't in original
     let newNodesMarkdown = '';
     nodes.forEach(node => {
@@ -985,24 +1008,24 @@ function MindmapStudio2Content() {
         console.log(`➕ Added: ${node.data.label}`);
       }
     });
-    
+
     // Clean up empty lines (removed headings) and combine
     const finalContent = updatedLines
       .filter(line => line !== '') // Remove deleted headings
       .join('\n') + newNodesMarkdown;
-    
+
     console.log('✅ Smart merge complete!');
     return finalContent.trim();
   }, [nodes]);
-  
+
   // Simple conversion (fallback when no original content)
   const convertNodesToMarkdownSimple = useCallback(() => {
     console.log('📝 Converting nodes to markdown (simple)...');
-    
+
     // Build a map of node connections for hierarchy
     const nodeMap = new Map(nodes.map(n => [n.id, n]));
     const childrenMap = new Map<string, string[]>();
-    
+
     // Build parent-child relationships
     edges.forEach(edge => {
       if (!childrenMap.has(edge.source)) {
@@ -1010,44 +1033,44 @@ function MindmapStudio2Content() {
       }
       childrenMap.get(edge.source)?.push(edge.target);
     });
-    
+
     // Find root nodes (nodes with no incoming edges)
     const targetNodes = new Set(edges.map(e => e.target));
     const rootNodes = nodes.filter(n => !targetNodes.has(n.id));
-    
+
     // Convert to markdown with hierarchy
     let markdown = '';
     const visited = new Set<string>();
-    
+
     const convertNode = (nodeId: string, level: number) => {
       if (visited.has(nodeId)) return;
       visited.add(nodeId);
-      
+
       const node = nodeMap.get(nodeId);
       if (!node) return;
-      
+
       const heading = '#'.repeat(Math.min(level + 1, 6)); // Max 6 levels
       markdown += `${heading} ${node.data.label}\n`;
-      
+
       if (node.data.description) {
         markdown += `\n${node.data.description}\n`;
       }
-      
+
       markdown += '\n';
-      
+
       // Process children
       const children = childrenMap.get(nodeId) || [];
       children.forEach(childId => {
         convertNode(childId, level + 1);
       });
     };
-    
+
     // Start from root nodes
     rootNodes.forEach((node, index) => {
       if (index > 0) markdown += '\n---\n\n'; // Separator between trees
       convertNode(node.id, 0);
     });
-    
+
     // If no root nodes (circular graph), just list all nodes
     if (rootNodes.length === 0) {
       nodes.forEach(node => {
@@ -1058,33 +1081,33 @@ function MindmapStudio2Content() {
         markdown += '\n';
       });
     }
-    
+
     console.log('✅ Markdown generated:', markdown.substring(0, 200) + '...');
     return markdown;
   }, [nodes, edges]);
-  
+
   // Back to Editor handler
   const handleBackToEditor = useCallback(() => {
     console.log('⬅️ Returning to Editor with updates');
-    
+
     if (!isInWorkspace || !documentId) {
       console.warn('Not in workspace context, navigating to editor anyway');
       window.location.href = '/dashboard/editor';
       return;
     }
-    
+
     // Use smart merge if we have original content
-    const markdown = originalContent 
+    const markdown = originalContent
       ? smartMergeNodesWithContent(originalContent)
       : convertNodesToMarkdownSimple();
-    
+
     // Save to document
     const document = workspaceService.getDocument(documentId);
     if (document) {
       workspaceService.updateDocument(documentId, { content: markdown });
       console.log('💾 Document updated with mindmap content');
     }
-    
+
     // Navigate back to editor
     navigate(`/workspace/doc/${documentId}/edit`);
   }, [isInWorkspace, documentId, originalContent, smartMergeNodesWithContent, convertNodesToMarkdownSimple, navigate]);
@@ -1101,26 +1124,26 @@ function MindmapStudio2Content() {
   // Generate presentation with settings from wizard
   const handleGeneratePresentation = useCallback(async (settings: GenerationSettings) => {
     console.log('🎬 Generating presentation with settings:', settings);
-    
+
     // 🔧 CLEAR OLD SESSION KEYS (from old Editor.tsx flow)
     localStorage.removeItem('presentation-session');
-    const oldKeys = Object.keys(localStorage).filter(key => 
-      key.startsWith('editor-pres-session-') || 
+    const oldKeys = Object.keys(localStorage).filter(key =>
+      key.startsWith('editor-pres-session-') ||
       key.startsWith('mindmap-pres-session-')
     );
     oldKeys.forEach(key => localStorage.removeItem(key));
     console.log('🧹 Cleared old session keys:', oldKeys.length);
-    
+
     // Close wizard, show progress
     setShowPresentationWizard(false);
     setShowPresentationProgress(true);
     setPresentationProgress(null);
     setPresentationError(null);
-    
+
     try {
       console.log('📊 Converting mindmap to markdown...');
       const markdown = convertNodesToMarkdownSimple();
-      
+
       console.log('🤖 Calling safe presentation service...');
       const presentation = await safePresentationService.generateSafely(
         markdown,
@@ -1132,19 +1155,19 @@ function MindmapStudio2Content() {
           setPresentationProgress(progress);
         }
       );
-      
+
       console.log('✅ Presentation generated:', presentation);
-      
+
       // Save presentation and navigate
       if (isInWorkspace && documentId) {
         console.log('💾 Saving presentation to workspace...');
         const doc = await workspaceService.createDocument(
-          'presentation', 
-          `${title} - Presentation`, 
+          'presentation',
+          `${title} - Presentation`,
           JSON.stringify(presentation)
         );
         console.log('✅ Presentation saved:', doc.id);
-        
+
         // Wait a moment to show success, then navigate
         setTimeout(() => {
           setShowPresentationProgress(false);
@@ -1160,7 +1183,7 @@ function MindmapStudio2Content() {
     } catch (error: any) {
       console.error('❌ Failed to generate presentation:', error);
       setPresentationError(error.message || 'Failed to generate presentation');
-      
+
       // Auto-close error after 5 seconds
       setTimeout(() => {
         setShowPresentationProgress(false);
@@ -1168,7 +1191,7 @@ function MindmapStudio2Content() {
       }, 5000);
     }
   }, [title, nodes, edges, isInWorkspace, documentId, convertNodesToMarkdownSimple, navigate]);
-  
+
   // Build mindmap context for AI
   const buildMindmapContext = useCallback((): MindmapContext => {
     return {
@@ -1190,10 +1213,10 @@ function MindmapStudio2Content() {
   const handleSmartExpandAll = useCallback(async () => {
     const context = buildMindmapContext();
     const newNodesAndEdges: { nodes: Node[]; edges: Edge[] } = { nodes: [], edges: [] };
-    
+
     let successCount = 0;
     let failCount = 0;
-    
+
     for (const node of nodes) {
       // Skip if node already has 3+ children
       const childCount = edges.filter(e => e.source === node.id).length;
@@ -1201,34 +1224,34 @@ function MindmapStudio2Content() {
         console.log(`⏭️ Skipping "${node.data.label}" (already has ${childCount} children)`);
         continue;
       }
-      
+
       try {
         console.log(`🧠 Expanding "${node.data.label}"...`);
-        
+
         // Generate children with AI
         const children = await mindmapAIService.generateChildNodes(
           node.id,
           context,
           { count: 3 - childCount, style: 'concise' }
         );
-        
+
         // Create nodes for each child
         const childNodes: Node[] = children.map((child, idx) => {
           const childId = `node-${Date.now()}-${node.id}-${idx}`;
           return {
             id: childId,
             type: 'mindNode',
-            position: { 
-              x: node.position.x + (idx - 1) * 250, 
-              y: node.position.y + 150 
+            position: {
+              x: node.position.x + (idx - 1) * 250,
+              y: node.position.y + 150
             },
-            data: { 
+            data: {
               label: child.label,
               description: child.description,
             },
           };
         });
-        
+
         // Create edges
         const childEdges: Edge[] = childNodes.map(childNode => ({
           id: `edge-${node.id}-${childNode.id}`,
@@ -1238,10 +1261,10 @@ function MindmapStudio2Content() {
           markerEnd: { type: 'arrowclosed', color: '#64748b' },
           style: { stroke: '#64748b', strokeWidth: 2 },
         }));
-        
+
         newNodesAndEdges.nodes.push(...childNodes);
         newNodesAndEdges.edges.push(...childEdges);
-        
+
         successCount++;
         console.log(`✅ Expanded "${node.data.label}" with ${children.length} children`);
       } catch (error) {
@@ -1249,12 +1272,12 @@ function MindmapStudio2Content() {
         failCount++;
       }
     }
-    
+
     // Add all new nodes and edges at once
     if (newNodesAndEdges.nodes.length > 0) {
       setNodes(nds => [...nds, ...newNodesAndEdges.nodes]);
       setEdges(eds => [...eds, ...newNodesAndEdges.edges]);
-      
+
       console.log(`🎉 Smart Expand Complete! ✅ ${successCount} nodes expanded, 🆕 ${newNodesAndEdges.nodes.length} new nodes created${failCount > 0 ? `, ❌ ${failCount} failed` : ''}`);
     } else {
       console.log('All nodes already have sufficient children! 🎯');
@@ -1269,25 +1292,25 @@ function MindmapStudio2Content() {
     }
 
     const context = buildMindmapContext();
-    
+
     try {
       console.log('🔗 Finding smart connections...');
-      
+
       // Get AI suggestions
       const suggestions = await mindmapAIService.suggestConnections(context, 5);
-      
+
       if (suggestions.length === 0) {
         console.log('✅ Your mindmap is already well-connected! No new connections needed.');
         throw new Error('Your mindmap is already well-connected');
       }
-      
+
       // Log preview for debugging
       suggestions.forEach((s, idx) => {
         const sourceNode = nodes.find(n => n.id === s.source);
         const targetNode = nodes.find(n => n.id === s.target);
         console.log(`${idx + 1}. "${sourceNode?.data.label}" → "${targetNode?.data.label}" - ${s.reason}`);
       });
-      
+
       // Create new edges (no confirmation needed - AI Response panel will show results)
       const newEdges: Edge[] = suggestions.map(s => ({
         id: `edge-${s.source}-${s.target}-${Date.now()}`,
@@ -1296,8 +1319,8 @@ function MindmapStudio2Content() {
         type: 'default', // Use bezier for cross-connections
         label: s.reason.split(' ').slice(0, 3).join(' '), // Short label
         labelStyle: { fill: '#3b82f6', fontSize: 10, fontWeight: 600 },
-        style: { 
-          stroke: '#3b82f6', 
+        style: {
+          stroke: '#3b82f6',
           strokeWidth: 2,
           strokeDasharray: '5,5', // Dashed to distinguish from hierarchy
         },
@@ -1305,10 +1328,10 @@ function MindmapStudio2Content() {
         animated: true, // Animated to show they're AI-suggested
         data: { aiGenerated: true, reason: s.reason },
       }));
-      
+
       setEdges(eds => [...eds, ...newEdges]);
       console.log(`✨ Added ${newEdges.length} smart connections!`);
-      
+
     } catch (error) {
       console.error('❌ Auto-connect failed:', error);
       throw error; // Re-throw so modal can catch it
@@ -1323,22 +1346,22 @@ function MindmapStudio2Content() {
     }
 
     const context = buildMindmapContext();
-    
+
     try {
       console.log('📊 Running quality audit...');
-      
+
       // Rule-based checks
-      const orphanedNodes = nodes.filter(n => 
+      const orphanedNodes = nodes.filter(n =>
         !edges.some(e => e.target === n.id) && !edges.some(e => e.source === n.id)
       );
-      const overloadedNodes = nodes.filter(n => 
+      const overloadedNodes = nodes.filter(n =>
         edges.filter(e => e.source === n.id).length > 10
       );
-      const leafNodes = nodes.filter(n => 
+      const leafNodes = nodes.filter(n =>
         !edges.some(e => e.source === n.id) && edges.some(e => e.target === n.id)
       );
       const rootNodes = nodes.filter(n => !edges.some(e => e.target === n.id));
-      
+
       // AI Analysis
       const aiPrompt = `Analyze this mindmap and provide a quality assessment:
 
@@ -1362,7 +1385,7 @@ Provide a JSON response:
 
       const aiResponse = await aiService.generateContent(aiPrompt, { temperature: 0.3 });
       const analysis = JSON.parse(aiResponse.match(/\{[\s\S]*\}/)?.[0] || '{}');
-      
+
       // Build report
       const report = `
 📊 QUALITY AUDIT REPORT
@@ -1387,10 +1410,10 @@ ${analysis.issues?.map((i: any) => `  • [${i.severity.toUpperCase()}] ${i.desc
 💡 SUGGESTIONS:
 ${analysis.suggestions?.map((s: string) => `  • ${s}`).join('\n') || '  • Keep up the good work!'}
 `;
-      
+
       console.log('📊 Quality Audit Report:\n', report);
       console.log('✅ Quality audit complete');
-      
+
     } catch (error) {
       console.error('❌ Quality audit failed:', error);
       throw error; // Re-throw so modal can catch it
@@ -1406,25 +1429,25 @@ ${analysis.suggestions?.map((s: string) => `  • ${s}`).join('\n') || '  • Ke
 
     try {
       console.log('🎯 Generating mindmap from goal:', goal);
-      
+
       // Generate mindmap with AI
       const generatedMindmap = await mindmapAIService.generateMindmapFromPrompt(
         goal,
         undefined,
         { depth: 3, style: 'detailed' }
       );
-      
+
       // Convert to React Flow format
       const rfNodes: Node[] = generatedMindmap.nodes.map(n => ({
         id: n.id || `node-${Date.now()}-${Math.random()}`,
         type: 'mindNode',
         position: { x: 0, y: 0 }, // Will be layouted
-        data: { 
+        data: {
           label: n.label,
           description: n.description,
         },
       }));
-      
+
       const rfEdges: Edge[] = generatedMindmap.edges.map(e => ({
         id: `edge-${e.source}-${e.target}`,
         source: e.source,
@@ -1433,38 +1456,38 @@ ${analysis.suggestions?.map((s: string) => `  • ${s}`).join('\n') || '  • Ke
         markerEnd: { type: 'arrowclosed', color: '#64748b' },
         style: { stroke: '#64748b', strokeWidth: 2 },
       }));
-      
+
       if (rfNodes.length === 0) {
         console.error('❌ Failed to generate mindmap');
         throw new Error('Failed to generate mindmap. Please try a different goal');
       }
-      
+
       // Confirm replacement
       const confirmed = confirm(
         `🎯 AI generated a mindmap with ${rfNodes.length} nodes!\n\n` +
         `Title: "${generatedMindmap.title}"\n\n` +
         `This will REPLACE your current mindmap. Continue?`
       );
-      
+
       if (!confirmed) {
         console.log('❌ User cancelled goal generation');
         return;
       }
-      
+
       // Apply tree layout
       console.log('🎨 Applying tree layout...');
-      const { nodes: layoutedNodes, edges: layoutedEdges } = 
+      const { nodes: layoutedNodes, edges: layoutedEdges } =
         await getLayoutedElements(rfNodes, rfEdges, 'tree');
-      
+
       // Replace nodes and edges
       setTitle(generatedMindmap.title);
       setNodes(layoutedNodes);
       setEdges(layoutedEdges);
       setCurrentLayout('tree');
-      
+
       console.log(`✨ Generated ${layoutedNodes.length} nodes with hierarchical layout!`);
       console.log('✅ Goal generation complete');
-      
+
     } catch (error) {
       console.error('❌ Goal generation failed:', error);
       throw error; // Re-throw so modal can catch it
@@ -1479,22 +1502,22 @@ ${analysis.suggestions?.map((s: string) => `  • ${s}`).join('\n') || '  • Ke
     }
 
     const context = buildMindmapContext();
-    
+
     try {
       console.log('✨ Analyzing structure for reorganization...');
-      
+
       // Analyze current structure
-      const orphanedNodes = nodes.filter(n => 
+      const orphanedNodes = nodes.filter(n =>
         !edges.some(e => e.target === n.id) && !edges.some(e => e.source === n.id)
       );
-      const overloadedNodes = nodes.filter(n => 
+      const overloadedNodes = nodes.filter(n =>
         edges.filter(e => e.source === n.id).length > 10
       );
       const singleChildChains = nodes.filter(n => {
         const children = edges.filter(e => e.source === n.id);
         return children.length === 1 && edges.filter(e => e.target === n.id).length === 1;
       });
-      
+
       // Build AI prompt
       const aiPrompt = `Analyze this mindmap structure and suggest improvements:
 
@@ -1533,7 +1556,7 @@ Respond with JSON:
 
       const aiResponse = await aiService.generateContent(aiPrompt, { temperature: 0.4 });
       const suggestions = JSON.parse(aiResponse.match(/\{[\s\S]*\}/)?.[0] || '{}');
-      
+
       // Show suggestions
       const report = `
 ✨ REORGANIZATION SUGGESTIONS
@@ -1545,26 +1568,26 @@ SUMMARY:
 ${suggestions.summary || 'No major issues found'}
 
 📊 GROUPINGS (${suggestions.groupings?.length || 0}):
-${suggestions.groupings?.map((g: any) => 
-  `  • "${g.milestone}" - ${g.nodeIds?.length || 0} nodes`
-).join('\n') || '  None suggested'}
+${suggestions.groupings?.map((g: any) =>
+        `  • "${g.milestone}" - ${g.nodeIds?.length || 0} nodes`
+      ).join('\n') || '  None suggested'}
 
 🔗 MERGES (${suggestions.merges?.length || 0}):
-${suggestions.merges?.map((m: any) => 
-  `  • Merge ${m.nodeIds?.length || 0} nodes → "${m.newLabel}"`
-).join('\n') || '  None suggested'}
+${suggestions.merges?.map((m: any) =>
+        `  • Merge ${m.nodeIds?.length || 0} nodes → "${m.newLabel}"`
+      ).join('\n') || '  None suggested'}
 
 ↔️ MOVES (${suggestions.moves?.length || 0}):
-${suggestions.moves?.map((m: any) => 
-  `  • Move node to different parent - ${m.reason}`
-).join('\n') || '  None suggested'}
+${suggestions.moves?.map((m: any) =>
+        `  • Move node to different parent - ${m.reason}`
+      ).join('\n') || '  None suggested'}
 
 Note: Auto-apply coming soon! For now, use these suggestions manually.
 `;
-      
+
       alert(report);
       console.log('✅ Reorganization analysis complete');
-      
+
     } catch (error) {
       console.error('❌ Reorganize failed:', error);
       alert('❌ Failed to analyze structure. Please try again.');
@@ -1593,44 +1616,44 @@ Note: Auto-apply coming soon! For now, use these suggestions manually.
   // Undo last AI action
   const handleUndo = useCallback(() => {
     const result = actionHistoryManager.undo();
-    
+
     if (!result) {
       setChatMessages(prev => [...prev, { role: 'ai', content: '⚠️ Nothing to undo!' }]);
       return;
     }
-    
+
     console.log('↩️ Undoing:', result.description);
-    
+
     // Restore previous state
     setNodes(result.nodes);
     setEdges(result.edges);
-    
+
     // Show feedback in chat
-    setChatMessages(prev => [...prev, { 
-      role: 'ai', 
-      content: `↩️ Undone: ${result.description}` 
+    setChatMessages(prev => [...prev, {
+      role: 'ai',
+      content: `↩️ Undone: ${result.description}`
     }]);
   }, [setNodes, setEdges]);
 
   // Redo last undone action
   const handleRedo = useCallback(() => {
     const result = actionHistoryManager.redo();
-    
+
     if (!result) {
       setChatMessages(prev => [...prev, { role: 'ai', content: '⚠️ Nothing to redo!' }]);
       return;
     }
-    
+
     console.log('↪️ Redoing:', result.description);
-    
+
     // Restore next state
     setNodes(result.nodes);
     setEdges(result.edges);
-    
+
     // Show feedback in chat
-    setChatMessages(prev => [...prev, { 
-      role: 'ai', 
-      content: `↪️ Redone: ${result.description}` 
+    setChatMessages(prev => [...prev, {
+      role: 'ai',
+      content: `↪️ Redone: ${result.description}`
     }]);
   }, [setNodes, setEdges]);
 
@@ -1661,28 +1684,28 @@ Note: Auto-apply coming soon! For now, use these suggestions manually.
   // Utility: Find nodes by pattern for multi-node operations
   const findNodesByPattern = useCallback((pattern: string, targetString: string): Node[] => {
     console.log(`🔍 Finding nodes by pattern: "${pattern}" from target: "${targetString}"`);
-    
+
     // Handle special cases
     if (targetString === 'all') {
       console.log(`✅ Found ALL nodes: ${nodes.length}`);
       return nodes;
     }
-    
+
     // Extract pattern from "pattern:keyword" format
-    const keyword = targetString.startsWith('pattern:') 
-      ? targetString.replace('pattern:', '') 
+    const keyword = targetString.startsWith('pattern:')
+      ? targetString.replace('pattern:', '')
       : pattern || targetString;
-    
+
     if (!keyword) {
       console.warn('⚠️ No keyword provided for pattern matching');
       return [];
     }
-    
+
     // Find nodes whose labels include the keyword (case-insensitive)
-    const matchedNodes = nodes.filter(node => 
+    const matchedNodes = nodes.filter(node =>
       node.data.label.toLowerCase().includes(keyword.toLowerCase())
     );
-    
+
     console.log(`✅ Found ${matchedNodes.length} nodes matching "${keyword}":`, matchedNodes.map(n => n.data.label));
     return matchedNodes;
   }, [nodes]);
@@ -1699,12 +1722,12 @@ Note: Auto-apply coming soon! For now, use these suggestions manually.
     setChatLoading(true);
 
     const context = buildMindmapContext();
-    
+
     // BRAINSTORM MODE: Conversational AI like ChatGPT
     if (chatMode === 'brainstorm') {
       try {
         console.log('💭 Brainstorm mode - having conversation...');
-        
+
         // Check if user wants to commit ideas to mindmap
         const commitPhrases = [
           'add them',
@@ -1718,15 +1741,15 @@ Note: Auto-apply coming soon! For now, use these suggestions manually.
           'add to mindmap',
           'create it',
         ];
-        
-        const isReadyToCommit = commitPhrases.some(phrase => 
+
+        const isReadyToCommit = commitPhrases.some(phrase =>
           prompt.toLowerCase().includes(phrase)
         );
-        
+
         if (isReadyToCommit) {
           console.log('✅ User ready to commit! Extracting ideas and creating nodes...');
           console.log('🎯 Discussion target node:', discussionTargetNode);
-          
+
           // Switch to command mode temporarily to execute
           const extractPrompt = `Based on our conversation, extract the key ideas that should be added to the mindmap.
 
@@ -1752,39 +1775,39 @@ Extract the main topics/ideas that should become mindmap nodes. Respond with JSO
           const extractResponse = await aiService.generateContent(extractPrompt, { temperature: 0.3 });
           let jsonStr = extractResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '');
           const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
-          
+
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]);
-            
+
             // Find target node - prioritize discussion target!
             let targetNode: Node | undefined;
-            
+
             if (discussionTargetNode) {
               // Find the node we were discussing
-              targetNode = nodes.find(n => 
+              targetNode = nodes.find(n =>
                 n.data.label.toLowerCase() === discussionTargetNode.toLowerCase()
               );
               console.log(`🎯 Found discussion target: "${targetNode?.data.label}"`);
             }
-            
+
             // Fallback to root if no discussion target
             if (!targetNode) {
               targetNode = nodes.find(n => !edges.some(e => e.target === n.id)) || nodes[0];
               console.log(`📍 Using fallback target: "${targetNode?.data.label}"`);
             }
-            
+
             // Generate nodes from topics
             const topics = parsed.details.topics || [];
             const newNodes: Node[] = topics.map((topic: string, idx: number) => ({
               id: `node-${Date.now()}-${idx}`,
               type: 'mindNode',
-              position: { 
-                x: (targetNode?.position.x || 400) + (idx - Math.floor(topics.length / 2)) * 250, 
-                y: (targetNode?.position.y || 300) + 150 
+              position: {
+                x: (targetNode?.position.x || 400) + (idx - Math.floor(topics.length / 2)) * 250,
+                y: (targetNode?.position.y || 300) + 150
               },
               data: { label: topic },
             }));
-            
+
             const newEdges: Edge[] = newNodes.map(n => ({
               id: `edge-${targetNode?.id || nodes[0].id}-${n.id}`,
               source: targetNode?.id || nodes[0].id,
@@ -1793,16 +1816,16 @@ Extract the main topics/ideas that should become mindmap nodes. Respond with JSO
               markerEnd: { type: 'arrowclosed', color: '#64748b' },
               style: { stroke: '#64748b', strokeWidth: 2 },
             }));
-            
+
             setNodes(nds => [...nds, ...newNodes]);
             setEdges(eds => [...eds, ...newEdges]);
-            
+
             const targetName = targetNode?.data.label || 'root';
-            setChatMessages(prev => [...prev, { 
-              role: 'ai', 
+            setChatMessages(prev => [...prev, {
+              role: 'ai',
               content: `✅ Great! I've added ${newNodes.length} nodes under "${targetName}":\n\n${topics.map((t: string) => `• ${t}`).join('\n')}\n\nWhat would you like to explore next?`
             }]);
-            
+
             // Clear conversation context AND discussion target after committing
             setConversationContext([]);
             setDiscussionTargetNode(null);
@@ -1811,18 +1834,18 @@ Extract the main topics/ideas that should become mindmap nodes. Respond with JSO
         } else {
           // Continue brainstorming conversation
           console.log('💬 Continuing brainstorm conversation...');
-          
+
           // Detect if user mentioned a specific node (track discussion target)
           const nodeList = nodes.map(n => n.data.label);
-          const mentionedNode = nodeList.find(label => 
+          const mentionedNode = nodeList.find(label =>
             prompt.toLowerCase().includes(label.toLowerCase())
           );
-          
+
           if (mentionedNode) {
             console.log(`🎯 User mentioned node: "${mentionedNode}" - setting as discussion target`);
             setDiscussionTargetNode(mentionedNode);
           }
-          
+
           const brainstormPrompt = `You are a brainstorming partner for mindmap creation. Have a natural conversation like ChatGPT.
 
 Current Mindmap: "${title}" with ${nodes.length} nodes
@@ -1853,20 +1876,20 @@ Keep responses concise (3-5 sentences) unless providing a list of ideas.
 
 IMPORTANT: Do NOT include JSON or commands. Just have a natural conversation.`;
 
-          const response = await aiService.generateContent(brainstormPrompt, { 
+          const response = await aiService.generateContent(brainstormPrompt, {
             systemPrompt: brainstormPrompt,
-            temperature: 0.7 
+            temperature: 0.7
           });
-          
+
           setChatMessages(prev => [...prev, { role: 'ai', content: response }]);
-          
+
           // Track conversation context
           setConversationContext(prev => [...prev, `User: ${prompt}`, `AI: ${response}`]);
         }
       } catch (error) {
         console.error('❌ Brainstorm error:', error);
-        setChatMessages(prev => [...prev, { 
-          role: 'ai', 
+        setChatMessages(prev => [...prev, {
+          role: 'ai',
           content: `❌ Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}`
         }]);
       } finally {
@@ -1874,23 +1897,23 @@ IMPORTANT: Do NOT include JSON or commands. Just have a natural conversation.`;
       }
       return; // Exit early - brainstorm mode handled
     }
-    
+
     // COMMAND MODE: Direct execution (original behavior)
     try {
       console.log('⚡ Command mode - executing directly...');
-      
+
       // Parse command with AI
       const nodeList = nodes.map(n => n.data.label).join(', ');
-      
+
       // Get conversation context
       const contextSummary = chatContextManager.getContextSummary(
         nodes.map(n => ({ id: n.id, label: n.data.label }))
       );
-      
+
       // Check if command contains pronouns
       const hasPronoun = chatContextManager.containsPronoun(prompt);
-      
-        const parsePrompt = `Parse this mindmap command and determine the action. BE ACTION-ORIENTED! Support MULTI-NODE operations and CONTEXT-AWARE pronouns.
+
+      const parsePrompt = `Parse this mindmap command and determine the action. BE ACTION-ORIENTED! Support MULTI-NODE operations and CONTEXT-AWARE pronouns.
 
 User Command: "${prompt}"
 
@@ -1952,62 +1975,62 @@ Examples:
 - "What's missing?" → {"action": "analyze", "target": "none", "isMultiNode": false, "useContext": false, "response": "Analyzing mindmap..."}`;
 
       const parseResponse = await aiService.generateContent(parsePrompt, { temperature: 0.3 });
-      
+
       console.log('📥 Raw AI Response:', parseResponse);
-      
+
       // Extract JSON from response (handles markdown code blocks)
       let jsonStr = parseResponse;
-      
+
       // Remove markdown code blocks if present
       if (jsonStr.includes('```')) {
         console.log('🔧 Removing markdown code blocks...');
         jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '');
       }
-      
+
       console.log('🔍 Cleaned JSON string:', jsonStr);
-      
+
       // Extract JSON object
       const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         console.error('❌ No JSON found in response!');
         throw new Error('No JSON found in AI response');
       }
-      
+
       console.log('✂️ Extracted JSON:', jsonMatch[0]);
-      
+
       const parsed = JSON.parse(jsonMatch[0]);
-      
+
       console.log('✅ Parsed command:', parsed);
       console.log('📍 Target node:', parsed.target);
-      
+
       // Execute based on action type
       switch (parsed.action) {
         case 'add': {
           // Extract exact node name from quotes if present (from slash command)
           const quotedMatch = prompt.match(/"([^"]+)"/);
           let exactNodeName = quotedMatch ? quotedMatch[1] : null;
-          
+
           // Find target node - be smart about it!
           let targetNode = exactNodeName
             ? nodes.find(n => n.data.label === exactNodeName) // Exact match from slash command
             : nodes.find(n => n.data.label.toLowerCase().includes(parsed.target.toLowerCase())); // Fuzzy match
-          
+
           // If no specific target, use root or first node
           if (!targetNode && (parsed.target === 'all' || parsed.target === 'none' || parsed.target === 'root' || !parsed.target)) {
             // Find root node (no incoming edges)
             targetNode = nodes.find(n => !edges.some(e => e.target === n.id)) || nodes[0];
             console.log(`✅ Using root node: "${targetNode?.data.label}"`);
           }
-          
+
           if (!targetNode) {
             const errorMsg = `❌ Couldn't find node "${parsed.target || exactNodeName}". Try using / to select a node precisely.`;
             setChatMessages(prev => [...prev, { role: 'ai', content: errorMsg }]);
             console.error(errorMsg);
             return;
           }
-          
+
           console.log(`✅ Found target node: "${targetNode.data.label}"`);
-          
+
           // Generate new nodes
           const count = parsed.details.count || 3;
           const children = await mindmapAIService.generateChildNodes(
@@ -2015,18 +2038,18 @@ Examples:
             context,
             { count, focus: parsed.details.topic }
           );
-          
+
           // Add to canvas
           const newNodes: Node[] = children.map((child, idx) => ({
             id: `node-${Date.now()}-${idx}`,
             type: 'mindNode',
-            position: { 
-              x: (targetNode?.position.x || 400) + (idx - 1) * 250, 
-              y: (targetNode?.position.y || 300) + 150 
+            position: {
+              x: (targetNode?.position.x || 400) + (idx - 1) * 250,
+              y: (targetNode?.position.y || 300) + 150
             },
             data: { label: child.label, description: child.description },
           }));
-          
+
           const newEdges: Edge[] = newNodes.map(n => ({
             id: `edge-${targetNode?.id || nodes[0].id}-${n.id}`,
             source: targetNode?.id || nodes[0].id,
@@ -2035,13 +2058,13 @@ Examples:
             markerEnd: { type: 'arrowclosed', color: '#64748b' },
             style: { stroke: '#64748b', strokeWidth: 2 },
           }));
-          
+
           // Record in history (BEFORE state)
           const beforeState = { nodes: [...nodes], edges: [...edges] };
-          
+
           setNodes(nds => [...nds, ...newNodes]);
           setEdges(eds => [...eds, ...newEdges]);
-          
+
           // Record in history (AFTER state)
           const afterState = { nodes: [...nodes, ...newNodes], edges: [...edges, ...newEdges] };
           actionHistoryManager.recordAction(
@@ -2051,54 +2074,54 @@ Examples:
             afterState,
             newNodes.map(n => n.id)
           );
-          
+
           // Record in context
           chatContextManager.recordAction('add', newNodes.map(n => n.id), `Added ${newNodes.length} nodes to "${targetNode?.data.label || 'root'}"`);
-          
+
           // Add AI response to chat
           const aiResponse = `✅ ${parsed.response}\n\nAdded ${newNodes.length} new nodes!`;
           setChatMessages(prev => [...prev, { role: 'ai', content: aiResponse }]);
           break;
         }
-        
+
         case 'modify': {
           // Check if using context (pronouns)
           if (parsed.useContext) {
             console.log('🧠 Context-aware command detected');
-            
+
             // Resolve nodes from context
             const contextNodeIds = chatContextManager.resolvePronoun(prompt);
-            
+
             if (!contextNodeIds || contextNodeIds.length === 0) {
               const errorMsg = `❌ I don't have any recent context to work with. Try being more specific or adding/modifying nodes first.`;
               setChatMessages(prev => [...prev, { role: 'ai', content: errorMsg }]);
               return;
             }
-            
+
             // Find the actual nodes
             const targetNodes = nodes.filter(n => contextNodeIds.includes(n.id));
-            
+
             if (targetNodes.length === 0) {
               const errorMsg = `❌ The nodes I was working with seem to have been deleted.`;
               setChatMessages(prev => [...prev, { role: 'ai', content: errorMsg }]);
               return;
             }
-            
+
             console.log(`✅ Resolved context to ${targetNodes.length} nodes:`, targetNodes.map(n => n.data.label));
-            
+
             // Show action feedback
             const nodeNames = targetNodes.slice(0, 3).map(n => n.data.label).join(', ') + (targetNodes.length > 3 ? '...' : '');
             setChatMessages(prev => [...prev, { role: 'ai', content: `🔄 ${parsed.response}\n\nWorking on: ${nodeNames}` }]);
-            
+
             // Enhance all nodes in parallel
             const enhancementPromises = targetNodes.map(async (node) => {
               try {
                 const enhanced = await mindmapAIService.enhanceNode(
                   node.id,
                   context,
-                  { 
-                    type: parsed.details.changes?.includes('creative') || parsed.details.changes?.includes('creativity') 
-                      ? 'description' 
+                  {
+                    type: parsed.details.changes?.includes('creative') || parsed.details.changes?.includes('creativity')
+                      ? 'description'
                       : 'both',
                     style: 'creative'
                   }
@@ -2109,22 +2132,22 @@ Examples:
                 return { nodeId: node.id, enhanced: null, success: false };
               }
             });
-            
+
             const results = await Promise.all(enhancementPromises);
             const successCount = results.filter(r => r.success).length;
-            
+
             // Capture before state
             const beforeNodesState = [...nodes];
             const beforeEdgesState = [...edges];
-            
+
             // Update all nodes at once
             const updatedNodes = nodes.map(n => {
               const result = results.find(r => r.nodeId === n.id && r.success);
               return result ? { ...n, data: { ...n.data, ...result.enhanced } } : n;
             });
-            
+
             setNodes(updatedNodes);
-            
+
             // Record in history
             recordInHistory(
               'modify',
@@ -2135,43 +2158,43 @@ Examples:
               edges,
               contextNodeIds
             );
-            
+
             // Record in context
             chatContextManager.recordAction('modify', contextNodeIds, `Enhanced ${targetNodes.length} nodes`);
-            
+
             // Show success message
             const successMsg = `✅ Enhanced ${successCount}/${targetNodes.length} nodes!`;
             setChatMessages(prev => [...prev, { role: 'ai', content: successMsg }]);
             break;
           }
-          
+
           // Check if multi-node operation
           if (parsed.isMultiNode) {
             console.log('🔄 Multi-node modification detected');
-            
+
             // Find all matching nodes
             const targetNodes = findNodesByPattern(parsed.details?.pattern || '', parsed.target);
-            
+
             if (targetNodes.length === 0) {
               const errorMsg = `❌ No nodes found matching "${parsed.details?.pattern || parsed.target}".`;
               setChatMessages(prev => [...prev, { role: 'ai', content: errorMsg }]);
               return;
             }
-            
+
             console.log(`✅ Found ${targetNodes.length} nodes for modification`);
-            
+
             // Show action feedback
             setChatMessages(prev => [...prev, { role: 'ai', content: `🔄 ${parsed.response}\n\nEnhancing ${targetNodes.length} nodes...` }]);
-            
+
             // Enhance all nodes in parallel
             const enhancementPromises = targetNodes.map(async (node) => {
               try {
                 const enhanced = await mindmapAIService.enhanceNode(
                   node.id,
                   context,
-                  { 
-                    type: parsed.details.changes?.includes('creative') || parsed.details.changes?.includes('creativity') 
-                      ? 'description' 
+                  {
+                    type: parsed.details.changes?.includes('creative') || parsed.details.changes?.includes('creativity')
+                      ? 'description'
                       : 'both',
                     style: 'creative'
                   }
@@ -2182,22 +2205,22 @@ Examples:
                 return { nodeId: node.id, enhanced: null, success: false };
               }
             });
-            
+
             const results = await Promise.all(enhancementPromises);
             const successCount = results.filter(r => r.success).length;
-            
+
             // Capture before state
             const beforeNodesState = [...nodes];
             const beforeEdgesState = [...edges];
-            
+
             // Update all nodes at once
             const updatedNodes = nodes.map(n => {
               const result = results.find(r => r.nodeId === n.id && r.success);
               return result ? { ...n, data: { ...n.data, ...result.enhanced } } : n;
             });
-            
+
             setNodes(updatedNodes);
-            
+
             // Record in history
             recordInHistory(
               'modify',
@@ -2208,62 +2231,62 @@ Examples:
               edges,
               targetNodes.map(n => n.id)
             );
-            
+
             // Record in context
             chatContextManager.recordAction('modify', targetNodes.map(n => n.id), `Enhanced ${targetNodes.length} nodes`);
-            
+
             // Show success message
             const successMsg = `✅ Enhanced ${successCount}/${targetNodes.length} nodes!\n\n📊 Updated: ${targetNodes.slice(0, 3).map(n => n.data.label).join(', ')}${targetNodes.length > 3 ? '...' : ''}`;
             setChatMessages(prev => [...prev, { role: 'ai', content: successMsg }]);
             break;
           }
-          
+
           // Single-node modification (original logic)
           const quotedMatch = prompt.match(/"([^"]+)"/);
           let exactNodeName = quotedMatch ? quotedMatch[1] : null;
-          
+
           // Find target node
           let targetNode = exactNodeName
             ? nodes.find(n => n.data.label === exactNodeName)
             : nodes.find(n => n.data.label.toLowerCase().includes(parsed.target.toLowerCase()));
-          
+
           if (!targetNode) {
             const errorMsg = `❌ Couldn't find node "${parsed.target || exactNodeName}". Try using / to select a node precisely.`;
             setChatMessages(prev => [...prev, { role: 'ai', content: errorMsg }]);
             console.error(errorMsg);
             return;
           }
-          
+
           console.log(`✅ Found target node for modification: "${targetNode.data.label}"`);
-          
+
           // Show action feedback
           setChatMessages(prev => [...prev, { role: 'ai', content: `🔄 ${parsed.response}` }]);
-          
+
           // Capture before state
           const beforeNodesState = [...nodes];
           const beforeEdgesState = [...edges];
-          
+
           // Use AI to enhance the node
           const enhanced = await mindmapAIService.enhanceNode(
             targetNode.id,
             context,
-            { 
-              type: parsed.details.changes?.includes('creative') || parsed.details.changes?.includes('creativity') 
-                ? 'description' 
+            {
+              type: parsed.details.changes?.includes('creative') || parsed.details.changes?.includes('creativity')
+                ? 'description'
                 : 'both',
               style: 'creative'
             }
           );
-          
+
           // Update the node with enhanced content
-          const updatedNodes = nodes.map(n => 
-            n.id === targetNode.id 
+          const updatedNodes = nodes.map(n =>
+            n.id === targetNode.id
               ? { ...n, data: { ...n.data, ...enhanced } }
               : n
           );
-          
+
           setNodes(updatedNodes);
-          
+
           // Record in history
           recordInHistory(
             'modify',
@@ -2274,16 +2297,16 @@ Examples:
             edges,
             [targetNode.id]
           );
-          
+
           // Record in context
           chatContextManager.recordAction('modify', [targetNode.id], `Enhanced "${targetNode.data.label}"`);
-          
+
           // Show success message
           const successMsg = `✅ Enhanced "${targetNode.data.label}"!\n\n📝 ${enhanced.description || 'Updated with richer content.'}`;
           setChatMessages(prev => [...prev, { role: 'ai', content: successMsg }]);
           break;
         }
-        
+
         case 'analyze': {
           // Add AI response to chat
           setChatMessages(prev => [...prev, { role: 'ai', content: '📊 Running quality audit...' }]);
@@ -2291,7 +2314,7 @@ Examples:
           await handleQualityAudit();
           break;
         }
-        
+
         case 'organize': {
           // Add AI response to chat
           setChatMessages(prev => [...prev, { role: 'ai', content: '✨ Analyzing structure for reorganization...' }]);
@@ -2299,30 +2322,30 @@ Examples:
           await handleReorganize();
           break;
         }
-        
+
         case 'query': {
           // Add AI response to chat
           setChatMessages(prev => [...prev, { role: 'ai', content: parsed.response }]);
           break;
         }
-        
+
         default: {
           // Add AI response to chat
           setChatMessages(prev => [...prev, { role: 'ai', content: parsed.response || 'Command received, but not yet implemented!' }]);
         }
       }
-      
+
       console.log('✅ Chat command executed');
-      
+
     } catch (error) {
       console.error('❌ Chat command failed:', error);
       console.error('Error details:', error);
-      
+
       // Show detailed error in chat for debugging
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      setChatMessages(prev => [...prev, { 
-        role: 'ai', 
-        content: `❌ Failed to understand command.\n\nError: ${errorMessage}\n\nPlease try:\n• Using / to select a node\n• Being more specific\n• Check console for details` 
+      setChatMessages(prev => [...prev, {
+        role: 'ai',
+        content: `❌ Failed to understand command.\n\nError: ${errorMessage}\n\nPlease try:\n• Using / to select a node\n• Being more specific\n• Check console for details`
       }]);
     } finally {
       setChatLoading(false);
@@ -2340,12 +2363,12 @@ Examples:
   // Handle chat input changes - detect "/" for node selector
   const handleChatInputChange = useCallback((value: string) => {
     setChatInput(value);
-    
+
     // Check if "/" is present and show node dropdown
     const lastSlashIndex = value.lastIndexOf('/');
     if (lastSlashIndex !== -1) {
       const searchTerm = value.slice(lastSlashIndex + 1).toLowerCase();
-      const filtered = nodes.filter(n => 
+      const filtered = nodes.filter(n =>
         n.data.label.toLowerCase().includes(searchTerm)
       );
       setFilteredNodes(filtered);
@@ -2370,13 +2393,13 @@ Examples:
       chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
     }
   }, [chatMessages]);
-  
+
   // Load template
   // Handle AI Tools actions
   const handleAIAction = useCallback(async (action: AIAction) => {
     console.log('🤖 AI ACTION:', action.type, action.data);
     setAILoading(true);
-    
+
     try {
       switch (action.type) {
         case 'expand-all':
@@ -2435,7 +2458,7 @@ Examples:
     setEdges(templateEdges);
     console.log(`✅ Loaded template: ${template.name}`);
   }, [setNodes, setEdges]);
-  
+
   // Load session from Editor on mount
   useEffect(() => {
     const session = sessionService.getSession();
@@ -2443,12 +2466,12 @@ Examples:
       console.log('📖 Loading session from Editor:', session.sessionId);
       setHasEditorSession(true);
       setTitle(session.documentTitle);
-      
+
       // Parse Mermaid diagram to nodes/edges
       try {
         const generator = new MindmapGenerator();
         const mindmapData = generator.fromMermaid(session.diagramCode);
-        
+
         // Convert to React Flow format
         const rfNodes: Node[] = mindmapData.nodes.map((n) => ({
           id: n.id,
@@ -2456,14 +2479,14 @@ Examples:
           position: { x: 0, y: 0 }, // Temporary position, will be layouted
           data: { label: n.text },
         }));
-        
+
         const rfEdges: Edge[] = mindmapData.connections.map((c) => ({
           id: `e-${c.from}-${c.to}`,
           source: c.from,
           target: c.to,
           type: 'smoothstep',
         }));
-        
+
         if (rfNodes.length > 0) {
           // Apply ELK tree layout for hierarchical presentation
           console.log('🎨 Applying hierarchical tree layout...');
@@ -2473,7 +2496,7 @@ Examples:
               ...edge,
               type: 'default', // Bezier curves
             }));
-            
+
             setNodes(layoutedNodes);
             setEdges(bezierEdges);
             setCurrentLayout('tree');
@@ -2487,13 +2510,16 @@ Examples:
       } catch (error) {
         console.error('Failed to parse Mermaid from session:', error);
       }
+
+      // Clear session so we don't reload it on refresh (persistence handled by store now)
+      sessionService.clearSession();
     }
   }, []); // Run once on mount
 
   // Inject callbacks into ALL nodes whenever they change
   useEffect(() => {
-    const nodesNeedingCallbacks = nodes.filter(n => 
-      (n.type === 'milestone' && !n.data.onDelete) || 
+    const nodesNeedingCallbacks = nodes.filter(n =>
+      (n.type === 'milestone' && !n.data.onDelete) ||
       (n.type !== 'milestone' && !n.data.onAddChild)
     );
 
@@ -2507,7 +2533,7 @@ Examples:
       nodesCount: nodes.length,
       nodesNeedingCallbacks: nodesNeedingCallbacks.length,
     });
-    
+
     setNodes((nds) =>
       nds.map((node) => {
         // Inject callbacks based on node type
@@ -2562,56 +2588,56 @@ Examples:
           {/* Back to Editor Button (only show if in workspace) */}
           {isInWorkspace && (
             <>
-              <Button 
-                size="sm" 
+              <Button
+                size="sm"
                 variant="outline"
                 onClick={handleBackToEditor}
                 className="text-primary hover:bg-primary/10"
                 title="Save mindmap and return to editor"
               >
-                <ArrowLeft className="h-4 w-4 mr-2"/>Back
+                <ArrowLeft className="h-4 w-4 mr-2" />Back
               </Button>
               <Separator orientation="vertical" className="h-6" />
             </>
           )}
-          
+
           {/* File Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="sm" variant="outline" className="hover:bg-muted">
-                <FileText className="h-4 w-4 mr-2"/>
+                <FileText className="h-4 w-4 mr-2" />
                 File
                 <ChevronDown className="h-3 w-3 ml-2 opacity-50" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-48">
               <DropdownMenuItem onClick={() => setShowTemplateModal(true)}>
-                <FileText className="h-4 w-4 mr-2"/>
+                <FileText className="h-4 w-4 mr-2" />
                 Templates
               </DropdownMenuItem>
               <DropdownMenuItem>
-                <Upload className="h-4 w-4 mr-2"/>
+                <Upload className="h-4 w-4 mr-2" />
                 Import
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setShowExportModal(true)}>
-                <Download className="h-4 w-4 mr-2"/>
+                <Download className="h-4 w-4 mr-2" />
                 Export
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          
+
           {/* Add Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="sm" className="gradient-primary text-white hover:opacity-90">
-                <Plus className="h-4 w-4 mr-2"/>
+                <Plus className="h-4 w-4 mr-2" />
                 Add
                 <ChevronDown className="h-3 w-3 ml-2" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-48">
               <DropdownMenuItem onClick={addNode}>
-                <Plus className="h-4 w-4 mr-2"/>
+                <Plus className="h-4 w-4 mr-2" />
                 New Node
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setShowIconPickerModal(true)}>
@@ -2619,25 +2645,25 @@ Examples:
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          
+
           {/* Group Button - Visible on toolbar to avoid losing selection */}
-          <Button 
-            size="sm" 
-            variant="outline" 
+          <Button
+            size="sm"
+            variant="outline"
             onClick={createMilestone}
             disabled={selectedNodeIds.length < 2}
             className="hover:bg-muted"
             title={selectedNodeIds.length < 2 ? "Select 2+ nodes to group" : `Group ${selectedNodeIds.length} selected nodes`}
           >
-            <Folder className="h-4 w-4 mr-2"/>
+            <Folder className="h-4 w-4 mr-2" />
             Group {selectedNodeIds.length > 0 && `(${selectedNodeIds.length})`}
           </Button>
-          
+
           {/* Node Style Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="sm" variant="outline" className="hover:bg-muted">
-                <Palette className="h-4 w-4 mr-2"/>
+                <Palette className="h-4 w-4 mr-2" />
                 Node Style
                 <ChevronDown className="h-3 w-3 ml-2 opacity-50" />
               </Button>
@@ -2686,12 +2712,12 @@ Examples:
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          
+
           {/* Layout Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="sm" variant="outline" className="hover:bg-muted">
-                <LayoutIcon className="h-4 w-4 mr-2"/>
+                <LayoutIcon className="h-4 w-4 mr-2" />
                 Layout
                 <ChevronDown className="h-3 w-3 ml-2 opacity-50" />
               </Button>
@@ -2711,15 +2737,15 @@ Examples:
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          
+
           {/* Context Actions - Delete Connection (conditional) */}
           {(() => {
             const selectedEdges = edges.filter(e => e.selected);
             return selectedEdges.length > 0 ? (
               <>
                 <Separator orientation="vertical" className="h-6" />
-                <Button 
-                  size="sm" 
+                <Button
+                  size="sm"
                   variant="destructive"
                   onClick={() => {
                     setEdges((eds) => eds.filter(e => !e.selected));
@@ -2733,12 +2759,12 @@ Examples:
             ) : null;
           })()}
         </div>
-        
+
         {/* Right Section */}
         <div className="flex items-center gap-2">
-          <Button 
-            size="sm" 
-            variant="outline" 
+          <Button
+            size="sm"
+            variant="outline"
             onClick={handleOpenPresentationWizard}
             disabled={aiLoading || nodes.length === 0}
             title={nodes.length === 0 ? "Add nodes to generate presentation" : "Generate AI presentation from mindmap"}
@@ -2751,13 +2777,13 @@ Examples:
               </>
             ) : (
               <>
-                <Presentation className="h-4 w-4 mr-2"/>Presentation
+                <Presentation className="h-4 w-4 mr-2" />Presentation
               </>
             )}
           </Button>
-          <Button 
-            size="sm" 
-            className="gradient-primary text-white hover:opacity-90 shadow-md" 
+          <Button
+            size="sm"
+            className="gradient-primary text-white hover:opacity-90 shadow-md"
             onClick={() => setShowAIToolsModal(true)}
             disabled={aiLoading}
           >
@@ -2768,7 +2794,7 @@ Examples:
               </>
             ) : (
               <>
-                <Sparkles className="h-4 w-4 mr-2"/>AI Tools
+                <Sparkles className="h-4 w-4 mr-2" />AI Tools
               </>
             )}
           </Button>
@@ -2800,8 +2826,8 @@ Examples:
               type: 'arrowclosed',
               color: '#64748b',
             },
-            style: { 
-              stroke: '#64748b', 
+            style: {
+              stroke: '#64748b',
               strokeWidth: 2,
               strokeDasharray: edgeStyle === 'dashed' ? '5,5' : edgeStyle === 'dotted' ? '2,2' : undefined,
             },
@@ -2809,16 +2835,16 @@ Examples:
           edgesFocusable={true}
         >
           {/* Background Grid */}
-          <Background 
-            variant={BackgroundVariant.Dots} 
-            gap={20} 
-            size={1} 
+          <Background
+            variant={BackgroundVariant.Dots}
+            gap={20}
+            size={1}
             color="hsl(var(--muted-foreground))"
             className="opacity-30"
           />
 
           {/* Built-in Controls */}
-          <Controls 
+          <Controls
             showZoom={true}
             showFitView={true}
             showInteractive={true}
@@ -2826,7 +2852,7 @@ Examples:
           />
 
           {/* Built-in Minimap - Positioned bottom-left to avoid AI button */}
-          <MiniMap 
+          <MiniMap
             position="bottom-left"
             nodeColor={(node) => {
               return '#6366f1';
@@ -2841,7 +2867,7 @@ Examples:
           {/* Top-left Panel for Stats */}
           <Panel position="top-left" className="bg-card/95 border border-border rounded-lg px-4 py-2 shadow-lg">
             <div className="text-xs text-muted-foreground">
-              <span className="font-semibold">{nodes.length}</span> nodes · 
+              <span className="font-semibold">{nodes.length}</span> nodes ·
               <span className="font-semibold ml-1">{edges.length}</span> connections
             </div>
           </Panel>
@@ -2986,35 +3012,33 @@ Examples:
               </div>
             </div>
             <p className="text-xs text-purple-100 mt-1">
-              {chatMode === 'brainstorm' 
-                ? '💭 Having a conversation with you - like ChatGPT' 
+              {chatMode === 'brainstorm'
+                ? '💭 Having a conversation with you - like ChatGPT'
                 : '⚡ Direct command mode - instant execution'}
             </p>
-            
+
             {/* Mode Toggle */}
             <div className="mt-3 flex gap-2">
               <button
                 onClick={() => setChatMode('brainstorm')}
-                className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-all ${
-                  chatMode === 'brainstorm'
-                    ? 'bg-white text-purple-600 shadow-md'
-                    : 'bg-white/10 text-white hover:bg-white/20'
-                }`}
+                className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-all ${chatMode === 'brainstorm'
+                  ? 'bg-white text-purple-600 shadow-md'
+                  : 'bg-white/10 text-white hover:bg-white/20'
+                  }`}
               >
                 💬 Brainstorm
               </button>
               <button
                 onClick={() => setChatMode('command')}
-                className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-all ${
-                  chatMode === 'command'
-                    ? 'bg-white text-purple-600 shadow-md'
-                    : 'bg-white/10 text-white hover:bg-white/20'
-                }`}
+                className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-all ${chatMode === 'command'
+                  ? 'bg-white text-purple-600 shadow-md'
+                  : 'bg-white/10 text-white hover:bg-white/20'
+                  }`}
               >
                 ⚡ Command
               </button>
             </div>
-            
+
             {/* Active Context Indicator */}
             {(() => {
               // Show discussion target in brainstorm mode
@@ -3022,7 +3046,7 @@ Examples:
                 return (
                   <div className="mt-2 px-2 py-1 bg-white/10 rounded text-xs flex items-center justify-between">
                     <span>🎯 Discussing: <strong>{discussionTargetNode}</strong></span>
-                    <button 
+                    <button
                       onClick={() => setDiscussionTargetNode(null)}
                       className="text-white/60 hover:text-white ml-2"
                       title="Clear discussion target"
@@ -3032,18 +3056,18 @@ Examples:
                   </div>
                 );
               }
-              
+
               // Show context in command mode
               if (chatMode === 'command') {
                 const contextData = chatContextManager.getContext();
                 const hasContext = contextData.lastAddedNodes.length > 0 || contextData.lastModifiedNodes.length > 0;
-                
+
                 if (hasContext) {
                   const contextNodes = [...contextData.lastAddedNodes, ...contextData.lastModifiedNodes]
                     .map(id => nodes.find(n => n.id === id)?.data.label)
                     .filter(Boolean)
                     .slice(0, 2);
-                  
+
                   return (
                     <div className="mt-2 px-2 py-1 bg-white/10 rounded text-xs">
                       💡 Context: Working on {contextNodes.join(', ')}
@@ -3052,14 +3076,14 @@ Examples:
                   );
                 }
               }
-              
+
               return null;
             })()}
           </div>
 
-        {/* Chat Messages Area */}
-        <div ref={chatMessagesRef} className="p-4 h-80 overflow-y-auto bg-muted/30">
-          <div className="space-y-3">
+          {/* Chat Messages Area */}
+          <div ref={chatMessagesRef} className="p-4 h-80 overflow-y-auto bg-muted/30">
+            <div className="space-y-3">
               {/* Welcome Message */}
               {chatMessages.length === 0 && (
                 <div className="flex gap-2">
@@ -3073,7 +3097,7 @@ Examples:
                           👋 Hi! I'm your brainstorming partner, just like ChatGPT.
                         </p>
                         <p className="text-xs mt-2 text-muted-foreground">
-                          Describe what you want to create, and I'll ask questions, suggest ideas, and help you refine your thoughts. 
+                          Describe what you want to create, and I'll ask questions, suggest ideas, and help you refine your thoughts.
                           When you're ready, just say <strong>"add it"</strong> and I'll create the mindmap!
                         </p>
                         <p className="text-xs mt-2 text-purple-600 font-medium">
@@ -3108,15 +3132,14 @@ Examples:
                       <Sparkles className="h-4 w-4 text-white" />
                     </div>
                   )}
-                  <div className={`rounded-lg p-3 shadow-sm max-w-[280px] ${
-                    msg.role === 'user' 
-                      ? 'bg-indigo-500 text-white ml-auto' 
-                      : 'bg-white'
-                  }`}>
+                  <div className={`rounded-lg p-3 shadow-sm max-w-[280px] ${msg.role === 'user'
+                    ? 'bg-indigo-500 text-white ml-auto'
+                    : 'bg-white'
+                    }`}>
                     <p className="text-sm whitespace-pre-wrap">
                       {msg.role === 'ai' ? (
-                        <StreamingText 
-                          text={msg.content} 
+                        <StreamingText
+                          text={msg.content}
                           speed={3}
                         />
                       ) : (
@@ -3162,11 +3185,10 @@ Examples:
                   {filteredNodes.map((node, idx) => (
                     <div
                       key={node.id}
-                      className={`px-3 py-2 text-sm rounded cursor-pointer transition-colors ${
-                        idx === selectedNodeIndex
-                          ? 'bg-purple-100 text-purple-900 font-medium'
-                          : 'hover:bg-purple-50'
-                      }`}
+                      className={`px-3 py-2 text-sm rounded cursor-pointer transition-colors ${idx === selectedNodeIndex
+                        ? 'bg-purple-100 text-purple-900 font-medium'
+                        : 'hover:bg-purple-50'
+                        }`}
                       onClick={() => handleNodeSelect(node.data.label)}
                     >
                       {node.data.label}
@@ -3180,8 +3202,8 @@ Examples:
               <input
                 ref={chatInputRef}
                 type="text"
-                placeholder={chatMode === 'brainstorm' 
-                  ? 'Tell me what you want to create...' 
+                placeholder={chatMode === 'brainstorm'
+                  ? 'Tell me what you want to create...'
                   : 'Type your command (use / to select nodes)...'}
                 value={chatInput}
                 onChange={(e) => handleChatInputChange(e.target.value)}
@@ -3200,10 +3222,10 @@ Examples:
                     const command = chatInput;
                     setChatInput('');
                     setShowNodeDropdown(false);
-                    
+
                     // Keep input enabled, just execute command
                     await handleChatCommand(command);
-                    
+
                     // Re-focus after command completes
                     setTimeout(() => chatInputRef.current?.focus(), 100);
                   } else if (e.key === 'Escape') {
@@ -3219,9 +3241,9 @@ Examples:
                     const command = chatInput;
                     setChatInput('');
                     setShowNodeDropdown(false);
-                    
+
                     await handleChatCommand(command);
-                    
+
                     // Re-focus input after command
                     setTimeout(() => chatInputRef.current?.focus(), 100);
                   }

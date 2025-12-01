@@ -34,6 +34,10 @@ export interface MindmapData {
   milestones?: any[];
 }
 
+/**
+ * @deprecated Use MindmapService instead.
+ * This class is being replaced by the Domain Layer implementation.
+ */
 export class MindmapGenerator {
   private nodeIdCounter: number;
 
