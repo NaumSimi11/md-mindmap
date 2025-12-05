@@ -1,0 +1,150 @@
+/**
+ * Inline Preview Widget Styles
+ * 
+ * Beautiful animations and styling for AI content previews
+ * that appear directly in the document.
+ */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+.inline-preview-container {
+  animation: fadeIn 0.3s ease-out;
+  margin: 24px 0;
+}
+
+.inline-preview-container.removing {
+  animation: fadeOut 0.2s ease-in;
+}
+
+/* Preview Content Scrollbar */
+.preview-content {
+  max-height: 500px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #8b5cf6 #f1f1f1;
+}
+
+.preview-content::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.preview-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.preview-content::-webkit-scrollbar-track:hover {
+  background: #e5e5e5;
+}
+
+.preview-content::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #8b5cf6 0%, #7c3aed 100%);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.preview-content::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #7c3aed 0%, #6d28d9 100%);
+}
+
+/* Dark mode scrollbar */
+.dark .preview-content::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+
+.dark .preview-content::-webkit-scrollbar-track:hover {
+  background: #374151;
+}
+
+/* Inline preview widget base styling */
+.inline-preview-widget {
+  position: relative;
+  z-index: 10;
+}
+
+/* Smooth transitions for expand/collapse */
+.preview-content {
+  transition: max-height 0.3s ease-out, opacity 0.2s ease;
+}
+
+.preview-content.collapsed {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+/* Button hover effects */
+.inline-preview-widget button {
+  transition: all 0.2s ease;
+}
+
+.inline-preview-widget button:active {
+  transform: scale(0.95);
+}
+
+/* Position dropdown animation */
+.inline-preview-widget .position-dropdown {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Insertion indicator pulse */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.insertion-indicators {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .inline-preview-container {
+    margin: 16px 0;
+  }
+  
+  .preview-content {
+    max-height: 400px;
+  }
+  
+  .inline-preview-widget .preview-actions {
+    flex-direction: column;
+  }
+  
+  .inline-preview-widget .preview-actions button {
+    width: 100%;
+  }
+}
+
+/* Print styles - hide inline previews when printing */
+@media print {
+  .inline-preview-container {
+    display: none !important;
+  }
+}
+

@@ -1,0 +1,117 @@
+/**
+ * Comment System Styles
+ * 
+ * Beautiful styling for comments and annotations
+ */
+
+/* Commented text highlighting */
+.has-comment {
+  background-color: rgba(255, 235, 59, 0.3);
+  border-bottom: 2px solid rgba(255, 193, 7, 0.6);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 2px 0;
+}
+
+.has-comment:hover {
+  background-color: rgba(255, 235, 59, 0.5);
+  border-bottom-color: rgba(255, 193, 7, 1);
+}
+
+.dark .has-comment {
+  background-color: rgba(255, 235, 59, 0.15);
+  border-bottom-color: rgba(255, 193, 7, 0.4);
+}
+
+.dark .has-comment:hover {
+  background-color: rgba(255, 235, 59, 0.25);
+  border-bottom-color: rgba(255, 193, 7, 0.6);
+}
+
+/* Comment thread animations */
+.comment-thread {
+  animation: slideIn 0.2s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Comment button pulse */
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.comment-button-pulse {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* Scrollbar for comment sidebar */
+.comment-sidebar-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.comment-sidebar-scroll::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.comment-sidebar-scroll::-webkit-scrollbar-thumb {
+  background: #8b5cf6;
+  border-radius: 4px;
+}
+
+.comment-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: #7c3aed;
+}
+
+.dark .comment-sidebar-scroll::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+
+/* Comment badge */
+.comment-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Resolved comment styling */
+.comment-thread.resolved {
+  opacity: 0.6;
+}
+
+.comment-thread.resolved .has-comment {
+  background-color: rgba(76, 175, 80, 0.2);
+  border-bottom-color: rgba(76, 175, 80, 0.4);
+}
+
+.dark .comment-thread.resolved .has-comment {
+  background-color: rgba(76, 175, 80, 0.1);
+  border-bottom-color: rgba(76, 175, 80, 0.3);
+}
+

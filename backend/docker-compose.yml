@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: mdreader-postgres
+    environment:
+      POSTGRES_USER: mdreader
+      POSTGRES_PASSWORD: mdreader_dev_2024
+      POSTGRES_DB: mdreader_dev
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.UTF-8"
+    ports:
+      - "7432:5432"  # Safe port 7432 to avoid ALL conflicts
+    volumes:
+      - ./.data/postgres:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mdreader"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - mdreader-network
+
+  # Redis Cache & Session Store
+  redis:
+    image: redis:7-alpine
+    container_name: mdreader-redis
+    command: redis-server --appendonly yes --requirepass mdreader_redis_2024
+    ports:
+      - "7379:6379"  # Safe port 7379 to avoid ALL conflicts
+    volumes:
+      - ./.data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - mdreader-network
+
+networks:
+  mdreader-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+
