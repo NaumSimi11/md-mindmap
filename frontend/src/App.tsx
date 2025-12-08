@@ -25,6 +25,10 @@ import AILandingPageRedesigned from "./pages/AILandingPageRedesigned";
 import Workspace from "./pages/Workspace";
 import Install from "./pages/Install";
 import Support from "./pages/Support";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import WorkspaceTest from "./pages/WorkspaceTest";
+import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -45,12 +49,19 @@ const App = () => (
             <Route path="/landing-redesigned" element={<AILandingPageRedesigned />} />
             <Route path="/old-landing" element={<LandingPage />} />
 
-            {/* NEW: Main Workspace (AI Office Suite) */}
-            <Route path="/workspace" element={<Workspace />} />
-            <Route path="/workspace/doc/:id/edit" element={<Workspace />} />
-            <Route path="/workspace/doc/:id/mindmap" element={<Workspace />} />
-            <Route path="/workspace/doc/:id/slides" element={<Workspace />} />
-            <Route path="/workspace/doc/:id/present" element={<Workspace />} />
+            {/* Authentication */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            
+            {/* Backend Integration Test */}
+            <Route path="/workspace-test" element={<ProtectedRoute><WorkspaceTest /></ProtectedRoute>} />
+
+            {/* NEW: Main Workspace (AI Office Suite) - Protected Routes */}
+            <Route path="/workspace" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
+            <Route path="/workspace/doc/:id/edit" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
+            <Route path="/workspace/doc/:id/mindmap" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
+            <Route path="/workspace/doc/:id/slides" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
+            <Route path="/workspace/doc/:id/present" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
 
             {/* Standalone Mindmap Studio */}
             <Route path="/studio2" element={<MindmapStudio2 />} />

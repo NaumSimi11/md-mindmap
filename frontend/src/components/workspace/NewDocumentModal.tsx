@@ -26,7 +26,6 @@ import {
   X,
 } from 'lucide-react';
 import { documentTemplates_service, type DocumentTemplate } from '@/services/workspace/DocumentTemplates';
-import { workspaceService } from '@/services/workspace/WorkspaceService';
 
 interface NewDocumentModalProps {
   isOpen: boolean;
@@ -34,6 +33,7 @@ interface NewDocumentModalProps {
   onDocumentCreated: (documentId: string) => void;
   defaultType?: 'markdown' | 'mindmap' | 'presentation';
   folderId?: string | null;
+  createDocument?: (type: 'markdown' | 'mindmap' | 'presentation', title: string, content: string) => Promise<any>;
 }
 
 export function NewDocumentModal({
@@ -42,6 +42,7 @@ export function NewDocumentModal({
   onDocumentCreated,
   defaultType,
   folderId = null,
+  createDocument,
 }: NewDocumentModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -88,7 +89,9 @@ export function NewDocumentModal({
     const title = customTitle.trim() || 'Untitled Document';
     const content = getBlankContent(type, title);
     
-    const doc = await workspaceService.createDocument(type, title, content, folderId);
+    const doc = createDocument 
+      ? await createDocument(type, title, content)
+      : { id: `doc-${Date.now()}` };
     
     // Show success message
     console.log(`✅ Created ${type}: ${title} (ID: ${doc.id})`);
@@ -100,12 +103,9 @@ export function NewDocumentModal({
   const handleCreateFromTemplate = async (template: DocumentTemplate) => {
     const title = customTitle.trim() || template.name;
     
-    const doc = await workspaceService.createDocument(
-      template.type,
-      title,
-      template.content,
-      folderId
-    );
+    const doc = createDocument
+      ? await createDocument(template.type, title, template.content)
+      : { id: `doc-${Date.now()}` };
     
     // Show success message
     console.log(`✅ Created from template "${template.name}": ${title} (ID: ${doc.id})`);

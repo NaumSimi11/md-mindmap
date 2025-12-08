@@ -5,7 +5,8 @@ Pydantic models for request/response validation
 
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from uuid import UUID
+from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
 import re
 
 
@@ -74,17 +75,21 @@ class UserUpdatePassword(BaseModel):
 
 class UserResponse(UserBase):
     """Schema for user response (safe, no password)"""
-    id: str
+    id: UUID  # Changed from str to UUID, will be serialized to string in JSON
     is_active: bool
     is_verified: bool
     is_superuser: bool
-    email_verified_at: Optional[datetime]
-    last_login_at: Optional[datetime]
+    email_verified_at: Optional[datetime] = None
+    last_login_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
+            UUID: str,  # Convert UUID to string when serializing to JSON
+        }
+    )
 
 
 class UserLogin(BaseModel):

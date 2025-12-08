@@ -1,13 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { workspaceService, Document } from '@/services/workspace/WorkspaceService';
+import { useBackendWorkspace } from '@/hooks/useBackendWorkspace';
+import { useAuth } from '@/hooks/useAuth';
+import type { Document } from '@/services/workspace/BackendWorkspaceService';
 import { AdaptiveSidebar } from '@/components/workspace/AdaptiveSidebar';
 import { QuickSwitcher } from '@/components/workspace/QuickSwitcher';
 import { NewDocumentModal } from '@/components/workspace/NewDocumentModal';
 import { DesktopWorkspaceSelector } from '@/components/workspace/DesktopWorkspaceSelector';
 import { WorkspaceHome } from '@/components/workspace/WorkspaceHome';
 import { Button } from '@/components/ui/button';
-import { Plus, Search, Sparkles, Presentation as PresentationIcon } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Plus, Search, Sparkles, Presentation as PresentationIcon, User, Settings, LogOut } from 'lucide-react';
 import { getGuestCredits } from '@/lib/guestCredits';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { usePlatform } from '@/contexts/PlatformContext';
@@ -33,6 +43,20 @@ export default function Workspace() {
   const location = useLocation();
   const { isDesktop } = usePlatform();
   const { remaining, total } = getGuestCredits();
+  
+  // Auth state
+  const { user, logout } = useAuth();
+  
+  // 🔥 Backend integration - replaces LocalStorage
+  const { 
+    documents: backendDocuments,
+    createDocument: backendCreateDocument,
+    updateDocument: backendUpdateDocument,
+    deleteDocument: backendDeleteDocument,
+    getDocument: backendGetDocument,
+    autoSaveDocument,
+    isLoading: workspaceLoading,
+  } = useBackendWorkspace();
 
   // Parse URL to determine view mode and document ID
   // /workspace → home
@@ -104,12 +128,11 @@ export default function Workspace() {
   // Load document if ID is in URL
   useEffect(() => {
     if (documentId) {
-      const doc = workspaceService.getDocument(documentId);
+      const doc = backendGetDocument(documentId);
       if (doc) {
         setCurrentDocument(doc);
         // CRITICAL: Clear live editor content when loading new document
         setLiveEditorContent(doc.content || '');
-        workspaceService.markDocumentOpened(documentId);
         console.log('📄 Document loaded:', {
           id: doc.id,
           title: doc.title,
@@ -235,7 +258,7 @@ export default function Workspace() {
 
   // Handle document selection from sidebar or quick switcher
   const handleDocumentSelect = (docId: string) => {
-    const doc = workspaceService.getDocument(docId);
+    const doc = backendGetDocument(docId);
     if (!doc) return;
 
     // Navigate to appropriate view based on document type
@@ -260,7 +283,7 @@ export default function Workspace() {
 
     try {
       // Save demo presentation to workspace
-      const doc = await workspaceService.createDocument(
+      const doc = await backendCreateDocument(
         'presentation',
         'Beautiful Blocks Showcase',
         JSON.stringify(DEMO_PRESENTATION)
@@ -317,7 +340,7 @@ export default function Workspace() {
 
       // Save presentation to workspace
       console.log('💾 Saving presentation to workspace...');
-      const doc = await workspaceService.createDocument(
+      const doc = await backendCreateDocument(
         'presentation',
         `${currentDocument.title} - Presentation`,
         JSON.stringify(presentation)
@@ -361,16 +384,16 @@ export default function Workspace() {
 
   // Callback to receive live content updates from editors
   const handleContentChange = (content: string) => {
+    // Only save if content actually changed compared to what we already have in editor
+    if (liveEditorContent === content) {
+      return; // No change, skip
+    }
+    
     setLiveEditorContent(content);
 
-    // CRITICAL: Save to document!
+    // Auto-save to backend (debounced)
     if (currentDocument) {
-      // Only update if content actually changed to prevent infinite loop
-      if (currentDocument.content !== content) {
-        workspaceService.updateDocument(currentDocument.id, { content });
-        // DON'T update currentDocument state here - it causes infinite loop!
-        // The editor already has the latest content, no need to pass it back
-      }
+      autoSaveDocument(currentDocument.id, content);
     }
   };
 
@@ -497,6 +520,7 @@ export default function Workspace() {
           onDocumentSelect={handleDocumentSelect}
           onNewDocument={handleNewDocument}
           onLoadDemo={handleLoadDemoPresentation}
+          documents={backendDocuments}
         />
       );
     }
@@ -512,7 +536,7 @@ export default function Workspace() {
           onContentChange={handleContentChange}
           onTitleChange={(newTitle) => {
             if (currentDocument) {
-              workspaceService.updateDocument(currentDocument.id, { title: newTitle });
+              backendUpdateDocument(currentDocument.id, { title: newTitle });
               setCurrentDocument({ ...currentDocument, title: newTitle });
             }
           }}
@@ -608,7 +632,7 @@ export default function Workspace() {
                     onChange={(e) => {
                       const newTitle = e.target.value;
                       setCurrentDocument({ ...currentDocument, title: newTitle });
-                      workspaceService.updateDocument(currentDocument.id, { title: newTitle });
+                      backendUpdateDocument(currentDocument.id, { title: newTitle });
                     }}
                     className="text-sm font-medium bg-transparent border-none outline-none focus:ring-0 min-w-[200px] max-w-[400px] hover:bg-muted/30 px-2 py-1 rounded transition-colors"
                     placeholder="Untitled Document"
@@ -643,15 +667,56 @@ export default function Workspace() {
                 </span>
               </div>
 
-              {/* Login */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate('/pricing')}
-                className="hidden md:inline-flex"
-              >
-                Log in
-              </Button>
+              {/* User Menu */}
+              {user ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="gap-2">
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-medium">
+                        {(user.full_name?.[0] || user.username?.[0] || 'U').toUpperCase()}
+                      </div>
+                      <span className="hidden md:inline">{user.full_name || user.username}</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>
+                      <div className="flex flex-col space-y-1">
+                        <p className="text-sm font-medium">{user.full_name || user.username}</p>
+                        <p className="text-xs text-muted-foreground">{user.email}</p>
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => navigate('/profile')}>
+                      <User className="mr-2 h-4 w-4" />
+                      Profile
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate('/settings')}>
+                      <Settings className="mr-2 h-4 w-4" />
+                      Settings
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={async () => {
+                        await logout();
+                        navigate('/login');
+                      }}
+                      className="text-red-600 focus:text-red-600"
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Log out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate('/login')}
+                  className="hidden md:inline-flex"
+                >
+                  Log in
+                </Button>
+              )}
 
               {/* Theme Toggle */}
               <ThemeToggle />
@@ -678,6 +743,7 @@ export default function Workspace() {
         onClose={() => setShowNewDocModal(false)}
         onDocumentCreated={handleDocumentCreated}
         folderId={null}
+        createDocument={backendCreateDocument}
       />
 
       {/* Presentation Wizard */}

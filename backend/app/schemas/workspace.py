@@ -5,7 +5,8 @@ Pydantic models for workspace request/response validation
 
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field, field_validator
+from uuid import UUID
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from enum import Enum
 import re
 
@@ -67,11 +68,11 @@ class WorkspaceMemberUpdate(BaseModel):
 
 class WorkspaceMemberResponse(WorkspaceMemberBase):
     """Schema for workspace member response"""
-    id: str
-    workspace_id: str
-    user_id: str
+    id: UUID
+    workspace_id: UUID
+    user_id: UUID
     role: WorkspaceRoleEnum
-    invited_by_id: Optional[str]
+    invited_by_id: Optional[UUID] = None
     invited_at: datetime
     joined_at: Optional[datetime]
     created_at: datetime
@@ -87,9 +88,9 @@ class WorkspaceMemberResponse(WorkspaceMemberBase):
 
 class WorkspaceResponse(WorkspaceBase):
     """Schema for workspace response"""
-    id: str
+    id: UUID  # Changed from str to UUID
     slug: str
-    owner_id: str
+    owner_id: UUID  # Changed from str to UUID
     is_archived: bool
     is_deleted: bool
     created_at: datetime
@@ -99,8 +100,12 @@ class WorkspaceResponse(WorkspaceBase):
     member_count: Optional[int] = None
     user_role: Optional[WorkspaceRoleEnum] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
+            UUID: str,  # Convert UUID to string in JSON
+        }
+    )
 
 
 class WorkspaceDetailResponse(WorkspaceResponse):

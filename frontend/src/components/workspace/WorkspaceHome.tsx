@@ -21,24 +21,35 @@ import {
   Star,
   TrendingUp,
 } from 'lucide-react';
-import { workspaceService, type Document } from '@/services/workspace/WorkspaceService';
+import type { Document } from '@/services/workspace/BackendWorkspaceService';
 import { QuickSwitcher } from './QuickSwitcher';
 
 interface WorkspaceHomeProps {
   onDocumentSelect: (documentId: string) => void;
   onNewDocument: () => void;
   onLoadDemo?: () => void;
+  documents?: Document[]; // 🔥 Now passed from parent
 }
 
 export function WorkspaceHome({
   onDocumentSelect,
   onNewDocument,
   onLoadDemo,
+  documents = [],
 }: WorkspaceHomeProps) {
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
 
-  const recentDocs = workspaceService.getRecentDocuments(8);
-  const starredDocs = workspaceService.getStarredDocuments().slice(0, 4);
+  // Get recent and starred from passed documents
+  const recentDocs = documents
+    .filter(d => d.lastOpenedAt)
+    .sort((a, b) => {
+      const aTime = a.lastOpenedAt?.getTime() || 0;
+      const bTime = b.lastOpenedAt?.getTime() || 0;
+      return bTime - aTime;
+    })
+    .slice(0, 8);
+  
+  const starredDocs = documents.filter(d => d.starred).slice(0, 4);
 
   const getDocumentIcon = (type: Document['type']) => {
     switch (type) {
@@ -100,7 +111,7 @@ export function WorkspaceHome({
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
             <div className="flex items-center gap-1.5">
               <TrendingUp className="h-4 w-4 opacity-60" />
-              <span>{workspaceService.getAllDocuments().length} documents</span>
+              <span>{documents.length} documents</span>
             </div>
           </div>
         </div>

@@ -5,7 +5,8 @@ Pydantic models for document request/response validation
 
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field, field_validator
+from uuid import UUID
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 import re
 
 
@@ -61,10 +62,10 @@ class DocumentUpdate(BaseModel):
 
 class DocumentResponse(DocumentBase):
     """Schema for document response"""
-    id: str
+    id: UUID
     slug: str
-    workspace_id: str
-    created_by_id: Optional[str]
+    workspace_id: UUID
+    created_by_id: Optional[UUID] = None
     version: int
     view_count: int
     word_count: int
@@ -75,17 +76,18 @@ class DocumentResponse(DocumentBase):
     workspace_name: Optional[str] = None
     created_by_username: Optional[str] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
+            UUID: str,
+        }
+    )
 
 
 class DocumentDetailResponse(DocumentResponse):
     """Detailed document response with version history"""
     metadata: Dict[str, Any] = {}
     version_count: int = 0
-    
-    class Config:
-        from_attributes = True
 
 
 class DocumentListResponse(BaseModel):
@@ -99,18 +101,20 @@ class DocumentListResponse(BaseModel):
 
 class DocumentVersionResponse(BaseModel):
     """Schema for document version response"""
-    id: str
-    document_id: str
+    id: UUID
+    document_id: UUID
     version_number: int
     title: str
     content: str
-    change_summary: Optional[str]
+    change_summary: Optional[str] = None
     word_count: int
-    created_by_id: Optional[str]
+    created_by_id: Optional[UUID] = None
     created_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={UUID: str}
+    )
 
 
 class DocumentVersionListResponse(BaseModel):
@@ -121,12 +125,14 @@ class DocumentVersionListResponse(BaseModel):
 
 class DocumentStats(BaseModel):
     """Document statistics"""
-    document_id: str
+    document_id: UUID
     version_count: int
     view_count: int
     word_count: int
     last_edited_at: datetime
-    last_edited_by_id: Optional[str]
+    last_edited_by_id: Optional[UUID] = None
+    
+    model_config = ConfigDict(json_encoders={UUID: str})
 
 
 class DocumentSearchQuery(BaseModel):
