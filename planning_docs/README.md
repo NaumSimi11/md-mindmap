@@ -72,26 +72,31 @@
 
 ## 🎯 **Which Document to Use When**
 
-### **Starting a New Phase**
-→ Read: `DEFINITIVE_EXECUTION_PLAN.md` (detailed tasks)
+### **🚀 I Want to Start Building NOW**
+→ Read: `../BUILD_PLAN_SUMMARY.md` (5 minutes) ⭐ **START HERE**
 
-### **Daily Work / Quick Check**
-→ Read: `START_HERE.md` (current week tasks)
+### **📋 I Need the Detailed Build Plan**
+→ Read: `BUILD_AND_WIRE_PLAN.md` (30 minutes) ⭐ **MAIN BUILD DOCUMENT**
 
-### **Implementing Specific Feature**
-→ Read: `COMPREHENSIVE_USE_CASES.md` (user flows)
+### **🏗️ I Need to Understand the Architecture**
+→ Read: `BACKEND_ARCHITECTURE_BRIEF.md` (10 minutes)  
+→ Read: `SERVICE_LAYER_ARCHITECTURE.md` (10 minutes)
 
-### **Technical Architecture Questions**
-→ Read: `/SENIOR_ENGINEERING_PLAN.md` (main plan in root)
+### **📖 I Need to See All User Scenarios**
+→ Read: `COMPREHENSIVE_USE_CASES.md` (1 hour)
 
-### **Understanding v2 Changes**
-→ Read: `WHATS_NEW_V2.md` (what changed)
+### **🗓️ I Need Week-by-Week Tasks**
+→ Read: `DEFINITIVE_EXECUTION_PLAN.md` (15 minutes)
 
-### **Checking Feature Coverage**
+### **🎯 I Need the Big Picture**
+→ Read: `/SENIOR_ENGINEERING_PLAN.md` (30 minutes)
+
+### **✅ I Want to Verify Alignment**
 → Read: `ALIGNMENT_ANALYSIS.md` (gap analysis)
 
-### **Understanding New Scenarios**
-→ Read: `SCENARIOS_UPDATE_SUMMARY.md` (what was added)
+### **📊 I Want to See What Changed**
+→ Read: `SCENARIOS_UPDATE_SUMMARY.md` (new scenarios)  
+→ Read: `WHATS_NEW_V2.md` (v1 vs v2)
 
 ---
 
@@ -118,9 +123,16 @@ Planning Docs Folder:
 | Document | Status | Use |
 |----------|--------|-----|
 | `/SENIOR_ENGINEERING_PLAN.md` | ✅ MAIN | Technical blueprint (v2.0) |
+| `../BUILD_PLAN_SUMMARY.md` | ⭐ START HERE | Quick overview of build plan |
+| `BUILD_AND_WIRE_PLAN.md` | ⭐ ACTIVE | **Detailed 9-week build plan** |
+| `DEVELOPMENT_EXECUTION_MANUAL.md` | ⭐ EXECUTION | **Commands, patterns, testing** |
+| `API_CONTRACTS.md` | ⭐ CONTRACTS | **Exact API specs (all phases)** |
+| `SECURITY_CHECKLIST.md` | ⭐ SECURITY | **OWASP 2025 standards** |
 | `DEFINITIVE_EXECUTION_PLAN.md` | ✅ Active | Week-by-week execution |
 | `START_HERE.md` | ✅ Active | Quick daily reference |
 | `COMPREHENSIVE_USE_CASES.md` | ✅ Active | All user scenarios (85+) |
+| `BACKEND_ARCHITECTURE_BRIEF.md` | ✅ Active | Service layers, communication |
+| `SERVICE_LAYER_ARCHITECTURE.md` | ✅ Active | Architecture validation |
 | `ALIGNMENT_ANALYSIS.md` | ✅ Complete | Gap analysis (100% aligned) |
 | `SCENARIOS_UPDATE_SUMMARY.md` | ℹ️ Reference | What was added (50+ scenarios) |
 | `SENIOR_ENGINEERING_PLAN_V2_ENHANCED.md` | ℹ️ Archived | Technical details (merged) |
