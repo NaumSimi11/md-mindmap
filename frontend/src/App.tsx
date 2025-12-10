@@ -29,6 +29,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import WorkspaceTest from "./pages/WorkspaceTest";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
+import { WorkspaceProvider } from "./contexts/WorkspaceContext";
 
 const queryClient = new QueryClient();
 
@@ -41,9 +42,10 @@ const App = () => (
       disableTransitionOnChange
     >
       <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
+        <WorkspaceProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
           <Routes>
             <Route path="/" element={<AILandingPage />} />
             <Route path="/landing-redesigned" element={<AILandingPageRedesigned />} />
@@ -88,6 +90,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
+        </WorkspaceProvider>
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>

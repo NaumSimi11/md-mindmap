@@ -204,6 +204,12 @@ class DocumentService:
         if document_data.is_template is not None:
             document.is_template = document_data.is_template
         
+        if document_data.is_starred is not None:
+            document.is_starred = document_data.is_starred
+        
+        if document_data.folder_id is not None:
+            document.folder_id = document_data.folder_id
+        
         # Create new version if content changed
         if content_changed:
             document.version += 1

@@ -70,8 +70,27 @@ export class ApiClient {
 
       try {
         const data = await response.json();
-        error.message = data.detail || data.message || response.statusText;
-        error.details = data;
+        
+        // Handle Pydantic validation errors (FastAPI 422)
+        if (response.status === 422 && data.detail && Array.isArray(data.detail)) {
+          // Extract validation error messages
+          const validationErrors = data.detail.map((err: any) => {
+            const field = err.loc ? err.loc[err.loc.length - 1] : 'field';
+            const message = err.msg || 'Validation error';
+            return `${field}: ${message}`;
+          });
+          error.message = validationErrors.join(', ');
+          error.details = data;
+        } else if (typeof data.detail === 'string') {
+          error.message = data.detail;
+          error.details = data;
+        } else if (data.message) {
+          error.message = data.message;
+          error.details = data;
+        } else {
+          error.message = response.statusText;
+          error.details = data;
+        }
       } catch {
         // Response is not JSON
       }

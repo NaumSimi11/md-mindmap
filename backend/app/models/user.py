@@ -92,6 +92,11 @@ class User(BaseModel, SoftDeleteMixin):
     # Relationships
     owned_workspaces = relationship("Workspace", back_populates="owner", foreign_keys="Workspace.owner_id")
     workspace_memberships = relationship("WorkspaceMember", back_populates="user", foreign_keys="WorkspaceMember.user_id")
+    documents_created = relationship("Document", back_populates="created_by", foreign_keys="Document.created_by_id")
+    folders_created = relationship("Folder", back_populates="created_by", foreign_keys="Folder.created_by_id")
+    files_uploaded = relationship("File", back_populates="uploaded_by", foreign_keys="File.uploaded_by_id")
+    sessions = relationship("UserSession", back_populates="user")
+    document_presences = relationship("DocumentPresence", back_populates="user")
     
     # Indexes for common queries
     __table_args__ = (

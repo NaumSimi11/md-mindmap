@@ -93,6 +93,10 @@ class Workspace(BaseModel, SoftDeleteMixin):
     # Relationships
     owner = relationship("User", back_populates="owned_workspaces", foreign_keys=[owner_id])
     members = relationship("WorkspaceMember", back_populates="workspace", cascade="all, delete-orphan")
+    documents = relationship("Document", back_populates="workspace", cascade="all, delete-orphan")
+    folders = relationship("Folder", back_populates="workspace", cascade="all, delete-orphan")
+    files = relationship("File", back_populates="workspace", cascade="all, delete-orphan")
+    active_sessions = relationship("UserSession", back_populates="current_workspace")
     
     # Indexes for common queries
     __table_args__ = (

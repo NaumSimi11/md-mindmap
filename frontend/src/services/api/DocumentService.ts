@@ -63,15 +63,28 @@ export class DocumentService {
    * Auto-save document (debounced)
    */
   private autoSaveTimeout: NodeJS.Timeout | null = null;
+  private lastSavedContent: Map<string, string> = new Map();
 
   autoSave(documentId: string, content: string, delay: number = 2000): void {
+    // Check if content has changed since last save
+    const lastContent = this.lastSavedContent.get(documentId);
+    if (lastContent === content) {
+      return; // Skip if no change
+    }
+
     if (this.autoSaveTimeout) {
       clearTimeout(this.autoSaveTimeout);
     }
 
     this.autoSaveTimeout = setTimeout(async () => {
       try {
+        // Double-check content hasn't changed to what was last saved
+        if (this.lastSavedContent.get(documentId) === content) {
+          return;
+        }
+
         await this.updateDocument(documentId, { content });
+        this.lastSavedContent.set(documentId, content);
         console.log('✅ Document auto-saved');
       } catch (error) {
         console.error('❌ Auto-save failed:', error);
@@ -87,6 +100,13 @@ export class DocumentService {
       clearTimeout(this.autoSaveTimeout);
       this.autoSaveTimeout = null;
     }
+  }
+
+  /**
+   * Clear saved content cache (useful when document is deleted or closed)
+   */
+  clearSavedContent(documentId: string): void {
+    this.lastSavedContent.delete(documentId);
   }
 }
 

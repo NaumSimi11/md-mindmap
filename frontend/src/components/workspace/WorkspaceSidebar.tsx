@@ -33,6 +33,11 @@ import {
   FolderPlus,
 } from 'lucide-react';
 import { workspaceService, type Document, type Folder as WorkspaceFolder } from '@/services/workspace/WorkspaceService';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useBackendFolders } from '@/hooks/useBackendFolders';
+import { useDragAndDrop } from '@/hooks/useDragAndDrop';
+import { CreateFolderModal } from './CreateFolderModal';
+import { ImportDocumentButton } from './ImportDocumentButton';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,26 +58,71 @@ export function WorkspaceSidebar({
   onLoadDemo,
 }: WorkspaceSidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [workspace, setWorkspace] = useState(workspaceService.getCurrentWorkspace());
+  // 🔥 USE SHARED WORKSPACE CONTEXT
+  const { documents: backendDocuments, currentWorkspace, updateDocument: backendUpdateDocument } = useWorkspace();
+  const { folderTree, createFolder, updateFolder, deleteFolder } = useBackendFolders();
+  
+  // Force re-render on workspace change
+  const workspaceKey = currentWorkspace?.id || 'no-workspace';
+  
+  // Calculate document distribution
+  const rootDocs = backendDocuments.filter(doc => !doc.folderId);
+  const docsInFolders = backendDocuments.filter(doc => doc.folderId);
+  
+  // Collect all folder IDs (including nested)
+  const folderIds = new Set<string>();
+  const collectFolderIds = (folders: any[]) => {
+    folders.forEach(f => {
+      folderIds.add(f.id);
+      if (f.children) collectFolderIds(f.children);
+    });
+  };
+  collectFolderIds(folderTree);
+  
+  const orphanDocs = docsInFolders.filter(doc => !folderIds.has(doc.folderId!));
+  
+  console.log('🔍 WorkspaceSidebar render:', {
+    workspace: currentWorkspace?.name,
+    total: backendDocuments.length,
+    rootDocs: rootDocs.length,
+    docsInFolders: docsInFolders.length,
+    orphanDocs: orphanDocs.length,
+    folders: folderTree.length
+  });
+  
+  if (orphanDocs.length > 0) {
+    console.warn('⚠️ Orphan documents (folder_id points to non-existent folder):', orphanDocs.map(d => ({title: d.title, folderId: d.folderId})));
+  }
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [activeSection, setActiveSection] = useState<'all' | 'recent' | 'starred'>('all');
   const [showNewDocModal, setShowNewDocModal] = useState(false);
-
-  // Refresh workspace data
-  const refreshWorkspace = () => {
-    setWorkspace(workspaceService.getCurrentWorkspace());
-  };
-
-  // Initialize expanded folders
+  const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
+  
+  // Auto-expand all folders when they load
   useEffect(() => {
-    const initialExpanded = new Set<string>();
-    workspace.folders.forEach(folder => {
-      if (folder.expanded) {
-        initialExpanded.add(folder.id);
-      }
-    });
-    setExpandedFolders(initialExpanded);
-  }, []);
+    if (folderTree.length > 0) {
+      const allFolderIds = new Set<string>();
+      const collectIds = (folders: any[]) => {
+        folders.forEach(f => {
+          allFolderIds.add(f.id);
+          if (f.children) collectIds(f.children);
+        });
+      };
+      collectIds(folderTree);
+      setExpandedFolders(allFolderIds);
+    }
+  }, [folderTree]);
+  
+  // Drag and drop
+  const {
+    draggedItem,
+    dropTarget,
+    handleDragStart,
+    handleDragEnd,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+  } = useDragAndDrop();
 
   const toggleFolder = (folderId: string) => {
     setExpandedFolders(prev => {
@@ -84,42 +134,50 @@ export function WorkspaceSidebar({
       }
       return next;
     });
-    workspaceService.toggleFolderExpanded(folderId);
   };
 
   const handleCreateFolder = () => {
-    const name = prompt('Folder name:');
-    if (name) {
-      workspaceService.createFolder(name, null, '📁');
-      refreshWorkspace();
-    }
+    setShowCreateFolderModal(true);
   };
 
-  const handleRenameFolder = (folderId: string, currentName: string) => {
-    const name = prompt('New folder name:', currentName);
+  const handleRenameFolder = async (folderId: string, currentName: string) => {
+    const name = prompt('Rename folder:', currentName);
     if (name && name !== currentName) {
-      workspaceService.renameFolder(folderId, name);
-      refreshWorkspace();
+      await updateFolder(folderId, { name });
     }
   };
 
-  const handleDeleteFolder = (folderId: string) => {
-    if (confirm('Delete this folder? Documents will be moved to the parent folder.')) {
-      workspaceService.deleteFolder(folderId);
-      refreshWorkspace();
+  const handleDeleteFolder = async (folderId: string) => {
+    if (confirm('Delete this folder and all its contents?')) {
+      await deleteFolder(folderId);
     }
   };
 
   const handleDeleteDocument = async (documentId: string) => {
     if (confirm('Delete this document? This cannot be undone.')) {
       await workspaceService.deleteDocument(documentId);
-      refreshWorkspace();
     }
   };
 
-  const handleToggleStar = (documentId: string) => {
-    workspaceService.toggleStar(documentId);
-    refreshWorkspace();
+  const handleToggleStar = async (documentId: string) => {
+    const doc = backendDocuments.find(d => d.id === documentId);
+    if (!doc) return;
+    
+    try {
+      await backendUpdateDocument(documentId, { starred: !doc.starred });
+      console.log('✅ Toggled star:', doc.title);
+    } catch (error) {
+      console.error('Failed to toggle star:', error);
+    }
+  };
+
+  const handleMoveDocument = async (documentId: string, folderId: string | null) => {
+    try {
+      await backendUpdateDocument(documentId, { folderId });
+      console.log(`✅ Moved document to folder: ${folderId || 'root'}`);
+    } catch (error) {
+      console.error('Failed to move document:', error);
+    }
   };
 
   const getDocumentIcon = (type: Document['type']) => {
@@ -135,24 +193,28 @@ export function WorkspaceSidebar({
     }
   };
 
+  // 🔥 USE BACKEND DOCUMENTS instead of localStorage
   const filteredDocuments = searchQuery
-    ? workspaceService.searchDocuments(searchQuery)
+    ? backendDocuments.filter(doc => 
+        doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        doc.content?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
     : activeSection === 'recent'
-      ? workspaceService.getRecentDocuments()
+      ? backendDocuments.sort((a, b) => 
+          (b.lastOpenedAt?.getTime() || 0) - (a.lastOpenedAt?.getTime() || 0)
+        ).slice(0, 10)
       : activeSection === 'starred'
-        ? workspaceService.getStarredDocuments()
-        : workspace.documents;
-
-  const rootFolders = workspace.folders.filter(f => f.parentId === null);
+        ? backendDocuments.filter(doc => doc.starred)
+        : backendDocuments;
 
   return (
-    <div className="w-72 border-r border-border bg-card flex flex-col h-full">
+    <div key={workspaceKey} className="w-72 border-r border-border bg-card flex flex-col h-full">
       {/* Header */}
       <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-lg flex items-center gap-2">
-            <span>{workspace.icon}</span>
-            <span>{workspace.name}</span>
+            <span>{currentWorkspace?.icon || '🚀'}</span>
+            <span>{currentWorkspace?.name || 'My Workspace'}</span>
           </h2>
         </div>
 
@@ -169,8 +231,6 @@ export function WorkspaceSidebar({
 
         {/* New Buttons */}
         <div className="flex flex-col gap-2">
-
-
           <div className="flex gap-2">
             <Button
               size="sm"
@@ -188,6 +248,9 @@ export function WorkspaceSidebar({
               <FolderPlus className="h-4 w-4" />
             </Button>
           </div>
+          
+          {/* Import Button */}
+          <ImportDocumentButton variant="outline" size="sm" className="w-full" />
         </div>
       </div>
 
@@ -196,8 +259,16 @@ export function WorkspaceSidebar({
         isOpen={showNewDocModal}
         onClose={() => setShowNewDocModal(false)}
         onDocumentCreated={(docId) => {
-          refreshWorkspace();
           onDocumentSelect(docId);
+        }}
+      />
+
+      {/* Create Folder Modal */}
+      <CreateFolderModal
+        open={showCreateFolderModal}
+        onClose={() => setShowCreateFolderModal(false)}
+        onCreate={async (data) => {
+          await createFolder(data);
         }}
       />
 
@@ -288,41 +359,73 @@ export function WorkspaceSidebar({
           ) : (
             // All Documents - Folder Tree View
             <div className="space-y-1">
-              {/* Root Level Documents */}
-              {workspaceService.getDocumentsInFolder(null).map(doc => (
+              {/* Root Level Documents + Orphans - 🔥 USE BACKEND DOCUMENTS */}
+              {backendDocuments
+                .filter(doc => !doc.folderId || !folderIds.has(doc.folderId)) // Root docs + orphans
+                .map(doc => (
                 <DocumentItem
                   key={doc.id}
                   document={doc}
                   isActive={doc.id === currentDocumentId}
                   onClick={() => {
-                    workspaceService.markDocumentOpened(doc.id);
                     onDocumentSelect(doc.id);
                   }}
                   onToggleStar={() => handleToggleStar(doc.id)}
                   onDelete={() => handleDeleteDocument(doc.id)}
                   getIcon={getDocumentIcon}
+                  draggable={true}
+                  onDragStart={() => handleDragStart({ type: 'document', id: doc.id, title: doc.title })}
+                  onDragEnd={handleDragEnd}
+                  isDragging={draggedItem?.id === doc.id}
                 />
               ))}
 
-              {/* Folders */}
-              {rootFolders.map(folder => (
-                <FolderItem
-                  key={folder.id}
-                  folder={folder}
-                  expanded={expandedFolders.has(folder.id)}
-                  onToggle={() => toggleFolder(folder.id)}
-                  onRename={(name) => handleRenameFolder(folder.id, name)}
-                  onDelete={() => handleDeleteFolder(folder.id)}
-                  currentDocumentId={currentDocumentId}
-                  onDocumentSelect={onDocumentSelect}
-                  onToggleStar={handleToggleStar}
-                  onDeleteDocument={handleDeleteDocument}
-                  getDocumentIcon={getDocumentIcon}
-                  allFolders={workspace.folders}
-                  allDocuments={workspace.documents}
-                  expandedFolders={expandedFolders}
-                />
-              ))}
+              {/* Folders - Backend folders only */}
+              {folderTree.length > 0 ? (
+                folderTree.map(folder => (
+                  <BackendFolderItem
+                    key={folder.id}
+                    folder={folder}
+                    expanded={expandedFolders.has(folder.id)}
+                    onToggle={() => toggleFolder(folder.id)}
+                    onRename={(name) => handleRenameFolder(folder.id, name)}
+                    onDelete={() => handleDeleteFolder(folder.id)}
+                    currentDocumentId={currentDocumentId}
+                    onDocumentSelect={onDocumentSelect}
+                    getDocumentIcon={getDocumentIcon}
+                    allDocuments={backendDocuments}
+                    expandedFolders={expandedFolders}
+                    draggedItem={draggedItem}
+                    dropTarget={dropTarget}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onMoveDocument={handleMoveDocument}
+                  />
+                ))
+              ) : (
+                // Empty state when no folders
+                backendDocuments.length === 0 && (
+                  <div className="text-center py-8 px-4">
+                    <Folder className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
+                    <p className="text-sm text-muted-foreground mb-2">No folders yet</p>
+                    <p className="text-xs text-muted-foreground/60 mb-3">
+                      Organize documents with folders
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleCreateFolder}
+                      className="gap-2"
+                    >
+                      <FolderPlus className="h-4 w-4" />
+                      Create First Folder
+                    </Button>
+                  </div>
+                )
+              )}
             </div>
           )}
         </div>
@@ -331,8 +434,8 @@ export function WorkspaceSidebar({
       {/* Footer Stats */}
       <div className="p-3 border-t border-border text-xs text-muted-foreground">
         <div className="flex items-center justify-between">
-          <span>{workspace.documents.length} documents</span>
-          <span>{workspace.folders.length} folders</span>
+          <span>{backendDocuments.length} documents</span>
+          <span>{folderTree.length} folders</span>
         </div>
       </div>
     </div>
@@ -340,27 +443,33 @@ export function WorkspaceSidebar({
 }
 
 // ============================================================================
-// FolderItem Component
+// BackendFolderItem Component - Uses backend folder tree
 // ============================================================================
 
-interface FolderItemProps {
-  folder: WorkspaceFolder;
+interface BackendFolderItemProps {
+  folder: any; // Backend folder type from useBackendFolders
   expanded: boolean;
   onToggle: () => void;
   onRename: (currentName: string) => void;
   onDelete: () => void;
   currentDocumentId?: string;
   onDocumentSelect: (documentId: string) => void;
-  onToggleStar: (documentId: string) => void;
-  onDeleteDocument: (documentId: string) => void;
   getDocumentIcon: (type: Document['type']) => JSX.Element;
-  allFolders: WorkspaceFolder[];
   allDocuments: Document[];
   expandedFolders: Set<string>;
   level?: number;
+  // Drag and drop props
+  draggedItem: any;
+  dropTarget: string | null;
+  onDragStart: (item: any) => void;
+  onDragEnd: () => void;
+  onDragOver: (e: React.DragEvent, targetId: string) => void;
+  onDragLeave: () => void;
+  onDrop: (e: React.DragEvent, targetId: string | null, callback: (draggedId: string, targetId: string | null) => void) => void;
+  onMoveDocument: (documentId: string, folderId: string | null) => void;
 }
 
-function FolderItem({
+function BackendFolderItem({
   folder,
   expanded,
   onToggle,
@@ -368,51 +477,78 @@ function FolderItem({
   onDelete,
   currentDocumentId,
   onDocumentSelect,
-  onToggleStar,
-  onDeleteDocument,
   getDocumentIcon,
-  allFolders,
   allDocuments,
   expandedFolders,
   level = 0,
-}: FolderItemProps) {
+  draggedItem,
+  dropTarget,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onMoveDocument,
+}: BackendFolderItemProps) {
   const documentsInFolder = allDocuments.filter(d => d.folderId === folder.id);
-  const subfolders = allFolders.filter(f => f.parentId === folder.id);
+  const subfolders = folder.children || [];
 
   return (
     <div>
       {/* Folder Header */}
       <div
-        className="flex items-center gap-1 px-2 py-1.5 rounded hover:bg-accent cursor-pointer group"
+        className={`flex items-center gap-2 px-2 py-1.5 rounded hover:bg-accent group transition-colors ${
+          dropTarget === folder.id ? 'bg-primary/20 border-2 border-primary' : ''
+        }`}
         style={{ paddingLeft: `${level * 12 + 8}px` }}
+        onDragOver={(e) => onDragOver(e, folder.id)}
+        onDragLeave={onDragLeave}
+        onDrop={(e) => onDrop(e, folder.id, (docId, folderId) => onMoveDocument(docId, folderId))}
       >
-        <button onClick={onToggle} className="flex items-center flex-1 min-w-0">
+        {/* Chevron */}
+        <button onClick={onToggle} className="flex-shrink-0" title={folder.name}>
           {expanded ? (
-            <ChevronDown className="h-4 w-4 flex-shrink-0" />
+            <ChevronDown className="h-4 w-4" />
           ) : (
-            <ChevronRight className="h-4 w-4 flex-shrink-0" />
+            <ChevronRight className="h-4 w-4" />
           )}
-          <Folder className="h-4 w-4 mx-1 flex-shrink-0 text-yellow-600" />
-          <span className="text-sm truncate">{folder.name}</span>
-          <span className="text-xs text-muted-foreground ml-1">
-            ({documentsInFolder.length})
-          </span>
         </button>
 
-        {/* Folder Actions */}
+        {/* Folder Icon */}
+        <Folder className="h-4 w-4 flex-shrink-0 text-yellow-600 cursor-pointer" onClick={onToggle} />
+
+        {/* Folder Name - truncated with fixed max-width */}
+        <span 
+          className="text-sm truncate cursor-pointer" 
+          style={{ maxWidth: '110px' }}
+          onClick={onToggle}
+          title={folder.name}
+        >
+          {folder.name}
+        </span>
+
+        {/* Document Count */}
+        <span className="text-xs text-muted-foreground flex-shrink-0">
+          ({documentsInFolder.length})
+        </span>
+
+        {/* 3-dot menu - ALWAYS VISIBLE */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="opacity-0 group-hover:opacity-100 p-1 hover:bg-muted rounded">
-              <MoreVertical className="h-3 w-3" />
+            <button 
+              onClick={(e) => e.stopPropagation()}
+              className="ml-auto p-1 hover:bg-muted rounded flex-shrink-0"
+            >
+              <MoreVertical className="h-3.5 w-3.5" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => onRename(folder.name)}>
-              <Edit className="h-3 w-3 mr-2" />
+              <Edit className="h-3.5 w-3.5 mr-2" />
               Rename
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onDelete} className="text-red-600">
-              <Trash2 className="h-3 w-3 mr-2" />
+              <Trash2 className="h-3.5 w-3.5 mr-2" />
               Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -424,48 +560,45 @@ function FolderItem({
         <div>
           {/* Documents in this folder */}
           {documentsInFolder.map(doc => (
-            <div key={doc.id} style={{ paddingLeft: `${(level + 1) * 12 + 8}px` }}>
-              <DocumentItem
-                document={doc}
-                isActive={doc.id === currentDocumentId}
-                onClick={() => {
-                  workspaceService.markDocumentOpened(doc.id);
-                  onDocumentSelect(doc.id);
-                }}
-                onToggleStar={() => onToggleStar(doc.id)}
-                onDelete={() => onDeleteDocument(doc.id)}
-                getIcon={getDocumentIcon}
-              />
-            </div>
+            <DocumentItem
+              key={doc.id}
+              document={doc}
+              isActive={doc.id === currentDocumentId}
+              onClick={() => onDocumentSelect(doc.id)}
+              onToggleStar={() => {}}
+              onDelete={() => {}}
+              getIcon={getDocumentIcon}
+              level={level + 1}
+              draggable={true}
+              onDragStart={() => onDragStart({ type: 'document', id: doc.id, title: doc.title })}
+              onDragEnd={onDragEnd}
+              isDragging={draggedItem?.id === doc.id}
+            />
           ))}
 
-          {/* Subfolders */}
-          {subfolders.map(subfolder => (
-            <FolderItem
+          {/* Subfolders (recursive) */}
+          {subfolders.map((subfolder: any) => (
+            <BackendFolderItem
               key={subfolder.id}
               folder={subfolder}
               expanded={expandedFolders.has(subfolder.id)}
-              onToggle={() => workspaceService.toggleFolderExpanded(subfolder.id)}
-              onRename={(name) => {
-                const newName = prompt('New folder name:', name);
-                if (newName && newName !== name) {
-                  workspaceService.renameFolder(subfolder.id, newName);
-                }
-              }}
-              onDelete={() => {
-                if (confirm('Delete this folder?')) {
-                  workspaceService.deleteFolder(subfolder.id);
-                }
-              }}
+              onToggle={() => {}}
+              onRename={onRename}
+              onDelete={onDelete}
               currentDocumentId={currentDocumentId}
               onDocumentSelect={onDocumentSelect}
-              onToggleStar={onToggleStar}
-              onDeleteDocument={onDeleteDocument}
               getDocumentIcon={getDocumentIcon}
-              allFolders={allFolders}
               allDocuments={allDocuments}
               expandedFolders={expandedFolders}
               level={level + 1}
+              draggedItem={draggedItem}
+              dropTarget={dropTarget}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop}
+              onMoveDocument={onMoveDocument}
             />
           ))}
         </div>
@@ -485,6 +618,11 @@ interface DocumentItemProps {
   onToggleStar: () => void;
   onDelete: () => void;
   getIcon: (type: Document['type']) => JSX.Element;
+  level?: number;
+  draggable?: boolean;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+  isDragging?: boolean;
 }
 
 function DocumentItem({
@@ -494,48 +632,56 @@ function DocumentItem({
   onToggleStar,
   onDelete,
   getIcon,
+  level = 0,
+  draggable = false,
+  onDragStart,
+  onDragEnd,
+  isDragging = false,
 }: DocumentItemProps) {
   return (
     <div
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       className={`
-        flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer group
+        flex items-center gap-2 px-2 py-1.5 rounded group
         ${isActive ? 'bg-primary/10 text-primary' : 'hover:bg-accent'}
+        ${isDragging ? 'opacity-50' : ''}
       `}
-      onClick={onClick}
+      style={{ paddingLeft: `${level * 12 + 8}px` }}
+      title={document.title}
     >
-      {getIcon(document.type)}
-      <span className="text-sm truncate flex-1">{document.title}</span>
+      {/* Icon */}
+      <div className="flex-shrink-0" onClick={onClick}>
+        {getIcon(document.type)}
+      </div>
 
-      {/* Star Icon */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggleStar();
-        }}
-        className="opacity-0 group-hover:opacity-100 hover:scale-110 transition-all"
+      {/* Title - fixed max-width, truncates */}
+      <span 
+        className="text-sm truncate flex-1 cursor-pointer" 
+        style={{ maxWidth: '130px' }}
+        onClick={onClick}
       >
-        <Star
-          className={`h-3 w-3 ${document.starred ? 'fill-yellow-500 text-yellow-500' : ''}`}
-        />
-      </button>
+        {document.title}
+      </span>
 
-      {/* Actions */}
+      {/* 3-dot menu - ALWAYS VISIBLE */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             onClick={(e) => e.stopPropagation()}
-            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-muted rounded"
+            className="ml-auto p-1 hover:bg-muted rounded flex-shrink-0"
           >
-            <MoreVertical className="h-3 w-3" />
+            <MoreVertical className="h-3.5 w-3.5" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={onToggleStar}>
-            <Star className="h-3 w-3 mr-2" />
+            <Star className={`h-3.5 w-3.5 mr-2 ${document.starred ? 'fill-yellow-500 text-yellow-500' : ''}`} />
             {document.starred ? 'Unstar' : 'Star'}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={onDelete} className="text-red-600">
-            <Trash2 className="h-3 w-3 mr-2" />
+            <Trash2 className="h-3.5 w-3.5 mr-2" />
             Delete
           </DropdownMenuItem>
         </DropdownMenuContent>

@@ -116,49 +116,6 @@ export function WorkspaceHome({
           </div>
         </div>
 
-        {/* Starred Documents */}
-        {starredDocs.length > 0 && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-              <h2 className="text-lg font-semibold">Starred</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {starredDocs.map((doc) => (
-                <button
-                  key={doc.id}
-                  onClick={() => onDocumentSelect(doc.id)}
-                  className="group relative p-4 rounded-xl border border-border/40 bg-card/50 hover:border-blue-500/40 hover:bg-card/70 transition-all text-left overflow-hidden backdrop-blur-sm"
-                >
-                  {/* Gradient overlay on hover */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/0 to-sky-500/0 group-hover:from-blue-500/10 group-hover:to-sky-500/10 transition-all" />
-                  
-                  <div className="relative z-10">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                        {getDocumentIcon(doc.type)}
-                      </div>
-                      <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                    <h3 className="font-semibold mb-1 line-clamp-2 group-hover:text-blue-400 transition-colors">
-                      {doc.title}
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      {getDocumentTypeLabel(doc.type)}
-                      {doc.updatedAt && (
-                        <>
-                          {' • '}
-                          <span>{new Date(doc.updatedAt).toLocaleDateString()}</span>
-                        </>
-                      )}
-                    </p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Recent Documents - Visual Cards */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">

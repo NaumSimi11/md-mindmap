@@ -181,10 +181,14 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
   // Syntax Highlighting Hook
   useSyntaxHighlighting(editor);
 
-  // Update title
+  // Update title (only when title changes, not when callback changes)
+  const prevTitleRef = useRef<string>(title);
   useEffect(() => {
-    onTitleChange?.(title);
-  }, [title, onTitleChange]);
+    if (prevTitleRef.current !== title) {
+      prevTitleRef.current = title;
+      onTitleChange?.(title);
+    }
+  }, [title]); // ← REMOVED onTitleChange from deps to prevent infinite loop
 
   // Keyboard shortcuts
   useEffect(() => {

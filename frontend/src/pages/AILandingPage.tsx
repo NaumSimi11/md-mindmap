@@ -23,24 +23,179 @@ import {
   Clock,
   Users,
   Check,
+  Upload,
+  Type,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { aiService } from '@/services/ai/AIService';
 import { workspaceService } from '@/services/workspace/WorkspaceService';
+import { MDFileDropZone, type FileAnalysisResult } from '@/components/landing/MDFileDropZone';
+import { FileAnalysisResults } from '@/components/landing/FileAnalysisResults';
+import { mdFileAnalyzerService, type AnalysisInsights } from '@/services/landing/MDFileAnalyzerService';
 
 type DocumentType = 'markdown' | 'mindmap' | 'presentation';
+type InputMode = 'file' | 'text';
 
 export default function AILandingPage() {
   const navigate = useNavigate();
+  const [inputMode, setInputMode] = useState<InputMode>('file');
   const [prompt, setPrompt] = useState('');
   const [selectedType, setSelectedType] = useState<DocumentType | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [guestCredits, setGuestCredits] = useState(3);
+  
+  // File analysis state
+  const [fileAnalysis, setFileAnalysis] = useState<FileAnalysisResult | null>(null);
+  const [analysisInsights, setAnalysisInsights] = useState<AnalysisInsights | null>(null);
 
   // Load guest credits
   useEffect(() => {
     const credits = parseInt(localStorage.getItem('guest-credits-remaining') || '3');
     setGuestCredits(credits);
   }, []);
+
+  // Handle file analysis
+  const handleFileAnalyzed = async (result: FileAnalysisResult) => {
+    console.log('📄 File analyzed:', result.fileName);
+    setIsAnalyzing(true);
+    
+    try {
+      // Generate insights
+      const insights = await mdFileAnalyzerService.generateInsights(result, {
+        isOnline: true, // TODO: Detect actual online status
+        isLoggedIn: false, // TODO: Check auth state
+        creditsRemaining: guestCredits,
+      });
+      
+      setFileAnalysis(result);
+      setAnalysisInsights(insights);
+      console.log('✨ Insights generated:', insights);
+    } catch (error) {
+      console.error('❌ Failed to generate insights:', error);
+      alert('Failed to analyze file. Please try again.');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  // Handle action selection from file analysis
+  const handleFileActionSelect = async (actionId: string) => {
+    if (!fileAnalysis || !analysisInsights) return;
+    
+    console.log('🎯 Action selected:', actionId);
+    
+    const action = analysisInsights.suggestions.find(s => s.id === actionId);
+    if (!action) return;
+
+    setIsGenerating(true);
+
+    try {
+      let content: string;
+      let title: string;
+      let docType: DocumentType;
+
+      // Map action type to document type
+      if (action.type === 'mindmap') {
+        // Only use credit for AI generation (mindmap)
+        if (guestCredits <= 0) {
+          alert('Out of free credits! Sign up for unlimited access.');
+          navigate('/signup');
+          setIsGenerating(false);
+          return;
+        }
+
+        docType = 'mindmap';
+        content = await aiService.generateContent(
+          `Convert this markdown into a mindmap:\n\n${fileAnalysis.content}`,
+          {
+            systemPrompt: `You are a mindmap expert. Create a hierarchical mindmap structure as JSON based on the markdown content. Format:
+{
+  "nodes": [
+    { "id": "1", "type": "mindNode", "data": { "label": "Central Topic" }, "position": { "x": 500, "y": 300 } },
+    { "id": "2", "type": "mindNode", "data": { "label": "Subtopic 1" }, "position": { "x": 300, "y": 200 } }
+  ],
+  "edges": [
+    { "id": "e1-2", "source": "1", "target": "2", "type": "smoothstep" }
+  ]
+}
+
+Generate 5-20 nodes with a clear hierarchy. Position nodes in a radial layout around the center.`,
+          }
+        );
+        title = `Mindmap: ${fileAnalysis.fileName.replace(/\.(md|markdown|txt)$/i, '')}`;
+
+        // Decrement credits
+        const newCredits = guestCredits - 1;
+        setGuestCredits(newCredits);
+        localStorage.setItem('guest-credits-remaining', newCredits.toString());
+      } else if (action.type === 'summary') {
+        // Summary generation - uses credit
+        if (guestCredits <= 0) {
+          alert('Out of free credits! Sign up for unlimited access.');
+          navigate('/signup');
+          setIsGenerating(false);
+          return;
+        }
+
+        docType = 'markdown';
+        content = await aiService.generateContent(
+          `Create a concise summary of this markdown content:\n\n${fileAnalysis.content}`,
+          {
+            systemPrompt: `You are an expert at creating concise, well-structured summaries. Extract key points and present them in clean markdown format.`,
+          }
+        );
+        title = `Summary: ${fileAnalysis.fileName.replace(/\.(md|markdown|txt)$/i, '')}`;
+
+        // Decrement credits
+        const newCredits = guestCredits - 1;
+        setGuestCredits(newCredits);
+        localStorage.setItem('guest-credits-remaining', newCredits.toString());
+      } else if (action.type === 'actionItems') {
+        // Action items extraction - uses credit
+        if (guestCredits <= 0) {
+          alert('Out of free credits! Sign up for unlimited access.');
+          navigate('/signup');
+          setIsGenerating(false);
+          return;
+        }
+
+        docType = 'markdown';
+        content = await aiService.generateContent(
+          `Extract all action items, tasks, and TODOs from this content:\n\n${fileAnalysis.content}`,
+          {
+            systemPrompt: `You are an expert at extracting action items. Create a clean markdown checklist with all tasks found.`,
+          }
+        );
+        title = `Action Items: ${fileAnalysis.fileName.replace(/\.(md|markdown|txt)$/i, '')}`;
+
+        // Decrement credits
+        const newCredits = guestCredits - 1;
+        setGuestCredits(newCredits);
+        localStorage.setItem('guest-credits-remaining', newCredits.toString());
+      } else {
+        // Document/Editor - NO credit needed (just opens file)
+        docType = 'markdown';
+        content = fileAnalysis.content; // Use original content as-is
+        title = fileAnalysis.fileName.replace(/\.(md|markdown|txt)$/i, '');
+      }
+
+      // Create document
+      const tempDoc = await workspaceService.createDocument(docType, title, content, null);
+
+      // Navigate to appropriate view
+      if (docType === 'markdown') {
+        navigate(`/workspace/doc/${tempDoc.id}/edit`);
+      } else if (docType === 'mindmap') {
+        navigate(`/workspace/doc/${tempDoc.id}/mindmap`);
+      }
+    } catch (error) {
+      console.error('❌ Generation failed:', error);
+      alert(`Failed to generate content: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   const examplePrompts = [
     {
@@ -280,128 +435,186 @@ Create 5-8 slides with varied layouts: title, content, bullets, diagram.`,
             </span>
           </h1>
           <p className="text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed">
-            Describe what you want to create, and watch AI bring it to life.
+            Drop a markdown file or describe what you want to create.
             <br />
             <span className="text-cyan-300/90">Documents, mindmaps, and presentations</span> in seconds.
           </p>
         </div>
 
-        {/* Type Selector (Above Input) */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium text-slate-400">
-              {selectedType ? (
-                <span className="text-cyan-400">✓ Will create: {selectedType === 'markdown' ? 'Document' : selectedType === 'mindmap' ? 'Mindmap' : 'Presentation'}</span>
-              ) : (
-                <span>Choose format (optional - defaults to Document)</span>
+        {/* Input Mode Toggle */}
+        <div className="flex justify-center mb-8">
+          <div className="inline-flex items-center gap-2 p-1.5 bg-slate-800/60 backdrop-blur-xl rounded-xl border border-slate-700/50">
+            <button
+              onClick={() => {
+                setInputMode('file');
+                setFileAnalysis(null);
+                setAnalysisInsights(null);
+              }}
+              className={cn(
+                'flex items-center gap-2 px-6 py-2.5 rounded-lg transition-all duration-200 font-medium text-sm',
+                inputMode === 'file'
+                  ? 'bg-gradient-to-r from-cyan-500 to-indigo-600 text-white shadow-lg shadow-cyan-500/25'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
               )}
-            </h3>
-            {selectedType && (
-              <button
-                onClick={() => setSelectedType(null)}
-                className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
-              >
-                Clear selection
-              </button>
-            )}
-          </div>
-          
-          <div className="grid grid-cols-3 gap-3">
-            {quickActions.map((action) => {
-              const Icon = action.icon;
-              const isSelected = selectedType === action.type;
-              
-              return (
-                <button
-                  key={action.type}
-                  onClick={() => setSelectedType(action.type)}
-                  className={`
-                    p-3 rounded-xl border-2 transition-all duration-200 text-left
-                    ${
-                      isSelected
-                        ? 'border-cyan-500/50 bg-slate-800/60 scale-[1.02]'
-                        : 'border-slate-600/50 bg-slate-800/50 hover:bg-slate-700/70 hover:border-slate-500'
-                    }
-                  `}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className={`w-8 h-8 bg-gradient-to-r ${action.gradient} rounded-lg flex items-center justify-center flex-shrink-0`}>
-                      <Icon className="h-4 w-4 text-white" />
-                    </div>
-                    <span className="font-bold text-base" style={{ color: '#ffffff' }}>{action.title}</span>
-                    {isSelected && <span className="ml-auto text-cyan-400 font-bold">✓</span>}
-                  </div>
-                  <p className="text-xs ml-10" style={{ color: '#cbd5e1' }}>{action.description}</p>
-                </button>
-              );
-            })}
+            >
+              <Upload className="h-4 w-4" />
+              Drop File
+            </button>
+            <button
+              onClick={() => {
+                setInputMode('text');
+                setFileAnalysis(null);
+                setAnalysisInsights(null);
+              }}
+              className={cn(
+                'flex items-center gap-2 px-6 py-2.5 rounded-lg transition-all duration-200 font-medium text-sm',
+                inputMode === 'text'
+                  ? 'bg-gradient-to-r from-cyan-500 to-indigo-600 text-white shadow-lg shadow-cyan-500/25'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
+              )}
+            >
+              <Type className="h-4 w-4" />
+              Type Prompt
+            </button>
           </div>
         </div>
 
-        {/* Main Prompt Area */}
+        {/* Main Input Area */}
         <div className="mb-8">
-          <div className="bg-slate-800/70 backdrop-blur-xl rounded-2xl border border-cyan-500/30 p-8 shadow-2xl shadow-cyan-500/10">
-            <textarea
-              placeholder="Describe what you want to create... (e.g., 'Create a project roadmap for launching a mobile app')"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              className="w-full min-h-32 bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-lg resize-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:border-cyan-500 focus-visible:outline-none"
-              style={{ 
-                color: '#ffffff',
-                backgroundColor: 'rgba(51, 65, 85, 0.4)',
-              }}
-            />
-            <div className="flex items-center justify-between mt-4">
-              <div className="flex flex-col gap-1">
-                <span className="text-sm text-slate-400">
-                  {prompt.length} / 500 characters
-                </span>
-                {!selectedType && prompt.trim() && (
-                  <span className="text-xs text-yellow-400 flex items-center gap-1">
-                    <span>⚠️</span> Select a document type below
-                  </span>
-                )}
-              </div>
-              <Button
-                size="lg"
-                onClick={handleGenerate}
-                disabled={!prompt.trim() || isGenerating || guestCredits <= 0}
-                className="bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-semibold px-8 shadow-lg shadow-cyan-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isGenerating ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-5 w-5 mr-2" />
-                    Generate with AI
-                    <ArrowRight className="h-5 w-5 ml-2" />
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
+          {inputMode === 'file' ? (
+            <>
+              {/* File Drop Zone */}
+              {!fileAnalysis && (
+                <MDFileDropZone
+                  onFileAnalyzed={handleFileAnalyzed}
+                  isAnalyzing={isAnalyzing}
+                />
+              )}
 
-          {/* Example Prompts */}
-          <div className="mt-6">
-            <p className="text-sm text-slate-400 mb-3">✨ Try these examples:</p>
-            <div className="flex flex-wrap gap-2">
-              {examplePrompts.map((example, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    setPrompt(example.text);
-                    setSelectedType(example.type);
+              {/* Analysis Results */}
+              {fileAnalysis && analysisInsights && (
+                <FileAnalysisResults
+                  fileAnalysis={fileAnalysis}
+                  insights={analysisInsights}
+                  onActionSelect={handleFileActionSelect}
+                  guestCredits={guestCredits}
+                />
+              )}
+            </>
+          ) : (
+            <>
+              {/* Type Selector */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium text-slate-400">
+                    {selectedType ? (
+                      <span className="text-cyan-400">✓ Will create: {selectedType === 'markdown' ? 'Document' : selectedType === 'mindmap' ? 'Mindmap' : 'Presentation'}</span>
+                    ) : (
+                      <span>Choose format (optional - defaults to Document)</span>
+                    )}
+                  </h3>
+                  {selectedType && (
+                    <button
+                      onClick={() => setSelectedType(null)}
+                      className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                    >
+                      Clear selection
+                    </button>
+                  )}
+                </div>
+                
+                <div className="grid grid-cols-3 gap-3">
+                  {quickActions.map((action) => {
+                    const Icon = action.icon;
+                    const isSelected = selectedType === action.type;
+                    
+                    return (
+                      <button
+                        key={action.type}
+                        onClick={() => setSelectedType(action.type)}
+                        className={`
+                          p-3 rounded-xl border-2 transition-all duration-200 text-left
+                          ${
+                            isSelected
+                              ? 'border-cyan-500/50 bg-slate-800/60 scale-[1.02]'
+                              : 'border-slate-600/50 bg-slate-800/50 hover:bg-slate-700/70 hover:border-slate-500'
+                          }
+                        `}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className={`w-8 h-8 bg-gradient-to-r ${action.gradient} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                            <Icon className="h-4 w-4 text-white" />
+                          </div>
+                          <span className="font-bold text-base" style={{ color: '#ffffff' }}>{action.title}</span>
+                          {isSelected && <span className="ml-auto text-cyan-400 font-bold">✓</span>}
+                        </div>
+                        <p className="text-xs ml-10" style={{ color: '#cbd5e1' }}>{action.description}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Text Prompt Area */}
+              <div className="bg-slate-800/70 backdrop-blur-xl rounded-2xl border border-cyan-500/30 p-8 shadow-2xl shadow-cyan-500/10">
+                <textarea
+                  placeholder="Describe what you want to create... (e.g., 'Create a project roadmap for launching a mobile app')"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  className="w-full min-h-32 bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-lg resize-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:border-cyan-500 focus-visible:outline-none"
+                  style={{ 
+                    color: '#ffffff',
+                    backgroundColor: 'rgba(51, 65, 85, 0.4)',
                   }}
-                  className="px-4 py-2 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-cyan-500/50 rounded-lg text-sm text-slate-300 transition-all hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/10"
-                >
-                  {example.icon} {example.text.substring(0, 50)}...
-                </button>
-              ))}
-            </div>
-          </div>
+                />
+                <div className="flex items-center justify-between mt-4">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm text-slate-400">
+                      {prompt.length} / 500 characters
+                    </span>
+                  </div>
+                  <Button
+                    size="lg"
+                    onClick={handleGenerate}
+                    disabled={!prompt.trim() || isGenerating || guestCredits <= 0}
+                    className="bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-semibold px-8 shadow-lg shadow-cyan-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-5 w-5 mr-2" />
+                        Generate with AI
+                        <ArrowRight className="h-5 w-5 ml-2" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Example Prompts */}
+              <div className="mt-6">
+                <p className="text-sm text-slate-400 mb-3">✨ Try these examples:</p>
+                <div className="flex flex-wrap gap-2">
+                  {examplePrompts.map((example, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        setPrompt(example.text);
+                        setSelectedType(example.type);
+                      }}
+                      className="px-4 py-2 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-cyan-500/50 rounded-lg text-sm text-slate-300 transition-all hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/10"
+                    >
+                      {example.icon} {example.text.substring(0, 50)}...
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Alternative Path: Manual Start */}

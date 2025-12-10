@@ -68,8 +68,8 @@ class UserSession(BaseModel):
     
     # Relationships
     user = relationship("User", foreign_keys=[user_id])
-    workspace = relationship("Workspace", foreign_keys=[current_workspace_id])
-    document = relationship("Document", foreign_keys=[current_document_id])
+    current_workspace = relationship("Workspace", foreign_keys=[current_workspace_id], back_populates="active_sessions")
+    current_document = relationship("Document", foreign_keys=[current_document_id], back_populates="active_sessions")
     
     # Indexes
     __table_args__ = (

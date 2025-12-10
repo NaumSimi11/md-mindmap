@@ -11,7 +11,7 @@ import logging
 
 from app.config import settings
 from app.database import check_database_connection
-from app.routers import auth, workspaces, documents, files, websocket
+from app.routers import auth, workspaces, documents, folders, files, websocket
 
 # Configure logging
 logging.basicConfig(
@@ -70,6 +70,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(workspaces.router)
 app.include_router(documents.router)
+app.include_router(folders.router)
 app.include_router(files.router)
 app.include_router(websocket.router)
 

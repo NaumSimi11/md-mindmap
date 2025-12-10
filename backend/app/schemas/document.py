@@ -17,6 +17,8 @@ class DocumentBase(BaseModel):
     tags: List[str] = Field(default_factory=list)
     is_public: bool = False
     is_template: bool = False
+    is_starred: bool = False
+    folder_id: Optional[UUID] = None
 
 
 class DocumentCreate(DocumentBase):
@@ -45,9 +47,11 @@ class DocumentUpdate(BaseModel):
     """Schema for document updates"""
     title: Optional[str] = Field(None, min_length=1, max_length=255)
     content: Optional[str] = None
+    folder_id: Optional[str] = Field(None, description="Move document to folder (null for root)")
     tags: Optional[List[str]] = None
     is_public: Optional[bool] = None
     is_template: Optional[bool] = None
+    is_starred: Optional[bool] = None
     change_summary: Optional[str] = Field(None, max_length=500)
     
     @field_validator('tags')

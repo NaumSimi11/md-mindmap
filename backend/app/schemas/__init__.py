@@ -43,6 +43,17 @@ from app.schemas.document import (
     DocumentSearchQuery,
 )
 
+from app.schemas.folder import (
+    FolderBase,
+    FolderCreate,
+    FolderUpdate,
+    FolderResponse,
+    FolderWithStats,
+    FolderTree,
+    FolderListResponse,
+    MoveFolder,
+)
+
 from app.schemas.file import (
     FileUploadResponse,
     FileResponse,
@@ -98,6 +109,15 @@ __all__ = [
     "DocumentVersionListResponse",
     "DocumentStats",
     "DocumentSearchQuery",
+    # Folder schemas
+    "FolderBase",
+    "FolderCreate",
+    "FolderUpdate",
+    "FolderResponse",
+    "FolderWithStats",
+    "FolderTree",
+    "FolderListResponse",
+    "MoveFolder",
     # File schemas
     "FileUploadResponse",
     "FileResponse",

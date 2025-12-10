@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     ALLOWED_EXTENSIONS: str = ".md,.txt,.pdf,.jpg,.jpeg,.png,.gif,.webp"
     
     # CORS
-    CORS_ORIGINS: str = "http://localhost:7100,http://localhost:8080"
+    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:5174,http://localhost:7100,http://localhost:8080"
     CORS_ALLOW_CREDENTIALS: bool = True
     CORS_ALLOW_METHODS: str = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
     CORS_ALLOW_HEADERS: str = "*"

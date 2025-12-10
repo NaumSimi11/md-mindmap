@@ -12,13 +12,32 @@ export class AuthService {
    * Sign up a new user
    */
   async signup(data: SignupRequest): Promise<AuthResponse> {
-    const response = await apiClient.post<AuthResponse>(API_ENDPOINTS.auth.signup, data);
+    console.log('🔐 AuthService.signup() called');
+    
+    const response = await apiClient.post<any>(API_ENDPOINTS.auth.signup, data);
+    
+    console.log('✅ Signup response received:', {
+      hasUser: !!response.user,
+      hasToken: !!response.access_token
+    });
     
     // Store tokens
     apiClient.setToken(response.access_token);
     localStorage.setItem('refresh_token', response.refresh_token);
+    
+    // Backend might not return user in signup response, fetch it if missing
+    if (!response.user) {
+      console.log('📞 Fetching user via /me...');
+      const user = await this.getCurrentUser();
+      console.log('✅ User fetched:', { username: user.username, email: user.email });
+      
+      return {
+        ...response,
+        user
+      };
+    }
+    
     localStorage.setItem('user', JSON.stringify(response.user));
-
     return response;
   }
 
@@ -26,13 +45,32 @@ export class AuthService {
    * Login user
    */
   async login(data: LoginRequest): Promise<AuthResponse> {
-    const response = await apiClient.post<AuthResponse>(API_ENDPOINTS.auth.login, data);
+    console.log('🔐 AuthService.login() called');
+    
+    const response = await apiClient.post<any>(API_ENDPOINTS.auth.login, data);
+    
+    console.log('✅ Login response received:', {
+      hasUser: !!response.user,
+      hasToken: !!response.access_token
+    });
     
     // Store tokens
     apiClient.setToken(response.access_token);
     localStorage.setItem('refresh_token', response.refresh_token);
+    
+    // Backend doesn't return user in login response, fetch it
+    if (!response.user) {
+      console.log('📞 Fetching user via /me...');
+      const user = await this.getCurrentUser();
+      console.log('✅ User fetched:', { username: user.username, email: user.email });
+      
+      return {
+        ...response,
+        user
+      };
+    }
+    
     localStorage.setItem('user', JSON.stringify(response.user));
-
     return response;
   }
 

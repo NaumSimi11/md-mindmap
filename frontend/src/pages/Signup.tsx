@@ -29,7 +29,13 @@ export default function Signup() {
   const [passwordStrength, setPasswordStrength] = useState(0);
 
   const handleChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+    let value = e.target.value;
+    
+    // Auto-trim username and email to prevent accidental spaces
+    if (field === 'username' || field === 'email') {
+      value = value.trim();
+    }
+    
     setFormData(prev => ({ ...prev, [field]: value }));
     
     // Calculate password strength

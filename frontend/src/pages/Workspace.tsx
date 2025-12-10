@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { useBackendWorkspace } from '@/hooks/useBackendWorkspace';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useAuth } from '@/hooks/useAuth';
 import type { Document } from '@/services/workspace/BackendWorkspaceService';
 import { AdaptiveSidebar } from '@/components/workspace/AdaptiveSidebar';
 import { QuickSwitcher } from '@/components/workspace/QuickSwitcher';
 import { NewDocumentModal } from '@/components/workspace/NewDocumentModal';
+import { WorkspaceSwitcher } from '@/components/workspace/WorkspaceSwitcher';
+import { CreateWorkspaceModal } from '@/components/workspace/CreateWorkspaceModal';
+import { DragDropZone } from '@/components/workspace/DragDropZone';
 import { DesktopWorkspaceSelector } from '@/components/workspace/DesktopWorkspaceSelector';
+import { SyncStatusIndicator } from '@/components/offline/SyncStatusIndicator';
 import { WorkspaceHome } from '@/components/workspace/WorkspaceHome';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,7 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Search, Sparkles, Presentation as PresentationIcon, User, Settings, LogOut } from 'lucide-react';
+import { Plus, Search, Sparkles, Presentation as PresentationIcon, User, Settings, LogOut, Clock, Database } from 'lucide-react';
 import { getGuestCredits } from '@/lib/guestCredits';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { usePlatform } from '@/contexts/PlatformContext';
@@ -29,6 +33,9 @@ import { PresentationWizardModal, type GenerationSettings } from '@/components/p
 import { PresentationLoadingScreen } from '@/components/presentation/PresentationLoadingScreen';
 import { safePresentationService, type ProgressUpdate } from '@/services/presentation/SafePresentationService';
 import { DEMO_PRESENTATION } from '@/data/demoPresentation';
+import { VersionHistory } from '@/components/editor/VersionHistory';
+// import { ConflictResolver } from '@/components/offline/ConflictResolver';
+// import { useConflicts } from '@/hooks/useConflicts';
 
 // Import document editors
 import { WYSIWYGEditor } from '@/components/editor/WYSIWYGEditor';
@@ -47,16 +54,21 @@ export default function Workspace() {
   // Auth state
   const { user, logout } = useAuth();
   
-  // 🔥 Backend integration - replaces LocalStorage
+  // 🔥 Backend integration - Multi-Workspace Support
   const { 
+    workspaces,
+    currentWorkspace,
+    createWorkspace,
+    switchWorkspace,
     documents: backendDocuments,
     createDocument: backendCreateDocument,
     updateDocument: backendUpdateDocument,
     deleteDocument: backendDeleteDocument,
     getDocument: backendGetDocument,
+    refreshDocuments,
     autoSaveDocument,
     isLoading: workspaceLoading,
-  } = useBackendWorkspace();
+  } = useWorkspace();
 
   // Parse URL to determine view mode and document ID
   // /workspace → home
@@ -70,12 +82,17 @@ export default function Workspace() {
 
   const [currentDocument, setCurrentDocument] = useState<Document | null>(null);
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
+  
+  // Conflict management (TODO: Enable after offline service is wired)
+  // const { conflicts, hasConflicts, isResolving, resolveConflict, dismissConflict } = useConflicts(currentDocument?.id || null);
   const [showNewDocModal, setShowNewDocModal] = useState(false);
+  const [showCreateWorkspaceModal, setShowCreateWorkspaceModal] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
 
-  // State to track LIVE editor content (not stored content)
-  const [liveEditorContent, setLiveEditorContent] = useState<string>('');
+  // Ref to track LIVE editor content (not stored content) - using ref to avoid re-renders
+  const liveEditorContentRef = React.useRef<string>('');
 
   // Editor instance ref for direct content insertion
   const editorInstanceRef = React.useRef<any>(null);
@@ -132,7 +149,7 @@ export default function Workspace() {
       if (doc) {
         setCurrentDocument(doc);
         // CRITICAL: Clear live editor content when loading new document
-        setLiveEditorContent(doc.content || '');
+        liveEditorContentRef.current = doc.content || '';
         console.log('📄 Document loaded:', {
           id: doc.id,
           title: doc.title,
@@ -144,7 +161,7 @@ export default function Workspace() {
       }
     } else {
       setCurrentDocument(null);
-      setLiveEditorContent(''); // Clear content when no document
+      liveEditorContentRef.current = ''; // Clear content when no document
     }
   }, [documentId, navigate]);
 
@@ -177,13 +194,13 @@ export default function Workspace() {
       const type = searchParams.get('type') as 'mindmap' | 'flowchart' | 'orgchart';
 
       // Use LIVE content if available (most recent), otherwise use stored content
-      const contentToUse = liveEditorContent || currentDocument.content;
+      const contentToUse = liveEditorContentRef.current || currentDocument.content;
 
       console.log('🧠 Mindmap mode detected:', {
         mode,
         type,
         contentLength: contentToUse.length,
-        hasLiveContent: !!liveEditorContent,
+        hasLiveContent: !!liveEditorContentRef.current,
         preview: contentToUse.substring(0, 200)
       });
 
@@ -196,7 +213,7 @@ export default function Workspace() {
         navigate(location.pathname, { replace: true }); // Clear params
       }
     }
-  }, [viewMode, currentDocument, location.search, liveEditorContent]);
+  }, [viewMode, currentDocument, location.search]);
 
   // Generate mindmap from content
   const generateMindmap = async (content: string, type: 'mindmap' | 'flowchart' | 'orgchart') => {
@@ -277,6 +294,34 @@ export default function Workspace() {
     setShowNewDocModal(true);
   };
 
+  // Handle workspace creation
+  const handleCreateWorkspace = async (data: { name: string; description: string; icon: string }) => {
+    try {
+      console.log('🏢 Creating new workspace:', data.name);
+      const newWorkspace = await createWorkspace(data);
+      console.log('✅ Workspace created and switched:', newWorkspace.name);
+      // Navigation stays on same page, just workspace changes
+    } catch (error) {
+      console.error('❌ Failed to create workspace:', error);
+      throw error;
+    }
+  };
+
+  // Handle workspace switch
+  const handleSwitchWorkspace = async (workspace: any) => {
+    try {
+      console.log('🔄 Switching to workspace:', workspace.name);
+      await switchWorkspace(workspace);
+      
+      // Navigate to home when switching workspaces
+      navigate('/workspace');
+      
+      console.log('✅ Switched to workspace:', workspace.name);
+    } catch (error) {
+      console.error('❌ Failed to switch workspace:', error);
+    }
+  };
+
   // Load demo presentation with all beautiful blocks
   const handleLoadDemoPresentation = async () => {
     console.log('🎨 Loading demo presentation...');
@@ -321,7 +366,7 @@ export default function Workspace() {
     setPresentationError(null);
 
     try {
-      const editorContent = liveEditorContent || currentDocument.content;
+      const editorContent = liveEditorContentRef.current || currentDocument.content;
       console.log('📝 Editor content length:', editorContent.length);
 
       console.log('🤖 Calling safe presentation service...');
@@ -383,19 +428,27 @@ export default function Workspace() {
   };
 
   // Callback to receive live content updates from editors
-  const handleContentChange = (content: string) => {
+  const handleContentChange = React.useCallback((content: string) => {
     // Only save if content actually changed compared to what we already have in editor
-    if (liveEditorContent === content) {
+    if (liveEditorContentRef.current === content) {
       return; // No change, skip
     }
     
-    setLiveEditorContent(content);
+    liveEditorContentRef.current = content; // Update ref instead of state to avoid re-renders!
 
     // Auto-save to backend (debounced)
     if (currentDocument) {
       autoSaveDocument(currentDocument.id, content);
     }
-  };
+  }, [currentDocument, autoSaveDocument]);
+
+  // Callback to handle title changes (memoized to prevent infinite loops)
+  const handleTitleChange = React.useCallback((newTitle: string) => {
+    if (currentDocument) {
+      backendUpdateDocument(currentDocument.id, { title: newTitle });
+      setCurrentDocument({ ...currentDocument, title: newTitle });
+    }
+  }, [currentDocument, backendUpdateDocument]);
 
   // Helper function to scroll editor to specific heading by index
   const scrollToHeading = (headingIndex: number) => {
@@ -534,12 +587,7 @@ export default function Workspace() {
           documentTitle={currentDocument?.title || 'Untitled Document'}
           initialContent={currentDocument?.content || ''}
           onContentChange={handleContentChange}
-          onTitleChange={(newTitle) => {
-            if (currentDocument) {
-              backendUpdateDocument(currentDocument.id, { title: newTitle });
-              setCurrentDocument({ ...currentDocument, title: newTitle });
-            }
-          }}
+          onTitleChange={handleTitleChange}
           onEditorReady={(editor) => {
             editorInstanceRef.current = editor;
           }}
@@ -578,7 +626,7 @@ export default function Workspace() {
       {!focusMode && viewMode !== 'present' && (
         <AdaptiveSidebar
           isEditingDocument={viewMode === 'edit' || viewMode === 'mindmap' || viewMode === 'slides'}
-          documentContent={liveEditorContent || currentDocument?.content || ''}
+          documentContent={liveEditorContentRef.current || currentDocument?.content || ''}
           onHeadingClick={(text, line, headingIndex) => {
             console.log('📍 Scroll to heading index:', headingIndex, 'Text:', text);
             // Trigger scroll in editor by index (more reliable)
@@ -621,8 +669,22 @@ export default function Workspace() {
         {/* Top Bar */}
         {!focusMode && (
           <header className="flex items-center justify-between px-6 py-4 bg-card/30 backdrop-blur-sm mb-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <h1 className="text-xl font-bold text-glow">MD Creator</h1>
+              
+              {/* Workspace Switcher */}
+              {currentWorkspace && workspaces.length > 0 && (
+                <>
+                  <span className="text-muted-foreground">/</span>
+                  <WorkspaceSwitcher
+                    workspaces={workspaces}
+                    currentWorkspace={currentWorkspace}
+                    onSwitch={handleSwitchWorkspace}
+                    onCreate={() => setShowCreateWorkspaceModal(true)}
+                  />
+                </>
+              )}
+              
               {currentDocument && (
                 <>
                   <span className="text-muted-foreground">/</span>
@@ -645,7 +707,8 @@ export default function Workspace() {
                       <span className="text-sm font-medium text-primary px-2 py-1 rounded-md bg-primary/10">
                         {viewMode === 'edit' && '✍️ Editor'}
                         {viewMode === 'mindmap' && '🧠 Mindmap'}
-                        {viewMode === 'presentation' && '📊 Presentation'}
+                        {viewMode === 'slides' && '📊 Presentation'}
+                        {viewMode === 'present' && '🎬 Presenting'}
                       </span>
                     </>
                   )}
@@ -654,6 +717,22 @@ export default function Workspace() {
             </div>
 
             <div className="flex items-center gap-3">
+              {/* Sync Status Indicator */}
+              <SyncStatusIndicator />
+              
+              {/* Version History Button - Only show when editing */}
+              {currentDocument && viewMode === 'edit' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowVersionHistory(!showVersionHistory)}
+                  className="gap-2"
+                >
+                  <Clock className="h-4 w-4" />
+                  <span className="hidden md:inline">History</span>
+                </Button>
+              )}
+
               {/* Guest Credits */}
               <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border border-border/40 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
@@ -693,6 +772,27 @@ export default function Workspace() {
                     <DropdownMenuItem onClick={() => navigate('/settings')}>
                       <Settings className="mr-2 h-4 w-4" />
                       Settings
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={async () => {
+                        if (confirm('⚠️ This will delete ALL offline data and refresh the page. Continue?')) {
+                          try {
+                            // Delete IndexedDB
+                            await indexedDB.deleteDatabase('MDReaderOfflineDB');
+                            console.log('✅ Offline database deleted');
+                            
+                            // Reload page
+                            window.location.reload();
+                          } catch (error) {
+                            console.error('❌ Failed to reset offline data:', error);
+                            alert('Failed to reset offline data. Check console for details.');
+                          }
+                        }
+                      }}
+                      className="text-orange-600 focus:text-orange-600"
+                    >
+                      <Database className="mr-2 h-4 w-4" />
+                      Reset Offline Data
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -746,6 +846,13 @@ export default function Workspace() {
         createDocument={backendCreateDocument}
       />
 
+      {/* Create Workspace Modal */}
+      <CreateWorkspaceModal
+        open={showCreateWorkspaceModal}
+        onClose={() => setShowCreateWorkspaceModal(false)}
+        onCreate={handleCreateWorkspace}
+      />
+
       {/* Presentation Wizard */}
       <PresentationWizardModal
         open={showPresentationWizard}
@@ -756,6 +863,28 @@ export default function Workspace() {
       {/* Full-Screen Presentation Loading */}
       {showPresentationProgress && (
         <PresentationLoadingScreen progress={presentationProgress} />
+      )}
+
+      {/* Drag-and-Drop Zone */}
+      <DragDropZone />
+
+      {/* Version History Panel */}
+      {showVersionHistory && currentDocument && (
+        <div className="fixed right-0 top-0 h-full z-40">
+          <VersionHistory
+            documentId={currentDocument.id}
+            currentVersion={currentDocument.metadata?.version || 1}
+            onRestore={async (versionNumber) => {
+              // Refresh document after restore
+              await refreshDocuments();
+              const restored = backendGetDocument(currentDocument.id);
+              if (restored) {
+                setCurrentDocument(restored);
+              }
+            }}
+            onClose={() => setShowVersionHistory(false)}
+          />
+        </div>
       )}
     </div>
   );

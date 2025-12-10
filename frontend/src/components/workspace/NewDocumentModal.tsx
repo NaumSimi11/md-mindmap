@@ -86,32 +86,42 @@ export function NewDocumentModal({
   };
 
   const handleCreateBlank = async (type: 'markdown' | 'mindmap' | 'presentation') => {
-    const title = customTitle.trim() || 'Untitled Document';
-    const content = getBlankContent(type, title);
-    
-    const doc = createDocument 
-      ? await createDocument(type, title, content)
-      : { id: `doc-${Date.now()}` };
-    
-    // Show success message
-    console.log(`✅ Created ${type}: ${title} (ID: ${doc.id})`);
-    
-    onDocumentCreated(doc.id);
-    onClose();
+    try {
+      const title = customTitle.trim() || 'Untitled Document';
+      const content = getBlankContent(type, title);
+      
+      const doc = createDocument 
+        ? await createDocument(type, title, content)
+        : { id: `doc-${Date.now()}` };
+      
+      // Show success message
+      console.log(`✅ Created ${type}: ${title} (ID: ${doc.id})`);
+      
+      onDocumentCreated(doc.id);
+      onClose();
+    } catch (error: any) {
+      console.error('❌ Failed to create document:', error);
+      alert(error.message || 'Failed to create document. Please try again.');
+    }
   };
 
   const handleCreateFromTemplate = async (template: DocumentTemplate) => {
-    const title = customTitle.trim() || template.name;
-    
-    const doc = createDocument
-      ? await createDocument(template.type, title, template.content)
-      : { id: `doc-${Date.now()}` };
-    
-    // Show success message
-    console.log(`✅ Created from template "${template.name}": ${title} (ID: ${doc.id})`);
-    
-    onDocumentCreated(doc.id);
-    onClose();
+    try {
+      const title = customTitle.trim() || template.name;
+      
+      const doc = createDocument
+        ? await createDocument(template.type, title, template.content)
+        : { id: `doc-${Date.now()}` };
+      
+      // Show success message
+      console.log(`✅ Created from template "${template.name}": ${title} (ID: ${doc.id})`);
+      
+      onDocumentCreated(doc.id);
+      onClose();
+    } catch (error: any) {
+      console.error('❌ Failed to create document from template:', error);
+      alert(error.message || 'Failed to create document. Please try again.');
+    }
   };
 
   const getBlankContent = (type: 'markdown' | 'mindmap' | 'presentation', title: string): string => {

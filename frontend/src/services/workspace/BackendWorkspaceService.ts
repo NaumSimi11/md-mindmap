@@ -114,10 +114,10 @@ export class BackendWorkspaceService {
       type: apiDoc.content_type === 'markdown' ? 'markdown' : 'markdown', // Extend later for mindmap/presentation
       title: apiDoc.title,
       content: apiDoc.content,
-      folderId: null, // Folders not implemented in backend yet
+      folderId: apiDoc.folder_id || null,
       workspaceId: apiDoc.workspace_id,
-      starred: false, // Extend later
-      tags: [], // Extend later
+      starred: apiDoc.is_starred || false,
+      tags: apiDoc.tags || [],
       createdAt: new Date(apiDoc.created_at),
       updatedAt: new Date(apiDoc.updated_at),
       lastOpenedAt: undefined,
@@ -179,6 +179,34 @@ export class BackendWorkspaceService {
   }
 
   /**
+   * Create new workspace
+   */
+  async createWorkspace(data: { name: string; description: string; icon?: string }): Promise<Workspace> {
+    try {
+      const newWorkspace = await apiWorkspace.createWorkspace({
+        name: data.name,
+        description: data.description,
+      });
+      
+      const mappedWorkspace = this.mapApiWorkspace(newWorkspace);
+      
+      // Add icon if provided (not stored in backend yet, just UI)
+      if (data.icon) {
+        mappedWorkspace.icon = data.icon;
+      }
+      
+      // Add to workspaces list
+      this.workspaces.push(mappedWorkspace);
+      
+      console.log('✅ Workspace created:', mappedWorkspace.name);
+      return mappedWorkspace;
+    } catch (error) {
+      console.error('❌ Failed to create workspace:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Create new document
    */
   async createDocument(
@@ -202,7 +230,7 @@ export class BackendWorkspaceService {
       const doc = this.mapApiDocument(apiDoc);
       this.documents.push(doc);
       
-      console.log('✅ Document created:', title);
+      console.log('✅ Document created:', title, '| Total docs:', this.documents.length);
       return doc;
     } catch (error) {
       console.error('❌ Failed to create document:', error);
@@ -247,9 +275,15 @@ export class BackendWorkspaceService {
       const apiUpdates: any = {};
       if (updates.title !== undefined) apiUpdates.title = updates.title;
       if (updates.content !== undefined) apiUpdates.content = updates.content;
+      if (updates.folderId !== undefined) apiUpdates.folder_id = updates.folderId;
+      if (updates.starred !== undefined) apiUpdates.is_starred = updates.starred;
+
+      console.log('🔄 Sending PATCH request:', { documentId, apiUpdates });
 
       // Send to backend
       const apiDoc = await apiDocument.updateDocument(documentId, apiUpdates);
+      
+      console.log('📥 Backend response:', apiDoc);
       
       // Update local cache
       const doc = this.mapApiDocument(apiDoc);
@@ -258,7 +292,7 @@ export class BackendWorkspaceService {
         this.documents[index] = doc;
       }
       
-      console.log('✅ Document updated');
+      console.log('✅ Document updated in cache:', doc);
     } catch (error) {
       console.error('❌ Failed to update document:', error);
       throw error;

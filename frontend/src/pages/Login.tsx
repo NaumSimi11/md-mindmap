@@ -25,16 +25,24 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    console.log('🚀 Login.handleSubmit() called');
+    
     try {
-      await login({ email, password });
+      console.log('📞 Calling login()...');
+      // Trim email to prevent accidental spaces
+      await login({ email: email.trim(), password });
       
+      console.log('✅ login() completed, showing toast...');
       toast({
         title: "✨ Welcome back!",
         description: "You've successfully logged in.",
       });
       
+      console.log('🧭 Navigating to /workspace...');
       navigate('/workspace');
+      console.log('✅ Navigation called');
     } catch (error: any) {
+      console.error('❌ Login error caught:', error);
       toast({
         variant: "destructive",
         title: "❌ Login failed",

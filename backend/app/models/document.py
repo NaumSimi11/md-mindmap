@@ -77,11 +77,18 @@ class Document(BaseModel, SoftDeleteMixin):
         nullable=True,
         index=True
     )
+    folder_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("folders.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True
+    )
     
     # Metadata
     version = Column(Integer, default=1, nullable=False)
     is_public = Column(Boolean, default=False, nullable=False)
     is_template = Column(Boolean, default=False, nullable=False, index=True)
+    is_starred = Column(Boolean, default=False, nullable=False, index=True)
     tags = Column(ARRAY(String), default=[], nullable=False)
     doc_metadata = Column(JSONB, default={}, nullable=False)
     
@@ -90,9 +97,13 @@ class Document(BaseModel, SoftDeleteMixin):
     word_count = Column(Integer, default=0, nullable=False)
     
     # Relationships
-    workspace = relationship("Workspace", backref="documents")
-    created_by = relationship("User", foreign_keys=[created_by_id])
+    workspace = relationship("Workspace", back_populates="documents")
+    created_by = relationship("User", back_populates="documents_created", foreign_keys=[created_by_id])
+    folder = relationship("Folder", back_populates="documents", foreign_keys=[folder_id])
     versions = relationship("DocumentVersion", back_populates="document", cascade="all, delete-orphan")
+    files = relationship("File", back_populates="document", cascade="all, delete-orphan")
+    presences = relationship("DocumentPresence", back_populates="document", cascade="all, delete-orphan")
+    active_sessions = relationship("UserSession", back_populates="current_document")
     
     # Indexes
     __table_args__ = (

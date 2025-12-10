@@ -265,3 +265,58 @@ async def get_document_stats(
     except ValueError:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document ID")
 
+
+# ==================== Star/Unstar ====================
+
+
+@router.post("/{document_id}/star", response_model=DocumentResponse)
+async def star_document(
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Star a document"""
+    try:
+        document_uuid = uuid.UUID(document_id)
+        document = DocumentService.update_document(
+            db, 
+            document_uuid, 
+            DocumentUpdate(is_starred=True),
+            current_user.id
+        )
+        
+        if not document:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+        
+        return DocumentResponse.model_validate(document)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document ID")
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+
+@router.delete("/{document_id}/star", response_model=DocumentResponse)
+async def unstar_document(
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Unstar a document"""
+    try:
+        document_uuid = uuid.UUID(document_id)
+        document = DocumentService.update_document(
+            db, 
+            document_uuid, 
+            DocumentUpdate(is_starred=False),
+            current_user.id
+        )
+        
+        if not document:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+        
+        return DocumentResponse.model_validate(document)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document ID")
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
