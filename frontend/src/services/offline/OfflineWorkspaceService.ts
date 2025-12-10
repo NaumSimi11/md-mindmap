@@ -21,15 +21,24 @@ export class OfflineWorkspaceService {
   }
   
   private setupNetworkListeners() {
-    window.addEventListener('online', () => {
+    window.addEventListener('online', async () => {
       console.log('✅ Back online');
       this.isOnline = true;
+      
+      // CRITICAL: Refresh UI from IndexedDB before syncing
+      await this.refreshFromIndexedDB();
+      window.dispatchEvent(new CustomEvent('offline-data-loaded'));
+      
       syncManager.syncNow();
     });
     
-    window.addEventListener('offline', () => {
+    window.addEventListener('offline', async () => {
       console.log('📴 Gone offline');
       this.isOnline = false;
+      
+      // CRITICAL: Refresh UI from IndexedDB
+      await this.refreshFromIndexedDB();
+      window.dispatchEvent(new CustomEvent('offline-data-loaded'));
     });
   }
   
@@ -57,12 +66,57 @@ export class OfflineWorkspaceService {
     return this.backendService.getCurrentWorkspace();
   }
   
+  /**
+   * Get all documents - Reads from IndexedDB if available, falls back to backend cache
+   */
   getAllDocuments(): Document[] {
+    // CRITICAL FIX: Always return backend service documents
+    // IndexedDB sync will update these via document-synced events
     return this.backendService.getAllDocuments();
   }
   
   getDocument(documentId: string): Document | undefined {
     return this.backendService.getDocument(documentId);
+  }
+  
+  /**
+   * Force refresh documents from IndexedDB (for offline/sync scenarios)
+   */
+  async refreshFromIndexedDB(): Promise<void> {
+    try {
+      const currentWorkspace = this.getCurrentWorkspace();
+      if (!currentWorkspace) return;
+      
+      // Load documents from IndexedDB
+      const offlineDocs = await offlineDB.documents
+        .where('workspaceId').equals(currentWorkspace.id)
+        .toArray();
+      
+      console.log(`📦 Loaded ${offlineDocs.length} documents from IndexedDB`);
+      
+      // Map to Document type
+      const docs: Document[] = offlineDocs.map(od => ({
+        id: od.id,
+        type: 'markdown',
+        title: od.title,
+        content: od.content,
+        folderId: od.folderId || null,
+        workspaceId: od.workspaceId,
+        starred: od.starred || false,
+        tags: od.tags || [],
+        createdAt: new Date(od.createdAt),
+        updatedAt: new Date(od.updatedAt),
+        lastOpenedAt: undefined,
+        metadata: {}
+      }));
+      
+      // Update backend service's in-memory cache
+      (this.backendService as any).documents = docs;
+      
+      console.log('✅ Backend service cache updated from IndexedDB');
+    } catch (error) {
+      console.error('❌ Failed to refresh from IndexedDB:', error);
+    }
   }
   
   // ==========================================================================
@@ -146,6 +200,7 @@ export class OfflineWorkspaceService {
     await syncManager.queueChange({
       entity_type: 'document',
       entity_id: tempId,
+      workspace_id: currentWorkspace.id, // Add workspace_id at top level
       operation: 'create',
       data: { type, title, content, folderId, workspaceId: currentWorkspace.id },
       priority: 'high'
@@ -190,6 +245,18 @@ export class OfflineWorkspaceService {
         
         await offlineDB.documents.update(documentId, updateData);
         console.log('✅ IndexedDB updated');
+        
+        // CRITICAL: Also update backend service's in-memory cache
+        const backendDoc = this.backendService.getDocument(documentId);
+        if (backendDoc) {
+          if (updates.title !== undefined) backendDoc.title = updates.title;
+          if (updates.content !== undefined) backendDoc.content = updates.content;
+          if (updates.folderId !== undefined) backendDoc.folderId = updates.folderId;
+          if (updates.starred !== undefined) backendDoc.starred = updates.starred;
+          if (updates.tags !== undefined) backendDoc.tags = updates.tags;
+          backendDoc.updatedAt = new Date();
+          console.log('✅ Backend service cache updated');
+        }
       } else {
         console.warn('⚠️ Document not found in IndexedDB:', documentId);
       }
@@ -212,9 +279,15 @@ export class OfflineWorkspaceService {
     
     // Offline or failed: Queue for sync
     console.log('📋 Queuing update for sync...');
+    
+    // Get workspace_id from IndexedDB document
+    const offlineDoc = await offlineDB.documents.get(documentId);
+    const workspaceId = offlineDoc?.workspaceId || this.backendService.getCurrentWorkspace()?.id || null;
+    
     await syncManager.queueChange({
       entity_type: 'document',
       entity_id: documentId,
+      workspace_id: workspaceId,
       operation: 'update',
       data: updates,
       priority: 'normal'
@@ -244,10 +317,15 @@ export class OfflineWorkspaceService {
       }
     }
     
+    // Get workspace_id before deleting
+    const offlineDoc = await offlineDB.documents.get(documentId);
+    const workspaceId = offlineDoc?.workspaceId || this.backendService.getCurrentWorkspace()?.id || null;
+    
     // Queue for sync
     await syncManager.queueChange({
       entity_type: 'document',
       entity_id: documentId,
+      workspace_id: workspaceId,
       operation: 'delete',
       data: {},
       priority: 'normal'

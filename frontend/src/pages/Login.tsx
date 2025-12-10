@@ -38,8 +38,12 @@ export default function Login() {
         description: "You've successfully logged in.",
       });
       
+      // CRITICAL: Wait for React to finish ALL state updates and WorkspaceContext to initialize
+      console.log('⏳ Waiting for WorkspaceContext to initialize (300ms)...');
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
       console.log('🧭 Navigating to /workspace...');
-      navigate('/workspace');
+      navigate('/workspace', { replace: true }); // Use replace to avoid back-button issues
       console.log('✅ Navigation called');
     } catch (error: any) {
       console.error('❌ Login error caught:', error);

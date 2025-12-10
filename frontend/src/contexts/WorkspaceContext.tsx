@@ -6,6 +6,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 import { useAuth } from '@/hooks/useAuth';
 import { backendWorkspaceService, type Workspace, type Document } from '@/services/workspace/BackendWorkspaceService';
 import { OfflineWorkspaceService } from '@/services/offline/OfflineWorkspaceService';
+import { syncManager } from '@/services/offline/SyncManager';
 
 // Create offline-aware wrapper
 const offlineWorkspaceService = new OfflineWorkspaceService(backendWorkspaceService);
@@ -38,6 +39,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [initCounter, setInitCounter] = useState(0); // Force re-init counter
 
   // Initialize on auth
   useEffect(() => {
@@ -46,20 +48,30 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         isAuthenticated, 
         hasUser: !!user, 
         userId: user?.id,
-        authLoading 
+        email: user?.email,
+        username: user?.username,
+        authLoading,
+        initCounter 
       });
       
       // Wait for auth to finish loading
       if (authLoading) {
-        console.log('⏳ Waiting for auth to finish loading...');
+        console.log('⏳ Waiting for auth to finish loading...', { authLoading });
+        setIsLoading(false);
         return;
       }
       
-      if (!isAuthenticated || !user) {
-        console.log('⚠️ Not authenticated or no user, clearing state');
+      if (!isAuthenticated) {
+        console.log('⚠️ Not authenticated, clearing state', { isAuthenticated });
         setWorkspaces([]);
         setCurrentWorkspace(null);
         setDocuments([]);
+        setIsLoading(false);
+        return;
+      }
+      
+      if (!user) {
+        console.log('⚠️ No user object yet, waiting...', { user });
         setIsLoading(false);
         return;
       }
@@ -98,23 +110,34 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           localStorage.setItem(LAST_WORKSPACE_KEY, workspace.id);
           
           console.log('✅ Workspace context initialized:', workspace.name, 'with', docs.length, 'docs');
+          console.log('📊 Final state:', {
+            workspaces: uniqueWorkspaces.length,
+            currentWorkspace: workspace.name,
+            documents: docs.length
+          });
+        } else {
+          console.warn('⚠️ No workspace found for user');
         }
       } catch (err: any) {
         console.error('❌ Workspace init failed:', err);
         setError(err.message || 'Failed to load workspaces');
       } finally {
         setIsLoading(false);
+        console.log('✅ WorkspaceContext initialization complete (isLoading = false)');
       }
     };
 
     init();
-  }, [isAuthenticated, user, authLoading, user?.id]); // Include user.id to re-init when user changes
+  }, [isAuthenticated, user, authLoading, user?.id, initCounter]); // Include initCounter to force re-init
   
-  // Listen for login events to force re-init
+  // Listen for login events to FORCE re-init
   useEffect(() => {
-    const handleLoginSuccess = () => {
-      console.log('🔔 Login event detected, will re-init workspace');
-      // The normal effect will handle this via user state change
+    const handleLoginSuccess = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('🔔 Login event detected, FORCING workspace re-init for user:', customEvent.detail?.user?.username);
+      
+      // Force re-init by incrementing counter
+      setInitCounter(prev => prev + 1);
     };
     
     window.addEventListener('auth:login', handleLoginSuccess);
@@ -165,16 +188,45 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       });
     };
     
+    const handleOfflineDataLoaded = () => {
+      console.log('🔄 Offline data loaded event, refreshing documents...');
+      const docs = offlineWorkspaceService.getAllDocuments();
+      setDocuments([...docs]);
+      console.log(`✅ Refreshed: ${docs.length} documents`);
+    };
+    
     window.addEventListener('document-synced', handleDocumentSynced);
+    window.addEventListener('offline-data-loaded', handleOfflineDataLoaded);
     
     return () => {
       window.removeEventListener('document-synced', handleDocumentSynced);
+      window.removeEventListener('offline-data-loaded', handleOfflineDataLoaded);
     };
   }, []);
 
   const switchWorkspace = useCallback(async (workspace: Workspace) => {
     try {
       console.log('🔄 [Context] Switching workspace:', workspace.name, workspace.id);
+      
+      // If switching to a different workspace, sync pending changes first
+      const oldWorkspaceId = currentWorkspace?.id;
+      if (oldWorkspaceId && oldWorkspaceId !== workspace.id) {
+        console.log('🔄 [Context] Syncing pending changes before switch...');
+        
+        // Try to sync with 3-second timeout
+        await Promise.race([
+          syncManager.syncNow(),
+          new Promise(resolve => setTimeout(resolve, 3000))
+        ]).catch(err => {
+          console.warn('⚠️ Failed to sync before workspace switch:', err);
+        });
+        
+        // Dispatch event after sync attempt
+        window.dispatchEvent(new CustomEvent('workspace:switch', {
+          detail: { oldWorkspaceId, newWorkspaceId: workspace.id }
+        }));
+      }
+      
       setIsLoading(true);
       
       // Clear old state

@@ -65,7 +65,7 @@ export class DocumentService {
   private autoSaveTimeout: NodeJS.Timeout | null = null;
   private lastSavedContent: Map<string, string> = new Map();
 
-  autoSave(documentId: string, content: string, delay: number = 2000): void {
+  autoSave(documentId: string, content: string, delay: number = 1000): void {
     // Check if content has changed since last save
     const lastContent = this.lastSavedContent.get(documentId);
     if (lastContent === content) {

@@ -108,6 +108,24 @@ export function useAuth(): UseAuthReturn {
   const logout = useCallback(async () => {
     try {
       setIsLoading(true);
+      
+      // Check for pending changes before logout
+      const { offlineDB } = await import('@/services/offline/OfflineDatabase');
+      const pendingCount = await offlineDB.pending_changes.count();
+      
+      if (pendingCount > 0) {
+        const confirmed = window.confirm(
+          `You have ${pendingCount} unsaved change(s) that haven't been synced yet.\n\nLogging out will discard them. Continue?`
+        );
+        if (!confirmed) {
+          setIsLoading(false);
+          return;
+        }
+      }
+      
+      // Dispatch logout event for cleanup (e.g., SyncManager)
+      window.dispatchEvent(new CustomEvent('auth:logout'));
+      
       await authService.logout();
       setUser(null);
     } catch (err) {

@@ -64,6 +64,7 @@ export interface PendingChange {
   id: string;
   entity_type: 'document' | 'folder' | 'workspace';
   entity_id: string;
+  workspace_id: string | null;    // Which workspace this change belongs to
   operation: 'create' | 'update' | 'delete';
   data: any;                      // The change payload
   timestamp: string;              // When change was made
@@ -92,14 +93,14 @@ class OfflineDatabaseClass extends Dexie {
   constructor() {
     super('MDReaderOfflineDB');
     
-    // Define schema - Version 2 (fixed compound index)
-    this.version(2).stores({
+    // Define schema - Version 3 (added workspace_id to pending_changes)
+    this.version(3).stores({
       // Primary key is 'id' by default
-      documents: 'id, workspaceId, folderId, [workspaceId+folderId], pending_changes, last_synced',
-      folders: 'id, workspace_id, parent_id, pending_changes',
-      workspaces: 'id, owner_id, is_active',
-      pending_changes: 'id, entity_type, entity_id, timestamp, priority, [priority+timestamp]', // Added compound index
-      sync_metadata: 'key'
+      documents: 'id, workspaceId, folderId, [workspaceId+folderId], pendingChanges, lastSynced',
+      folders: 'id, workspaceId, parentId, pendingChanges',
+      workspaces: 'id, ownerId, isActive',
+      pending_changes: 'id, entityType, entityId, workspaceId, [workspaceId+priority+timestamp], timestamp, priority, [priority+timestamp]',
+      syncMetadata: 'key'
     });
   }
   

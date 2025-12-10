@@ -148,8 +148,68 @@ export function WorkspaceSidebar({
   };
 
   const handleDeleteFolder = async (folderId: string) => {
-    if (confirm('Delete this folder and all its contents?')) {
-      await deleteFolder(folderId);
+    // Find folder in tree (recursive search)
+    const findFolderInTree = (folders: any[], targetId: string): any => {
+      for (const folder of folders) {
+        if (folder.id === targetId) return folder;
+        if (folder.children && folder.children.length > 0) {
+          const found = findFolderInTree(folder.children, targetId);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    
+    // Count documents in folder (and subfolders recursively)
+    const countDocumentsInFolder = (targetFolderId: string): { docs: number; subfolders: number } => {
+      // Direct documents in this folder
+      let docs = backendDocuments.filter(doc => doc.folderId === targetFolderId).length;
+      let subfolders = 0;
+      
+      // Find this folder in the tree to get its children
+      const folder = findFolderInTree(folderTree, targetFolderId);
+      
+      if (folder && folder.children && folder.children.length > 0) {
+        for (const subfolder of folder.children) {
+          subfolders++;
+          const childCounts = countDocumentsInFolder(subfolder.id);
+          docs += childCounts.docs;
+          subfolders += childCounts.subfolders;
+        }
+      }
+      
+      return { docs, subfolders };
+    };
+    
+    const folder = findFolderInTree(folderTree, folderId);
+    const folderName = folder?.name || 'this folder';
+    const { docs: docCount, subfolders: subfolderCount } = countDocumentsInFolder(folderId);
+    
+    // Build confirmation message
+    let message = `Delete "${folderName}"?`;
+    
+    if (subfolderCount > 0) {
+      message += `\n\n📁 ${subfolderCount} subfolder${subfolderCount === 1 ? '' : 's'} will be deleted.`;
+    }
+    
+    if (docCount > 0) {
+      message += `\n📄 ${docCount} document${docCount === 1 ? '' : 's'} will be deleted.`;
+    }
+    
+    if (docCount > 0 || subfolderCount > 0) {
+      message += '\n\n⚠️ This action cannot be undone!';
+    } else {
+      message += '\n\nThis folder is empty.';
+    }
+    
+    if (confirm(message)) {
+      try {
+        await deleteFolder(folderId, true); // cascade = true
+        console.log(`✅ Folder "${folderName}" deleted (${subfolderCount} subfolders, ${docCount} documents)`);
+      } catch (error) {
+        console.error('❌ Failed to delete folder:', error);
+        alert('Failed to delete folder. Please try again.');
+      }
     }
   };
 

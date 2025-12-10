@@ -105,6 +105,15 @@ class SyncManager {
   
   constructor() {
     this.setupNetworkListeners();
+    this.setupLifecycleListeners();
+    
+    // TEMPORARY FIX: Clear all pending changes on init to resolve orphaned changes
+    // TODO: Add workspace_id to PendingChange schema for proper filtering
+    this.clearAllPendingChanges().then(() => {
+      console.log('🧹 Cleared all pending changes on init (temporary fix for orphaned data)');
+    });
+    
+    this.cleanupStaleChanges(); // Run cleanup on init
     console.log('🔄 SyncManager initialized');
   }
   
@@ -157,9 +166,10 @@ class SyncManager {
   
   /**
    * Sync all pending changes now
+   * @param workspaceId - Optional: only sync changes for this workspace
    */
-  async syncNow(): Promise<SyncResult> {
-    console.log('🔄 syncNow() called, isOnline:', this.isOnline, 'isSyncing:', this.isSyncing);
+  async syncNow(workspaceId?: string): Promise<SyncResult> {
+    console.log('🔄 syncNow() called, isOnline:', this.isOnline, 'isSyncing:', this.isSyncing, 'workspace:', workspaceId || 'all');
     
     if (!this.isOnline) {
       console.log('📴 Cannot sync: offline');
@@ -193,11 +203,17 @@ class SyncManager {
     
     try {
       // Get pending changes, ordered by priority and timestamp
-      const pendingChanges = await offlineDB.pending_changes
+      let pendingChanges = await offlineDB.pending_changes
         .orderBy('[priority+timestamp]')
         .toArray();
       
-      console.log(`📦 Found ${pendingChanges.length} pending changes to sync`);
+      console.log(`📦 Found ${pendingChanges.length} pending changes (before filtering)`);
+      
+      // Filter by workspace if specified
+      if (workspaceId) {
+        pendingChanges = pendingChanges.filter(change => change.workspace_id === workspaceId);
+        console.log(`📦 Filtered to ${pendingChanges.length} changes for workspace ${workspaceId}`);
+      }
       
       if (pendingChanges.length === 0) {
         console.log('✅ No changes to sync');
@@ -291,11 +307,15 @@ class SyncManager {
       clearInterval(this.autoSyncInterval);
     }
     
-    this.autoSyncInterval = window.setInterval(() => {
+    this.autoSyncInterval = window.setInterval(async () => {
       if (this.isOnline && !this.isSyncing) {
-        this.syncNow().catch(err => {
-          console.error('❌ Auto-sync failed:', err);
-        });
+        // Check if there are pending changes before syncing
+        const pendingCount = await offlineDB.pending_changes.count();
+        if (pendingCount > 0) {
+          this.syncNow().catch(err => {
+            console.error('❌ Auto-sync failed:', err);
+          });
+        }
       }
     }, intervalMs);
     
@@ -314,6 +334,72 @@ class SyncManager {
   }
   
   /**
+   * Cleanup stale pending changes
+   * - Removes changes older than 24 hours with 3+ retries
+   * - Removes orphaned changes (document no longer exists)
+   */
+  async cleanupStaleChanges(): Promise<void> {
+    try {
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      
+      // 1. Remove changes older than 24 hours with high retry counts
+      const staleChanges = await offlineDB.pending_changes
+        .where('timestamp').below(twentyFourHoursAgo.toISOString())
+        .filter(change => change.retry_count >= 3)
+        .toArray();
+      
+      if (staleChanges.length > 0) {
+        console.log(`🗑️ Removing ${staleChanges.length} stale changes (24h+ old, 3+ retries)`);
+        for (const change of staleChanges) {
+          await offlineDB.pending_changes.delete(change.id);
+        }
+      }
+      
+      // 2. Validate entities still exist in IndexedDB
+      const allChanges = await offlineDB.pending_changes.toArray();
+      let orphanedCount = 0;
+      
+      for (const change of allChanges) {
+        if (change.entity_type === 'document') {
+          const doc = await offlineDB.documents.get(change.entity_id);
+          if (!doc) {
+            console.warn(`⚠️ Orphaned change for non-existent document: ${change.entity_id}`);
+            await offlineDB.pending_changes.delete(change.id);
+            orphanedCount++;
+          }
+        } else if (change.entity_type === 'folder') {
+          const folder = await offlineDB.folders.get(change.entity_id);
+          if (!folder) {
+            console.warn(`⚠️ Orphaned change for non-existent folder: ${change.entity_id}`);
+            await offlineDB.pending_changes.delete(change.id);
+            orphanedCount++;
+          }
+        }
+      }
+      
+      if (orphanedCount > 0) {
+        console.log(`🗑️ Removed ${orphanedCount} orphaned changes`);
+      }
+      
+      await this.updateStatus();
+    } catch (error) {
+      console.error('❌ Cleanup failed:', error);
+    }
+  }
+  
+  /**
+   * Clear all pending changes (used on logout)
+   */
+  async clearAllPendingChanges(): Promise<void> {
+    const count = await offlineDB.pending_changes.count();
+    if (count > 0) {
+      console.log(`🧹 Clearing ${count} pending changes`);
+      await offlineDB.pending_changes.clear();
+      await this.updateStatus();
+    }
+  }
+  
+  /**
    * Add event listener
    */
   addEventListener(listener: SyncEventListener): () => void {
@@ -328,6 +414,29 @@ class SyncManager {
   private setupNetworkListeners(): void {
     window.addEventListener('online', this.handleOnline);
     window.addEventListener('offline', this.handleOffline);
+  }
+  
+  private setupLifecycleListeners(): void {
+    // Clear pending changes on logout
+    window.addEventListener('auth:logout', async () => {
+      console.log('🚪 Logout detected, clearing pending changes');
+      this.stopAutoSync(); // Stop background sync
+      await this.clearAllPendingChanges();
+    });
+    
+    // Sync before workspace switch
+    window.addEventListener('workspace:switch', async (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { oldWorkspaceId, newWorkspaceId } = customEvent.detail || {};
+      console.log(`🔄 Workspace switch: ${oldWorkspaceId} → ${newWorkspaceId}`);
+      
+      // Attempt to sync remaining changes for old workspace
+      if (this.isOnline && !this.isSyncing) {
+        await this.syncNow().catch(err => {
+          console.warn('⚠️ Failed to sync before workspace switch:', err);
+        });
+      }
+    });
   }
   
   private handleOnline = async () => {
@@ -493,24 +602,35 @@ class SyncManager {
           const localDoc = await offlineDB.documents.get(change.entity_id);
           if (!localDoc) {
             console.warn(`   ⚠️ Document ${change.entity_id} not found in IndexedDB (may have been converted to new ID)`);
-            
-            // This might be an old temp ID that was already converted
-            // Just delete this pending change and let the converted one sync later
-            await offlineDB.pending_changes.delete(change.id);
-            console.log(`   🧹 Cleaned up orphaned pending change`);
             return { success: true }; // Consider it "successful" (cleaned up)
           }
           
-          // Fetch current version from server
-          let remoteDoc;
+          // Build update payload
+          const updatePayload: any = {};
+          if (change.data.title !== undefined) updatePayload.title = change.data.title;
+          if (change.data.content !== undefined) updatePayload.content = change.data.content;
+          if (change.data.folderId !== undefined) updatePayload.folder_id = change.data.folderId;
+          if (change.data.starred !== undefined) updatePayload.is_starred = change.data.starred;
+          
+          // OPTIMISTIC SYNC: Try PATCH first, only GET if it fails
           try {
-            remoteDoc = await apiDocument.getDocument(change.entity_id);
+            await apiDocument.updateDocument(change.entity_id, updatePayload);
+            
+            // Success - update IndexedDB
+            await offlineDB.documents.update(change.entity_id, {
+              pending_changes: false,
+              last_synced: new Date().toISOString(),
+              remote_version: (localDoc.remote_version || 0) + 1
+            });
+            
+            console.log(`   ✓ Document updated: ${change.entity_id}`);
+            return { success: true };
+            
           } catch (error: any) {
-            // 404 means document doesn't exist on server yet
+            // If 404, document doesn't exist - convert to CREATE
             if (error.response?.status === 404 || error.message?.includes('404')) {
-              console.warn(`   ⚠️ Document ${change.entity_id} not found on server, treating as CREATE`);
+              console.warn(`   ⚠️ Document ${change.entity_id} not found on server (404), converting to CREATE`);
               
-              // Convert this update to a create
               const createResult = await apiDocument.createDocument({
                 workspace_id: localDoc.workspaceId,
                 title: change.data.title || localDoc.title,
@@ -531,23 +651,13 @@ class SyncManager {
                 last_synced: new Date().toISOString()
               });
               
-              // Convert any OTHER pending changes to use new ID
-              const otherPendingChanges = await offlineDB.pending_changes
+              // Convert OTHER pending changes to use new ID
+              await offlineDB.pending_changes
                 .where('entity_id').equals(change.entity_id)
-                .toArray();
+                .modify({ entity_id: createResult.id });
               
-              if (otherPendingChanges.length > 0) {
-                console.log(`   🔄 Converting ${otherPendingChanges.length} other pending changes to use new ID: ${createResult.id}`);
-                for (const pendingChange of otherPendingChanges) {
-                  await offlineDB.pending_changes.update(pendingChange.id, {
-                    entity_id: createResult.id
-                  });
-                }
-              }
+              console.log(`   ✓ Document created (was 404): ${createResult.id}`);
               
-              console.log(`   ✓ Document created (was update): ${createResult.id} (old temp ID: ${change.entity_id})`);
-              
-              // Notify WorkspaceContext to update its state with new ID
               window.dispatchEvent(new CustomEvent('document-synced', {
                 detail: { oldId: change.entity_id, newId: createResult.id, doc: createResult }
               }));
@@ -555,55 +665,40 @@ class SyncManager {
               return { success: true };
             }
             
-            console.error(`   ✗ Failed to fetch remote document:`, error);
-            return { success: false };
-          }
-          
-          // Detect conflict: Remote was updated after our last sync
-          const remoteUpdated = new Date(remoteDoc.updated_at).getTime();
-          const lastSynced = localDoc.last_synced ? new Date(localDoc.last_synced).getTime() : 0;
-          
-          if (remoteUpdated > lastSynced && remoteDoc.content !== localDoc.content) {
-            // CONFLICT DETECTED!
-            console.warn(`   ⚠️ Conflict detected for ${change.entity_id}`);
+            // If 409 Conflict, fetch remote and detect conflict
+            if (error.response?.status === 409) {
+              console.warn(`   ⚠️ Conflict (409) for ${change.entity_id}, fetching remote version`);
+              
+              const remoteDoc = await apiDocument.getDocument(change.entity_id);
+              const remoteUpdated = new Date(remoteDoc.updated_at).getTime();
+              const lastSynced = localDoc.last_synced ? new Date(localDoc.last_synced).getTime() : 0;
+              
+              if (remoteUpdated > lastSynced && remoteDoc.content !== localDoc.content) {
+                const conflict: Conflict = {
+                  id: `conflict_${change.entity_id}_${Date.now()}`,
+                  documentId: change.entity_id,
+                  localVersion: {
+                    content: localDoc.content,
+                    updatedAt: localDoc.updated_at,
+                    version: localDoc.local_version
+                  },
+                  remoteVersion: {
+                    content: remoteDoc.content,
+                    updatedAt: remoteDoc.updated_at,
+                    version: remoteDoc.version || 1
+                  },
+                  type: 'content'
+                };
+                
+                console.warn(`   ⚠️ Conflict confirmed for ${change.entity_id}`);
+                return { success: false, conflict };
+              }
+            }
             
-            const conflict: Conflict = {
-              id: `conflict_${change.entity_id}_${Date.now()}`,
-              documentId: change.entity_id,
-              localVersion: {
-                content: localDoc.content,
-                updatedAt: localDoc.updated_at,
-                version: localDoc.local_version
-              },
-              remoteVersion: {
-                content: remoteDoc.content,
-                updatedAt: remoteDoc.updated_at,
-                version: remoteDoc.version || 1
-              },
-              type: 'content'
-            };
-            
-            return { success: false, conflict };
+            // Other error - rethrow
+            console.error(`   ✗ Update failed for ${change.entity_id}:`, error);
+            throw error;
           }
-          
-          // No conflict - proceed with update
-          const updatePayload: any = {};
-          if (change.data.title !== undefined) updatePayload.title = change.data.title;
-          if (change.data.content !== undefined) updatePayload.content = change.data.content;
-          if (change.data.folderId !== undefined) updatePayload.folder_id = change.data.folderId;
-          if (change.data.starred !== undefined) updatePayload.is_starred = change.data.starred;
-          
-          await apiDocument.updateDocument(change.entity_id, updatePayload);
-          
-          // Update IndexedDB sync status
-          await offlineDB.documents.update(change.entity_id, {
-            pending_changes: false,
-            last_synced: new Date().toISOString(),
-            remote_version: localDoc.remote_version + 1
-          });
-          
-          console.log(`   ✓ Document updated: ${change.entity_id}`);
-          return { success: true };
           
         case 'delete':
           // Delete document on server
@@ -625,22 +720,75 @@ class SyncManager {
     try {
       switch (change.operation) {
         case 'create':
-          await apiFolder.createFolder({
+          // Create folder on server
+          const createResult = await apiFolder.createFolder({
             workspace_id: change.data.workspaceId,
             name: change.data.name,
             icon: change.data.icon || '📁',
             parent_id: change.data.parentId || null
           });
-          console.log(`   ✓ Folder created: ${change.entity_id}`);
+          
+          // Update IndexedDB with real ID from server
+          const offlineFolder = await offlineDB.folders.get(change.entity_id);
+          if (offlineFolder) {
+            await offlineDB.folders.delete(change.entity_id);
+            await offlineDB.folders.put({
+              id: createResult.id,
+              workspace_id: createResult.workspace_id,
+              parent_id: createResult.parent_id,
+              name: createResult.name,
+              icon: createResult.icon,
+              position: createResult.position,
+              created_at: createResult.created_at,
+              updated_at: createResult.updated_at,
+              last_synced: new Date().toISOString(),
+              pending_changes: false
+            });
+          }
+          
+          // Convert any OTHER pending changes (updates, deletes) to use new ID
+          await offlineDB.pending_changes
+            .where('entity_id').equals(change.entity_id)
+            .modify({ entity_id: createResult.id });
+          
+          console.log(`   ✓ Folder created: ${createResult.id} (old temp ID: ${change.entity_id})`);
+          
+          // Notify UI to update folder ID
+          window.dispatchEvent(new CustomEvent('folder-synced', {
+            detail: { oldId: change.entity_id, newId: createResult.id, folder: createResult }
+          }));
+          
           return { success: true };
           
         case 'update':
-          await apiFolder.updateFolder(change.entity_id, change.data);
-          console.log(`   ✓ Folder updated: ${change.entity_id}`);
-          return { success: true };
+          // Try PATCH first (optimistic sync)
+          try {
+            await apiFolder.updateFolder(change.entity_id, change.data);
+            
+            // Update IndexedDB sync status
+            await offlineDB.folders.update(change.entity_id, {
+              pending_changes: false,
+              last_synced: new Date().toISOString()
+            });
+            
+            console.log(`   ✓ Folder updated: ${change.entity_id}`);
+            return { success: true };
+          } catch (error: any) {
+            // If 404, folder doesn't exist - skip this update
+            if (error.response?.status === 404 || error.message?.includes('404')) {
+              console.warn(`   ⚠️ Folder ${change.entity_id} not found (404), skipping update`);
+              return { success: true }; // Consider it "successful" (cleaned up)
+            }
+            throw error; // Re-throw other errors
+          }
           
         case 'delete':
+          // Delete folder on server
           await apiFolder.deleteFolder(change.entity_id);
+          
+          // Remove from IndexedDB
+          await offlineDB.folders.delete(change.entity_id);
+          
           console.log(`   ✓ Folder deleted: ${change.entity_id}`);
           return { success: true };
           

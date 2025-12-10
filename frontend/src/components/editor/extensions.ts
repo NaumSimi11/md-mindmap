@@ -35,7 +35,7 @@ interface GetExtensionsOptions {
 
 export function getExtensions(options: GetExtensionsOptions) {
   return [
-    // Core extensions
+    // Core extensions (StarterKit includes: Bold, Italic, Strike, Code, History, Paragraph, Text, etc.)
     StarterKit.configure({
       heading: {
         levels: [1, 2, 3, 4, 5, 6],
@@ -43,7 +43,7 @@ export function getExtensions(options: GetExtensionsOptions) {
     }),
     
     // Formatting
-    Underline,
+    Underline, // Not included in StarterKit, safe to add
     Highlight.configure({ multicolor: true }),
     TextStyle,
     FontFamily,
