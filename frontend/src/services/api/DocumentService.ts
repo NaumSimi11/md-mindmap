@@ -5,37 +5,88 @@
 
 import { apiClient } from './ApiClient';
 import { API_ENDPOINTS } from '@/config/api.config';
+import { extractUUID } from '@/utils/id-generator';
 import type { Document, DocumentCreate, DocumentUpdate, DocumentVersion } from '@/types/api.types';
 
 export class DocumentService {
   /**
    * List documents in a workspace
+   * Returns paginated response, extracts items array
    */
   async listDocuments(workspaceId: string): Promise<Document[]> {
-    return apiClient.get<Document[]>(API_ENDPOINTS.documents.list(workspaceId));
+    // Strip prefix from workspace ID before sending to backend
+    const wsId = extractUUID(workspaceId);
+    const response = await apiClient.get<any>(API_ENDPOINTS.documents.list(wsId));
+    
+    // Handle paginated response: { items: [], total, page, page_size, has_more }
+    if (response.items && Array.isArray(response.items)) {
+      return response.items;
+    }
+    // Fallback: if response is already an array (backward compatibility)
+    if (Array.isArray(response)) {
+      return response;
+    }
+    // If neither, return empty array
+    console.warn('⚠️ Unexpected document list response format:', response);
+    return [];
   }
 
   /**
    * Create a new document
    */
-  async createDocument(data: DocumentCreate): Promise<Document> {
-    // Backend expects workspace_id as query param
-    const endpoint = `${API_ENDPOINTS.documents.create}?workspace_id=${data.workspace_id}`;
-    return apiClient.post<Document>(endpoint, data);
+  async createDocument(data: DocumentCreate & { id?: string; folder_id?: string; is_starred?: boolean; tags?: string[] }): Promise<Document> {
+    // Backend expects workspace_id as query param (strip prefix if present)
+    const workspaceId = extractUUID(data.workspace_id);
+    const endpoint = `${API_ENDPOINTS.documents.create}?workspace_id=${workspaceId}`;
+    
+    // 🔥 FIX: Build payload from data object directly (avoid duplicate fields)
+    // SelectiveSyncService already builds complete payload, so just pass it through
+    const payload: any = {
+      ...data,
+      content: data.content || '',
+      content_type: data.content_type || 'markdown',
+    };
+    
+    // Remove workspace_id from payload (it's in query string)
+    delete payload.workspace_id;
+    
+    // Strip prefixes from IDs if present
+    if (payload.id) {
+      payload.id = extractUUID(payload.id);
+    }
+    if (payload.folder_id) {
+      payload.folder_id = extractUUID(payload.folder_id);
+    }
+    
+    return apiClient.post<Document>(endpoint, payload);
   }
 
   /**
    * Get document by ID
    */
   async getDocument(id: string): Promise<Document> {
-    return apiClient.get<Document>(API_ENDPOINTS.documents.get(id));
+    // Strip prefix from ID before sending to backend
+    const documentId = extractUUID(id);
+    return apiClient.get<Document>(API_ENDPOINTS.documents.get(documentId));
   }
 
   /**
    * Update document
    */
-  async updateDocument(id: string, data: DocumentUpdate): Promise<Document> {
-    return apiClient.patch<Document>(API_ENDPOINTS.documents.update(id), data);
+  async updateDocument(id: string, data: DocumentUpdate & { folder_id?: string; is_starred?: boolean; tags?: string[] }): Promise<Document> {
+    // Strip prefix from ID before sending to backend
+    const documentId = extractUUID(id);
+    
+    // Strip prefix from folder_id if present
+    const payload: any = {
+      ...data,
+    };
+    
+    if (data.folder_id) {
+      payload.folder_id = extractUUID(data.folder_id);
+    }
+    
+    return apiClient.patch<Document>(API_ENDPOINTS.documents.update(documentId), payload);
   }
 
   /**

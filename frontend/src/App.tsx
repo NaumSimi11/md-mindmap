@@ -58,12 +58,12 @@ const App = () => (
             {/* Backend Integration Test */}
             <Route path="/workspace-test" element={<ProtectedRoute><WorkspaceTest /></ProtectedRoute>} />
 
-            {/* NEW: Main Workspace (AI Office Suite) - Protected Routes */}
-            <Route path="/workspace" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
-            <Route path="/workspace/doc/:id/edit" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
-            <Route path="/workspace/doc/:id/mindmap" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
-            <Route path="/workspace/doc/:id/slides" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
-            <Route path="/workspace/doc/:id/present" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
+            {/* NEW: Main Workspace (AI Office Suite) - Guest & Auth Support */}
+            <Route path="/workspace" element={<Workspace />} />
+            <Route path="/workspace/doc/:id/edit" element={<Workspace />} />
+            <Route path="/workspace/doc/:id/mindmap" element={<Workspace />} />
+            <Route path="/workspace/doc/:id/slides" element={<Workspace />} />
+            <Route path="/workspace/doc/:id/present" element={<Workspace />} />
 
             {/* Standalone Mindmap Studio */}
             <Route path="/studio2" element={<MindmapStudio2 />} />

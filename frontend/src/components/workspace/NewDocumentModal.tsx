@@ -25,12 +25,12 @@ import {
   Plus,
   X,
 } from 'lucide-react';
-import { documentTemplates_service, type DocumentTemplate } from '@/services/workspace/DocumentTemplates';
+import { documentTemplates_service, type DocumentTemplate } from '@/services/workspace-legacy/DocumentTemplates';
 
 interface NewDocumentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onDocumentCreated: (documentId: string) => void;
+  onDocumentCreated: (documentId: string, document?: any) => void; // 🔥 FIX: Add optional document param
   defaultType?: 'markdown' | 'mindmap' | 'presentation';
   folderId?: string | null;
   createDocument?: (type: 'markdown' | 'mindmap' | 'presentation', title: string, content: string) => Promise<any>;
@@ -97,7 +97,8 @@ export function NewDocumentModal({
       // Show success message
       console.log(`✅ Created ${type}: ${title} (ID: ${doc.id})`);
       
-      onDocumentCreated(doc.id);
+      // Pass full document object, not just ID
+      onDocumentCreated(doc.id, doc);
       onClose();
     } catch (error: any) {
       console.error('❌ Failed to create document:', error);
@@ -116,7 +117,8 @@ export function NewDocumentModal({
       // Show success message
       console.log(`✅ Created from template "${template.name}": ${title} (ID: ${doc.id})`);
       
-      onDocumentCreated(doc.id);
+      // Pass full document object, not just ID
+      onDocumentCreated(doc.id, doc);
       onClose();
     } catch (error: any) {
       console.error('❌ Failed to create document from template:', error);
@@ -220,6 +222,7 @@ export function NewDocumentModal({
               Document Name (optional)
             </label>
             <Input
+              data-testid="document-title-input"
               placeholder="Enter document name..."
               value={customTitle}
               onChange={(e) => setCustomTitle(e.target.value)}
@@ -301,6 +304,7 @@ export function NewDocumentModal({
                   <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Start from Blank</h3>
                   <div className="grid grid-cols-3 gap-3">
                     <button
+                      data-testid="create-blank-markdown"
                       onClick={() => handleCreateBlank('markdown')}
                       className="p-4 border-2 border-dashed border-border rounded-lg hover:border-blue-500 hover:bg-blue-50/50 transition-all group"
                     >
@@ -309,6 +313,7 @@ export function NewDocumentModal({
                       <p className="text-xs text-muted-foreground mt-1">Markdown editor</p>
                     </button>
                     <button
+                      data-testid="create-blank-mindmap"
                       onClick={() => handleCreateBlank('mindmap')}
                       className="p-4 border-2 border-dashed border-border rounded-lg hover:border-purple-500 hover:bg-purple-50/50 transition-all group"
                     >
@@ -317,6 +322,7 @@ export function NewDocumentModal({
                       <p className="text-xs text-muted-foreground mt-1">Visual brainstorming</p>
                     </button>
                     <button
+                      data-testid="create-blank-presentation"
                       onClick={() => handleCreateBlank('presentation')}
                       className="p-4 border-2 border-dashed border-border rounded-lg hover:border-pink-500 hover:bg-pink-50/50 transition-all group"
                     >

@@ -81,9 +81,11 @@ export function useAuth(): UseAuthReturn {
       console.log('✅ useAuth.login() completed successfully');
     } catch (err: any) {
       console.error('❌ useAuth.login() failed:', err);
-      const message = err.message || 'Login failed';
+      // Extract error message from ApiError or generic Error
+      const message = err.message || err.detail || 'Invalid email or password. Please try again.';
       setError(message);
-      throw new Error(message);
+      // Throw the error so Login.tsx can catch it and show the toast
+      throw err;
     } finally {
       setIsLoading(false);
       console.log('✅ useAuth.login() finally block - isLoading set to false');
@@ -97,9 +99,12 @@ export function useAuth(): UseAuthReturn {
       const response = await authService.signup(data);
       setUser(response.user);
     } catch (err: any) {
-      const message = err.message || 'Signup failed';
+      console.error('❌ useAuth.signup() failed:', err);
+      // Extract error message from ApiError or generic Error
+      const message = err.message || err.detail || 'Signup failed. Please try again.';
       setError(message);
-      throw new Error(message);
+      // Throw the error so Signup.tsx can catch it and show the toast
+      throw err;
     } finally {
       setIsLoading(false);
     }

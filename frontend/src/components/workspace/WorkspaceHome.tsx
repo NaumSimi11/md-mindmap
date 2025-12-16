@@ -21,7 +21,7 @@ import {
   Star,
   TrendingUp,
 } from 'lucide-react';
-import type { Document } from '@/services/workspace/BackendWorkspaceService';
+import type { Document } from '@/services/workspace-legacy/BackendWorkspaceService';
 import { QuickSwitcher } from './QuickSwitcher';
 
 interface WorkspaceHomeProps {

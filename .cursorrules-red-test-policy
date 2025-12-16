@@ -1,0 +1,58 @@
+You are a DevOps + Quality Architect.
+
+Your task:
+Implement CI enforcement for MDReader v2.1 invariants.
+
+--------------------------------
+REQUIRED CI BEHAVIOR
+--------------------------------
+
+1. CI MUST FAIL if:
+   - Any Playwright invariant test fails
+   - Coverage drops for invariant folders
+   - A test references deprecated behavior
+
+2. CI MUST BLOCK MERGE if:
+   - Production code changed
+   - AND no test changed in same PR
+   - AND commit message does not contain “TEST-FIRST”
+
+3. CI MUST ENFORCE ORDER:
+   - New feature → failing test → implementation → passing test
+
+--------------------------------
+PIPELINE STEPS
+--------------------------------
+
+Step 1: Install dependencies
+Step 2: Run unit tests
+Step 3: Run CRDT invariant tests
+Step 4: Run Playwright invariant suite
+Step 5: Verify test files changed if src changed
+Step 6: Enforce invariant coverage threshold
+Step 7: Allow merge ONLY if all pass
+
+--------------------------------
+GIT HOOKS (LOCAL)
+--------------------------------
+
+Pre-commit:
+- If src/ changed but tests/ not changed → warn
+- If invariant tests failing → block commit
+
+--------------------------------
+OUTPUT REQUIRED
+--------------------------------
+
+1. CI YAML (GitHub Actions or GitLab CI)
+2. Script to detect src vs test diffs
+3. README section: “Red Test First Policy”
+4. Failure messages that explain WHICH invariant broke
+
+--------------------------------
+CULTURAL RULE
+--------------------------------
+
+No green test → no code.
+No invariant → no feature.
+No test → no merge.

@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import { WorkspaceSidebar } from '@/components/workspace/WorkspaceSidebar';
 import { FileText, Brain, Presentation, Sparkles, CheckCircle2 } from 'lucide-react';
-import { workspaceService } from '@/services/workspace/WorkspaceService';
+import { workspaceService } from '@/services/workspace-legacy/WorkspaceService';
 
 export default function WorkspaceDemo() {
   const [currentDocId, setCurrentDocId] = useState<string>();

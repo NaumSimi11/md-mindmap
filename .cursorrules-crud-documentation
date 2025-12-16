@@ -1,0 +1,133 @@
+# CRUD Documentation Rule
+
+## When to Apply
+This rule applies when:
+- A CRUD phase is completed (all endpoints implemented)
+- All tests are passing (100% coverage)
+- User says "document this phase" or "phase is complete"
+- Before moving to the next resource/phase
+
+## Standard Template Location
+`/planning_docs/CRUD_DOCUMENTATION_TEMPLATE.md`
+
+## Required Documentation
+
+For each completed CRUD phase, create comprehensive documentation that includes:
+
+### 1. Trigger Documentation
+**For each operation (Create, List, Get, Update, Delete):**
+- How the action is started (UI component, button click, API call)
+- What component/file initiates it (file path + line number)
+- What function/method is called
+- User action description
+
+### 2. Request Flow
+**What is sent:**
+- HTTP method and endpoint
+- Request headers (Authorization, Content-Type)
+- Request payload (TypeScript interface + JSON example)
+- Query parameters (if any)
+
+### 3. Processing Flow
+**What is called and how it's handled:**
+- Router layer (FastAPI endpoint code)
+- Service layer (business logic code)
+- Database layer (SQL/ORM operations)
+- Middleware (auth, validation, CORS)
+
+### 4. Response Flow
+**How it's returned:**
+- Success response (status code + JSON)
+- Response schema (Pydantic model)
+- Frontend handling code
+
+### 5. All Cases
+**Document every scenario:**
+- ✅ Success case (201/200)
+- ❌ Validation error (422)
+- ❌ Unauthorized (401/403)
+- ❌ Not found (404)
+- ❌ Conflict (409)
+- ❌ Forbidden (403)
+- ❌ Server error (500)
+
+### 6. Expected vs Real Results
+**Comparison table:**
+- Expected response time vs Real
+- Expected status codes vs Real
+- Expected behavior vs Real (verified in tests)
+
+### 7. Diagrams (Mermaid)
+**Required for each operation:**
+- Sequence diagram (Client → Router → Service → Database)
+- Flow diagram (decision tree with all paths)
+- System architecture diagram (overall structure)
+
+## Template Usage
+
+```bash
+# Copy template
+cp planning_docs/CRUD_DOCUMENTATION_TEMPLATE.md \
+   planning_docs/CRUD_[RESOURCE]_COMPLETE.md
+
+# Example
+cp planning_docs/CRUD_DOCUMENTATION_TEMPLATE.md \
+   planning_docs/CRUD_WORKSPACE_COMPLETE.md
+```
+
+## AI Assistant Instructions
+
+When user requests CRUD documentation:
+
+1. **Copy the template** to appropriate filename
+2. **Read implementation files** to get real code
+3. **Extract code snippets** from:
+   - `app/routers/[resource].py`
+   - `app/services/[resource]_service.py`
+   - `app/schemas/[resource].py`
+   - `app/models/[resource].py`
+4. **Document test results** from `tests/test_[resource].py`
+5. **Generate diagrams** for each operation
+6. **Fill all sections** with real data (no placeholders)
+7. **Verify completeness** against checklist
+
+## Quality Standards
+
+Documentation must include:
+- ✅ Real code snippets (not pseudocode)
+- ✅ Actual file paths and line numbers
+- ✅ Real request/response examples
+- ✅ All error cases with examples
+- ✅ Mermaid diagrams that render
+- ✅ 100% test coverage proof
+- ✅ Performance metrics
+- ✅ Security checklist
+- ✅ API contract compliance
+
+## Enforcement
+
+This documentation is REQUIRED before:
+- Marking phase as "Complete"
+- Starting next resource/phase
+- Code review approval
+- Production deployment
+
+## Example Command
+
+User: "Document the Workspace CRUD phase"
+
+AI Response:
+1. Copy template to `CRUD_WORKSPACE_COMPLETE.md`
+2. Fill with real implementation details
+3. Generate all diagrams
+4. Verify 100% test coverage
+5. Create summary report
+
+## Related Files
+
+- Template: `/planning_docs/CRUD_DOCUMENTATION_TEMPLATE.md`
+- Standard: `/planning_docs/DOCUMENTATION_STANDARD.md`
+- Quick Ref: `/planning_docs/QUICK_DOC_REFERENCE.md`
+
+## Version
+1.0 - Created December 12, 2025

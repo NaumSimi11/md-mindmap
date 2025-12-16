@@ -2,6 +2,16 @@ import { expect, afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
+// Minimal IndexedDB stubs for happy-dom tests.
+// Some app modules reference indexedDB; happy-dom throws MissingAPIError unless we stub.
+if (!(globalThis as any).indexedDB) {
+  (globalThis as any).indexedDB = {
+    open: () => ({}),
+    deleteDatabase: () => ({}),
+    databases: async () => [],
+  };
+}
+
 // Cleanup after each test
 afterEach(() => {
   cleanup();

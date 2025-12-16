@@ -1,7 +1,13 @@
 /**
  * SyncManager - Core offline sync engine
  * 
- * Responsibilities:
+ * @deprecated This service is deprecated in favor of Yjs CRDT synchronization.
+ * Yjs handles sync/conflict resolution/offline automatically.
+ * 
+ * Migration: Use useYjsDocument hook instead
+ * Will be removed in v2.0.0
+ * 
+ * Responsibilities (DEPRECATED):
  * - Queue changes when offline
  * - Sync changes when online
  * - Detect and handle conflicts
@@ -858,8 +864,13 @@ class SyncManager {
 // Singleton Export
 // ============================================================================
 
+/**
+ * @deprecated
+ * SyncManager is deprecated. Yjs handles sync automatically.
+ * This instance is kept for backward compatibility only.
+ */
 export const syncManager = new SyncManager();
 
-// Start auto-sync by default (every 30 seconds)
-syncManager.startAutoSync(30000);
+// ⚠️ DEPRECATED: Auto-sync disabled (Yjs handles sync automatically)
+// syncManager.startAutoSync(30000);
 

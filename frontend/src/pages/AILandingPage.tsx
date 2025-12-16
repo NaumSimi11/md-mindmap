@@ -11,6 +11,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useWorkspace } from '@/contexts/WorkspaceContext';  // 🔥 FIX: Import hook
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -28,7 +29,6 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { aiService } from '@/services/ai/AIService';
-import { workspaceService } from '@/services/workspace/WorkspaceService';
 import { MDFileDropZone, type FileAnalysisResult } from '@/components/landing/MDFileDropZone';
 import { FileAnalysisResults } from '@/components/landing/FileAnalysisResults';
 import { mdFileAnalyzerService, type AnalysisInsights } from '@/services/landing/MDFileAnalyzerService';
@@ -38,6 +38,7 @@ type InputMode = 'file' | 'text';
 
 export default function AILandingPage() {
   const navigate = useNavigate();
+  const { createDocument, refreshDocuments } = useWorkspace();
   const [inputMode, setInputMode] = useState<InputMode>('file');
   const [prompt, setPrompt] = useState('');
   const [selectedType, setSelectedType] = useState<DocumentType | null>(null);
@@ -181,7 +182,23 @@ Generate 5-20 nodes with a clear hierarchy. Position nodes in a radial layout ar
       }
 
       // Create document
-      const tempDoc = await workspaceService.createDocument(docType, title, content, null);
+      const tempDoc = await createDocument(docType, title, content);
+
+      // Store content in Yjs if markdown
+      if (docType === 'markdown') {
+        const Y = await import('yjs');
+        const { IndexeddbPersistence } = await import('y-indexeddb');
+        const ydoc = new Y.Doc();
+        const ytext = ydoc.getText('content');
+        ytext.insert(0, content);
+        
+        const persistence = new IndexeddbPersistence(`mdreader-${tempDoc.id}`, ydoc);
+        await new Promise(resolve => persistence.once('synced', resolve));
+        persistence.destroy();
+      }
+
+      await refreshDocuments();
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       // Navigate to appropriate view
       if (docType === 'markdown') {
@@ -249,6 +266,85 @@ Generate 5-20 nodes with a clear hierarchy. Position nodes in a radial layout ar
       examples: ['Pitch Deck', 'Report', 'Training'],
     },
   ];
+
+  // Handle opening a file from disk
+  const handleOpenFile = async () => {
+    console.log('📂 Open File clicked');
+    
+    // Create hidden file input
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.md,.markdown,.txt';
+    input.style.display = 'none';
+    
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      
+      console.log('📄 File selected:', file.name);
+      
+      try {
+        // Read file content
+        const content = await file.text();
+        console.log('✅ File read:', content.length, 'characters');
+        
+        // Create document (no AI, no credits used)
+        const title = file.name.replace(/\.(md|markdown|txt)$/i, '');
+        const doc = await createDocument('markdown', title, content);
+        
+        // Store content in Yjs document
+        const Y = await import('yjs');
+        const { IndexeddbPersistence } = await import('y-indexeddb');
+        const ydoc = new Y.Doc();
+        const ytext = ydoc.getText('content');
+        ytext.insert(0, content);
+        
+        const persistence = new IndexeddbPersistence(`mdreader-${doc.id}`, ydoc);
+        await new Promise(resolve => persistence.once('synced', resolve));
+        persistence.destroy();
+        
+        await refreshDocuments();
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        navigate(`/workspace/doc/${doc.id}/edit`);
+      } catch (error) {
+        console.error('❌ Failed to open file:', error);
+        alert(`Failed to open file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    };
+    
+    // Trigger file picker
+    document.body.appendChild(input);
+    input.click();
+    document.body.removeChild(input);
+  };
+
+  // Handle starting a blank document
+  const handleStartWriting = async () => {
+    console.log('✍️ Start Writing clicked');
+    
+    try {
+      // Create blank document (no AI, no credits used)
+      const doc = await createDocument('markdown', 'Untitled', '');
+      
+      // Initialize Yjs document
+      const Y = await import('yjs');
+      const { IndexeddbPersistence } = await import('y-indexeddb');
+      const ydoc = new Y.Doc();
+      
+      const persistence = new IndexeddbPersistence(`mdreader-${doc.id}`, ydoc);
+      await new Promise(resolve => persistence.once('synced', resolve));
+      persistence.destroy();
+      
+      await refreshDocuments();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      navigate(`/workspace/doc/${doc.id}/edit`);
+    } catch (error) {
+      console.error('❌ Failed to create document:', error);
+      alert(`Failed to create document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
 
   const handleGenerate = async () => {
     console.log('🚀 Generate button clicked!');
@@ -339,31 +435,39 @@ Create 5-8 slides with varied layouts: title, content, bullets, diagram.`,
       console.log('✅ Content generated:', content.substring(0, 100) + '...');
 
       // Create temporary guest document
-      const tempDoc = await workspaceService.createDocument(
+      const tempDoc = await createDocument(
         finalType,
         title,
-        content,
-        null // No folder for guest
+        content
       );
 
-      console.log('📄 Document created:', tempDoc.id, 'Type:', finalType);
+      // Store content in Yjs if markdown
+      if (finalType === 'markdown') {
+        const Y = await import('yjs');
+        const { IndexeddbPersistence } = await import('y-indexeddb');
+        const ydoc = new Y.Doc();
+        const ytext = ydoc.getText('content');
+        ytext.insert(0, content);
+        
+        const persistence = new IndexeddbPersistence(`mdreader-${tempDoc.id}`, ydoc);
+        await new Promise(resolve => persistence.once('synced', resolve));
+        persistence.destroy();
+      }
 
       // Decrement guest credits
       const newCredits = guestCredits - 1;
       setGuestCredits(newCredits);
       localStorage.setItem('guest-credits-remaining', newCredits.toString());
 
-      console.log('💳 Credits remaining:', newCredits);
+      await refreshDocuments();
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       // Navigate to workspace with appropriate view
       if (finalType === 'markdown') {
-        console.log('📝 Navigating to Workspace Editor...');
         navigate(`/workspace/doc/${tempDoc.id}/edit`);
       } else if (finalType === 'mindmap') {
-        console.log('🧠 Navigating to Workspace Mindmap...');
         navigate(`/workspace/doc/${tempDoc.id}/mindmap`);
       } else {
-        console.log('📊 Navigating to Workspace Presentation...');
         navigate(`/workspace/doc/${tempDoc.id}/slides`);
       }
     } catch (error) {
@@ -628,19 +732,32 @@ Create 5-8 slides with varied layouts: title, content, bullets, diagram.`,
             </div>
           </div>
           
-          <div className="mt-8">
-            <Button
-              size="lg"
-              variant="outline"
-              onClick={() => navigate('/dashboard')}
-              className="border-slate-600 hover:bg-slate-800/50 hover:border-cyan-500/50 text-white px-8"
-            >
-              <FileText className="h-5 w-5 mr-2" />
-              Start Working Manually
-              <ArrowRight className="h-5 w-5 ml-2" />
-            </Button>
-            <p className="text-sm text-slate-400 mt-3">
-              Open editor, browse templates, or organize your documents
+          <div className="mt-8 flex flex-col items-center gap-4">
+            {/* Primary Actions: Open File & Start Writing */}
+            <div className="flex items-center gap-4">
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={handleOpenFile}
+                className="border-slate-600 hover:bg-slate-800/50 hover:border-cyan-500/50 text-white px-8"
+              >
+                <Upload className="h-5 w-5 mr-2" />
+                Open .md File
+              </Button>
+              
+              <Button
+                size="lg"
+                className="bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white px-8 shadow-lg shadow-cyan-500/25"
+                onClick={handleStartWriting}
+              >
+                <Type className="h-5 w-5 mr-2" />
+                Start Writing
+                <ArrowRight className="h-5 w-5 ml-2" />
+              </Button>
+            </div>
+            
+            <p className="text-sm text-slate-400">
+              No login required • Works offline • Your data stays local
             </p>
           </div>
         </div>

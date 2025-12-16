@@ -25,7 +25,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { aiService } from '@/services/ai/AIService';
-import { workspaceService } from '@/services/workspace/WorkspaceService';
+import { workspaceService } from '@/services/workspace-legacy/WorkspaceService';
 
 type DocumentType = 'markdown' | 'mindmap' | 'presentation';
 

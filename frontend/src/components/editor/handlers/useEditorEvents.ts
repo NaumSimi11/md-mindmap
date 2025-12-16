@@ -6,7 +6,7 @@ interface UseEditorEventsProps {
     editor: Editor | null;
     setShowTableMenu: (show: boolean, position?: { x: number; y: number }) => void;
     setContextMenu: (menu: { visible: boolean; x: number; y: number; selectedText: string }) => void;
-    onContentChange?: (content: string) => void;
+    // ❌ STEP 1: Removed onContentChange (Yjs will handle persistence)
     isProgrammaticUpdateRef: React.MutableRefObject<boolean>;
 }
 
@@ -14,7 +14,7 @@ export const useEditorEvents = ({
     editor,
     setShowTableMenu,
     setContextMenu,
-    onContentChange,
+    // ❌ STEP 1: Removed onContentChange
     isProgrammaticUpdateRef,
 }: UseEditorEventsProps) => {
     return useMemo(() => ({
@@ -94,52 +94,36 @@ export const useEditorEvents = ({
             try {
                 const text = event.clipboardData?.getData('text/plain') || '';
                 if (!text) return false;
+                
+                // Check if it looks like markdown
                 const mdLike = /(^#\s)|(^-{3,}$)|(^\*\s)|(^\d+\.\s)|(```[\s\S]*?```)/m.test(text);
                 if (!mdLike) return false;
+                
                 event.preventDefault();
+                console.log(`📋 PASTE: ${text.length} chars`);
 
-                const regex = /(\s*```\s*mermaid[\s\S]*?```)/g;
-                const parts = text.split(regex);
-                // Prevent onUpdate from firing during programmatic multi-step insert
-                isProgrammaticUpdateRef.current = true;
+                if (!editor) {
+                    console.error('❌ No editor');
+                    return false;
+                }
 
-                // Process parts sequentially (not chained, to avoid issues)
-                parts.forEach((part: string) => {
-                    if (!part.trim()) return;
-                    const trimmed = part.trimStart();
-                    if (/^```\s*mermaid/.test(trimmed) && editor) {
-                        const m = trimmed.match(/```\s*mermaid\s*[\r\n]+([\s\S]*?)```/);
-                        const code = m ? m[1].trim() : '';
-                        if (code) {
-                            // Insert mermaid node using a single insertContent call with all nodes
-                            editor.commands.insertContent([
-                                { type: 'paragraph' },
-                                {
-                                    type: 'mermaid',
-                                    attrs: { code, scale: 1, width: '780px' }
-                                },
-                                { type: 'paragraph' }
-                            ]);
-                        }
-                    } else if (editor) {
-                        editor.commands.insertContent(markdownToHtml(part));
+                // Convert to HTML
+                const html = markdownToHtml(text);
+                console.log(`✅ HTML: ${html.length} chars`);
+                
+                // 🔥 FIX: Pass { parseOptions: { preserveWhitespace: false } } to parse HTML
+                editor.chain().focus().insertContent(html, {
+                    parseOptions: {
+                        preserveWhitespace: false,
                     }
-                });
-                // Ensure NodeViews mount and render, then trigger content update
-                // Increased timeout to allow mermaid nodes to fully mount
-                setTimeout(() => {
-                    try { editor?.commands.focus(); } catch { }
-                    isProgrammaticUpdateRef.current = false;
-
-                    // CRITICAL: Manually trigger content update for outline sync
-                    const markdown = htmlToMarkdown('', editor);
-                    onContentChange?.(markdown);
-                }, 200);
+                }).run();
+                console.log('✅ Inserted with HTML parsing');
+                
                 return true;
             } catch (e) {
-                console.error('Paste handler error:', e);
+                console.error('❌ Paste error:', e);
                 return false;
             }
         }
-    }), [editor, setShowTableMenu, setContextMenu, onContentChange, isProgrammaticUpdateRef]);
+    }), [editor, setShowTableMenu, setContextMenu, isProgrammaticUpdateRef]); // ❌ STEP 1: Removed onContentChange from deps
 };

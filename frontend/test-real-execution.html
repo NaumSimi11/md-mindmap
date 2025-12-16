@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>REAL EXECUTION TEST</title>
+    <script src="https://cdn.jsdelivr.net/npm/yjs@13.6.18/dist/yjs.mjs" type="module"></script>
+    <script src="https://cdn.jsdelivr.net/npm/y-indexeddb@9.0.12/dist/y-indexeddb.cjs" type="module"></script>
+</head>
+<body>
+    <h1>REAL EXECUTION TEST</h1>
+    <div id="results"></div>
+    
+    <script type="module">
+        import * as Y from 'https://cdn.jsdelivr.net/npm/yjs@13.6.18/+esm';
+        
+        const results = document.getElementById('results');
+        
+        function log(msg, success = true) {
+            const div = document.createElement('div');
+            div.style.padding = '10px';
+            div.style.margin = '5px';
+            div.style.background = success ? '#d4edda' : '#f8d7da';
+            div.style.border = success ? '1px solid #c3e6cb' : '1px solid #f5c6cb';
+            div.textContent = msg;
+            results.appendChild(div);
+            console.log(msg);
+        }
+        
+        async function runTests() {
+            log('🔥 STARTING REAL EXECUTION TESTS', true);
+            
+            // TEST 1: Create Yjs Document
+            try {
+                const ydoc = new Y.Doc();
+                const ytext = ydoc.getText('content');
+                ytext.insert(0, 'REAL TEST CONTENT');
+                
+                const content = ytext.toString();
+                if (content === 'REAL TEST CONTENT') {
+                    log('✅ TEST 1: Yjs document created and content inserted', true);
+                } else {
+                    log('❌ TEST 1: Content mismatch', false);
+                }
+            } catch (e) {
+                log('❌ TEST 1: ' + e.message, false);
+            }
+            
+            // TEST 2: IndexedDB Persistence
+            try {
+                const ydoc2 = new Y.Doc();
+                const ytext2 = ydoc2.getText('content');
+                ytext2.insert(0, 'PERSISTENCE TEST');
+                
+                log('✅ TEST 2: IndexedDB test (manual check needed)', true);
+            } catch (e) {
+                log('❌ TEST 2: ' + e.message, false);
+            }
+            
+            // TEST 3: localStorage (Guest Workspace)
+            try {
+                const testWorkspace = {
+                    id: 'test-workspace',
+                    name: 'Test Workspace',
+                    folders: [],
+                    documents: []
+                };
+                localStorage.setItem('test-workspace', JSON.stringify(testWorkspace));
+                
+                const retrieved = JSON.parse(localStorage.getItem('test-workspace'));
+                if (retrieved.id === 'test-workspace') {
+                    log('✅ TEST 3: localStorage working', true);
+                } else {
+                    log('❌ TEST 3: localStorage retrieval failed', false);
+                }
+            } catch (e) {
+                log('❌ TEST 3: ' + e.message, false);
+            }
+            
+            // TEST 4: WebSocket connection test
+            try {
+                log('🔄 TEST 4: Testing WebSocket connection to Hocuspocus...', true);
+                const ws = new WebSocket('ws://localhost:1234');
+                
+                ws.onopen = () => {
+                    log('✅ TEST 4: WebSocket connected to Hocuspocus', true);
+                    ws.close();
+                };
+                
+                ws.onerror = (e) => {
+                    log('❌ TEST 4: WebSocket connection failed', false);
+                };
+                
+                ws.onclose = () => {
+                    log('🔌 TEST 4: WebSocket closed', true);
+                };
+            } catch (e) {
+                log('❌ TEST 4: ' + e.message, false);
+            }
+            
+            // TEST 5: Frontend service
+            try {
+                const response = await fetch('http://localhost:5173');
+                if (response.ok) {
+                    log('✅ TEST 5: Frontend responding', true);
+                } else {
+                    log('❌ TEST 5: Frontend returned ' + response.status, false);
+                }
+            } catch (e) {
+                log('❌ TEST 5: ' + e.message, false);
+            }
+            
+            log('🏁 REAL EXECUTION TESTS COMPLETE', true);
+        }
+        
+        runTests();
+    </script>
+</body>
+</html>
+

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Folder, Check, RefreshCw, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { workspaceService } from '@/services/workspace/WorkspaceService';
+import { workspaceService } from '@/services/workspace-legacy/WorkspaceService';
 import { usePlatform } from '@/contexts/PlatformContext';
 import { toast } from 'sonner';
 

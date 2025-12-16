@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { backendWorkspaceService, type Workspace, type Document } from '@/services/workspace/BackendWorkspaceService';
+import { backendWorkspaceService, type Workspace, type Document } from '@/services/workspace-legacy/BackendWorkspaceService';
 import { useAuth } from './useAuth';
 
 const LAST_WORKSPACE_KEY = 'mdreader_last_workspace_id';

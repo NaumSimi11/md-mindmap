@@ -61,12 +61,32 @@ export const htmlToMarkdown = (html: string): string => {
  * Handles whitespace differences that don't affect meaning
  */
 export const normalizeMarkdown = (md: string): string => {
-  return md
+  const base = md
     .trim()
     .replace(/\r\n/g, '\n') // Normalize line endings
     .replace(/\n{3,}/g, '\n\n') // Max 2 consecutive newlines
     .replace(/\s+$/gm, '') // Remove trailing spaces per line
     .replace(/\t/g, '  '); // Normalize tabs to spaces
+
+  const lines = base.split('\n').map((line) => {
+    // Normalize list marker spacing: "-   Item" -> "- Item", "1.   Item" -> "1. Item"
+    line = line.replace(/^(\s*[-*+])\s{2,}/, '$1 ');
+    line = line.replace(/^(\s*\d+\.)\s{2,}/, '$1 ');
+
+    // Normalize markdown table rows to canonical cell-trimmed form.
+    // This removes formatting-only differences (padding/alignment spacing) while preserving structure.
+    const trimmed = line.trim();
+    if (trimmed.startsWith('|') && trimmed.includes('|')) {
+      const parts = trimmed.split('|');
+      // parts[0] and parts[last] are empty strings when line starts/ends with '|'
+      const cells = parts.slice(1, -1).map((c) => c.trim());
+      return `|${cells.join('|')}|`;
+    }
+
+    return line;
+  });
+
+  return lines.join('\n');
 };
 
 /**

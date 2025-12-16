@@ -1,0 +1,756 @@
+/**
+ * Selective Sync Service
+ * 
+ * Handles push/pull operations for documents, folders, and workspaces
+ * Following Google Drive model: local-first, user decides what syncs
+ * 
+ * Architecture:
+ * - Local storage: IndexedDB + localStorage (always)
+ * - Cloud storage: FastAPI backend (selective)
+ * - User controls: Push to Cloud, Pull from Cloud, Keep Local
+ */
+
+import { workspaceService as apiWorkspace, documentService as apiDocument, folderService as apiFolder, authService } from '@/services/api';
+import { guestWorkspaceService } from '@/services/workspace/GuestWorkspaceService';
+import { backendWorkspaceService } from '@/services/workspace';
+import { yjsDocumentManager } from '@/services/yjs/YjsDocumentManager';
+import { serializeYjsToHtml } from '@/services/snapshots/serializeYjs';
+import { extractUUID } from '@/utils/id-generator';
+import { htmlToMarkdown } from '@/utils/markdownConversion';
+import Dexie from 'dexie';
+import type { DocumentMeta, Workspace, Folder } from '@/services/workspace/types';
+import type { SyncResult, SyncStatus } from '@/types/sync.types';
+
+// ============================================================================
+// 🔥 FIX 13: ID Normalization Helpers
+// ============================================================================
+
+/**
+ * Convert any ID to cloud format (strip "doc_" prefix)
+ * Backend expects UUIDs without prefixes
+ */
+export const toCloudId = (id: string): string => {
+  if (!id) return id;
+  return id.startsWith('doc_') ? id.slice(4) : id;
+};
+
+/**
+ * Convert any ID to local format (ensure "doc_" prefix)
+ * Frontend uses "doc_" prefix for consistency
+ */
+export const toLocalId = (id: string): string => {
+  if (!id) return id;
+  return id.startsWith('doc_') ? id : `doc_${id}`;
+};
+
+// ============================================================================
+// Workspace ID Mapping Database (Local → Cloud ID mapping)
+// ============================================================================
+
+class WorkspaceMappingDatabase extends Dexie {
+  mappings!: Dexie.Table<{ localId: string; cloudId: string; name: string; createdAt: string }, string>;
+
+  constructor() {
+    super('MDReaderWorkspaceMappings');
+    this.version(1).stores({
+      mappings: 'localId, cloudId, name',
+    });
+  }
+}
+
+class DocumentMappingDatabase extends Dexie {
+  mappings!: Dexie.Table<{ localId: string; cloudId: string; createdAt: string }, string>;
+
+  constructor() {
+    super('MDReaderDocumentMappings');
+    this.version(1).stores({
+      mappings: 'localId, cloudId',
+    });
+  }
+}
+
+const mappingDb = new WorkspaceMappingDatabase();
+const documentMappingDb = new DocumentMappingDatabase();
+
+export class SelectiveSyncService {
+  /**
+   * Store workspace ID mapping (local → cloud)
+   */
+  private async storeWorkspaceMapping(localId: string, cloudId: string, name: string): Promise<void> {
+    try {
+      await mappingDb.mappings.put({
+        localId,
+        cloudId,
+        name,
+        createdAt: new Date().toISOString(),
+      });
+      console.log(`📝 Stored workspace mapping: ${localId} → ${cloudId}`);
+    } catch (error) {
+      console.warn('⚠️ Failed to store workspace mapping:', error);
+      // Non-fatal - continue without mapping
+    }
+  }
+
+  /**
+   * Get cloud workspace ID from local workspace ID (using mapping)
+   * Public method so WorkspaceContext can use it
+   */
+  async getCloudWorkspaceId(localId: string): Promise<string | null> {
+    try {
+      const mapping = await mappingDb.mappings.get(localId);
+      return mapping?.cloudId || null;
+    } catch (error) {
+      console.warn('⚠️ Failed to get workspace mapping:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Store document ID mapping (local → cloud)
+   */
+  private async storeDocumentMapping(localId: string, cloudId: string): Promise<void> {
+    try {
+      await documentMappingDb.mappings.put({
+        localId,
+        cloudId,
+        createdAt: new Date().toISOString(),
+      });
+      console.log(`📝 Stored document mapping: ${localId} → ${cloudId}`);
+    } catch (error) {
+      console.warn('⚠️ Failed to store document mapping:', error);
+      // Non-fatal - continue without mapping
+    }
+  }
+
+  /**
+   * Get cloud document ID from local document ID (using mapping)
+   * Public method so BackendWorkspaceService can use it
+   */
+  async getCloudDocumentId(localId: string): Promise<string | null> {
+    try {
+      const mapping = await documentMappingDb.mappings.get(localId);
+      return mapping?.cloudId || null;
+    } catch (error) {
+      console.warn('⚠️ Failed to get document mapping:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Ensure workspace exists on cloud (create if needed)
+   * Handles 409 conflicts (workspace already exists with same slug)
+   * Returns cloud workspace ID (may differ from local ID)
+   */
+  private async ensureWorkspaceExists(workspaceId: string, localWorkspace: Workspace | null): Promise<string> {
+    const cleanWorkspaceId = extractUUID(workspaceId);
+    
+    // 🔥 Check if we already have a mapping for this workspace
+    const existingMapping = await this.getCloudWorkspaceId(workspaceId);
+    if (existingMapping) {
+      console.log(`✅ Using existing workspace mapping: ${workspaceId} → ${existingMapping}`);
+      return existingMapping;
+    }
+    
+    // ✅ FIX: Skip GET probe, go straight to POST with conflict handling
+    // This eliminates the noisy GET 404 → POST 409 → GET 200 flow
+        const workspaceName = localWorkspace?.name || 'Local Workspace';
+        const workspaceDescription = localWorkspace?.description || '';
+        
+        try {
+      // Attempt to create workspace (backend UPSERT will handle if exists)
+          const cloudWorkspace = await apiWorkspace.createWorkspace({
+            name: workspaceName,
+            description: workspaceDescription,
+          });
+          
+          const cloudWorkspaceId = extractUUID(cloudWorkspace.id);
+          console.log('✅ Workspace created on cloud:', cloudWorkspace.name, `(cloud ID: ${cloudWorkspaceId})`);
+          
+          // 🔥 Store mapping: local workspace ID → cloud workspace ID
+          await this.storeWorkspaceMapping(workspaceId, cloudWorkspaceId, workspaceName);
+          
+          return cloudWorkspaceId;
+        } catch (createError: any) {
+          // Handle 409 Conflict - workspace already exists (maybe with different ID but same slug)
+          const isConflict = createError.status === 409 || 
+                            createError.response?.status === 409 ||
+                            createError.message?.toLowerCase().includes('already exists') ||
+                            createError.message?.toLowerCase().includes('slug');
+          
+          if (isConflict) {
+            console.log('⚠️ Workspace already exists (409 conflict), finding existing workspace...');
+            
+            // List all workspaces and find the one with matching name
+            try {
+              const allWorkspaces = await apiWorkspace.listWorkspaces();
+              
+              // Handle paginated response: { items: [], total, ... } or direct array
+              const workspacesArray = Array.isArray(allWorkspaces) 
+                ? allWorkspaces 
+                : (allWorkspaces.items || []);
+              
+              const matchingWorkspace = workspacesArray.find(
+                (ws: any) => ws.name?.toLowerCase() === workspaceName.toLowerCase()
+              );
+              
+              if (matchingWorkspace) {
+                const cloudWorkspaceId = extractUUID(matchingWorkspace.id);
+                console.log('✅ Found existing workspace:', matchingWorkspace.name, `(cloud ID: ${cloudWorkspaceId})`);
+                
+                // 🔥 Store mapping: local workspace ID → cloud workspace ID
+                await this.storeWorkspaceMapping(workspaceId, cloudWorkspaceId, workspaceName);
+                
+                return cloudWorkspaceId;
+              } else {
+                // Workspace exists but we can't find it - use first workspace as fallback
+                if (workspacesArray.length > 0) {
+                  const fallbackWorkspace = workspacesArray[0];
+                  const cloudWorkspaceId = extractUUID(fallbackWorkspace.id);
+                  console.log('⚠️ Using first available workspace as fallback:', fallbackWorkspace.name);
+                  
+                  // Store mapping
+                  await this.storeWorkspaceMapping(workspaceId, cloudWorkspaceId, fallbackWorkspace.name);
+                  
+                  return cloudWorkspaceId;
+                } else {
+                  throw new Error('Workspace conflict but no workspaces found');
+                }
+              }
+            } catch (listError: any) {
+              console.error('❌ Failed to list workspaces:', listError);
+              throw new Error(`Workspace already exists but could not retrieve it: ${createError.message}`);
+            }
+          } else {
+          // Other creation error (not a conflict)
+            console.error('❌ Failed to create workspace:', createError);
+            throw new Error(`Failed to create workspace: ${createError.message || 'Unknown error'}`);
+      }
+    }
+  }
+
+  /**
+   * Ensure folder exists on cloud (create if needed)
+   * Handles nested folders by ensuring parent folders exist first
+   */
+  private async ensureFolderExists(
+    folderId: string | null | undefined, 
+    workspaceId: string,
+    localFolder: Folder | null
+  ): Promise<string | undefined> {
+    if (!folderId) {
+      return undefined; // Document is in root
+    }
+    
+    const cleanFolderId = extractUUID(folderId);
+    const cleanWorkspaceId = extractUUID(workspaceId);
+    
+    // ✅ FIX 3: Skip GET endpoint (backend doesn't support it)
+    // Use POST-only approach with best-effort creation
+    
+    if (!localFolder) {
+      console.warn('⚠️ No local folder metadata, skipping folder sync');
+      return undefined; // Don't block document push
+    }
+    
+    try {
+      const folderName = localFolder.name || 'Untitled Folder';
+      const folderIcon = localFolder.icon || '📁';
+        let parentId: string | null = null;
+        
+      // Handle parent folder recursively (best-effort)
+      if (localFolder.parentId) {
+          try {
+            const folders = await backendWorkspaceService.getFolders(workspaceId);
+            const parentFolder = folders.find(f => f.id === localFolder.parentId);
+            
+            if (parentFolder) {
+              const cloudParentId = await this.ensureFolderExists(
+                localFolder.parentId,
+                workspaceId,
+                parentFolder
+              );
+              parentId = cloudParentId || null;
+            }
+          } catch (parentError) {
+          console.warn('⚠️ Parent folder sync failed, creating folder at root:', parentError);
+          // Continue without parent
+        }
+      }
+      
+      // Try POST (backend handles duplicates with UPSERT)
+      try {
+        const cloudFolder = await apiFolder.createFolder(cleanWorkspaceId, {
+          id: cleanFolderId, // Send client ID for UPSERT
+          name: folderName,
+          icon: folderIcon,
+          parent_id: parentId,
+        });
+        
+        console.log('✅ Folder synced to cloud:', cloudFolder.name);
+        return extractUUID(cloudFolder.id);
+      } catch (createError: any) {
+        // If parent not found, retry at root
+        const isParentError = createError.message?.toLowerCase().includes('parent') ||
+                            createError.message?.toLowerCase().includes('folder not found');
+        
+        if (isParentError && parentId) {
+          console.log('⚠️ Parent not found, creating folder at root...');
+          const cloudFolder = await apiFolder.createFolder(cleanWorkspaceId, {
+            id: cleanFolderId,
+            name: folderName,
+            icon: folderIcon,
+            parent_id: null,
+          });
+          
+          console.log('✅ Folder synced to cloud (at root):', cloudFolder.name);
+          return extractUUID(cloudFolder.id);
+        }
+        
+        // Folder sync failed, but don't block document push
+        console.warn('⚠️ Folder sync failed (non-fatal):', createError.message);
+        return undefined;
+      }
+    } catch (error: any) {
+      // All folder sync failures are non-fatal
+      console.warn('⚠️ Folder sync failed (non-fatal):', error.message);
+      return undefined; // Don't block document push
+    }
+  }
+
+  /**
+   * 🔥 FIX A: Serialize content directly from Yjs (single source of truth)
+   * - Read ONLY from Yjs
+   * - Return markdown string (empty string allowed)
+   */
+  private serializeFromYjs(documentId: string): string {
+    try {
+      const instance = yjsDocumentManager.getDocument(documentId, { enableWebSocket: false });
+      if (!instance || !instance.ydoc) {
+        throw new Error('Cannot push without Yjs doc');
+      }
+
+      // Serialize to HTML from Yjs fragment, then convert to markdown for backend
+      const html = serializeYjsToHtml(instance.ydoc);
+      if (!html) return '';
+
+      const markdown = htmlToMarkdown(html);
+      return markdown;
+    } catch (error: any) {
+      console.error('❌ [FIX A] Failed to serialize from Yjs:', error?.message || error);
+      throw error;
+    }
+  }
+
+  /**
+   * Push document to cloud
+   * 
+   * LOCAL-FIRST: Pushes local document to backend API.
+   * Per local_first.md section 5.2: "Push to Cloud" explicit action.
+   * 
+   * Cascading creation:
+   * 1. Ensure workspace exists (create if needed)
+   * 2. Ensure folder exists if document is in folder (create if needed)
+   * 3. Create/update document
+   */
+  async pushDocument(documentId: string, liveContent?: string): Promise<SyncResult> {
+    try {
+      if (!authService.isAuthenticated()) {
+        return {
+          success: false,
+          status: 'error',
+          error: 'Not authenticated',
+        };
+      }
+      
+      // 🔥 FIX A: Read content ONLY from Yjs (single source of truth)
+      const contentToSave = this.serializeFromYjs(documentId);
+
+      // Get local metadata from guest service (title/workspace/folder), but do NOT use it for content
+      let localDoc: DocumentMeta | undefined;
+      try {
+        localDoc = await guestWorkspaceService.getDocument(documentId) || undefined;
+      } catch (err) {
+        console.warn('⚠️ [pushDocument] Failed to get local metadata from guest service:', err);
+      }
+
+      if (!localDoc) {
+        return {
+          success: false,
+          status: 'error',
+          error: 'Document metadata not found locally',
+        };
+      }
+
+      console.log('☁️ Pushing document to cloud:', localDoc.title);
+
+      // Get current workspace ID (required for creation)
+      const currentWorkspace = await backendWorkspaceService.getCurrentWorkspace();
+      const workspaceId = localDoc.workspaceId || currentWorkspace?.id;
+      
+      if (!workspaceId) {
+        return {
+          success: false,
+          status: 'error',
+          error: 'No workspace found. Please select a workspace first.',
+        };
+      }
+
+      // Get workspace and folder info from local storage for cascading creation
+      let localWorkspace: Workspace | null = currentWorkspace;
+      
+      // Try to get workspace from local cache if not current
+      if (!localWorkspace) {
+        const allWorkspaces = await backendWorkspaceService.getAllWorkspaces();
+        localWorkspace = allWorkspaces.find(w => w.id === workspaceId) || null;
+      }
+      
+      // Get folder info if document is in a folder
+      let localFolder: Folder | null = null;
+      if (localDoc.folderId) {
+        try {
+          const folders = await backendWorkspaceService.getFolders(workspaceId);
+          localFolder = folders.find(f => f.id === localDoc.folderId) || null;
+        } catch (error) {
+          console.warn('⚠️ Could not load folders for cascading creation:', error);
+        }
+      }
+
+      // 🔥 CASCADING CREATION: Ensure workspace exists first
+      const cloudWorkspaceId = await this.ensureWorkspaceExists(workspaceId, localWorkspace);
+      
+      // 🔥 CASCADING CREATION: Ensure folder exists if document is in a folder
+      const cloudFolderId = await this.ensureFolderExists(localDoc.folderId, cloudWorkspaceId, localFolder);
+
+      // Decide create vs patch using local mapping only (WRITE-ONLY)
+      const mappedCloudId = await this.getCloudDocumentId(documentId);
+      const shouldPatch = !!mappedCloudId;
+
+      // Track response for sync state update
+      let syncedDoc: any = null;
+
+      if (shouldPatch) {
+        // PATCH existing cloud document
+        const updatePayload: any = {
+          title: localDoc.title,
+          folder_id: localDoc.folderId || undefined,
+          is_starred: localDoc.starred,
+          tags: localDoc.tags,
+          content: contentToSave,
+        };
+
+        console.log('☁️ [pushDocument] PATCH to cloud:', toCloudId(mappedCloudId));
+        syncedDoc = await apiDocument.updateDocument(toCloudId(mappedCloudId), updatePayload);
+      } else {
+        // POST create new cloud document
+        const createPayload: any = {
+          id: toCloudId(documentId),
+          workspace_id: cloudWorkspaceId,
+          title: localDoc.title,
+          content_type: localDoc.type === 'markdown' ? 'markdown' : 'markdown',
+          folder_id: cloudFolderId || null,
+          is_starred: localDoc.starred,
+          tags: localDoc.tags,
+          content: contentToSave,
+        };
+
+        console.log('☁️ [pushDocument] POST to cloud:', createPayload.title);
+        syncedDoc = await apiDocument.createDocument(createPayload);
+        const returnedLocalId = toLocalId(syncedDoc.id);
+
+        // Store mapping after successful creation
+        await this.storeDocumentMapping(documentId, returnedLocalId);
+        
+        // Dispatch event if ID changed (for rare ID mismatch cases)
+        if (returnedLocalId !== documentId) {
+          window.dispatchEvent(new CustomEvent('document-synced', {
+            detail: { oldId: documentId, newId: returnedLocalId, doc: syncedDoc }
+          }));
+        }
+      }
+
+      // ✅ FIX 2: Update sync state in local index (IndexedDB)
+      // This makes sync state DURABLE across refreshes
+      try {
+        await guestWorkspaceService.updateDocument(documentId, {
+          syncStatus: 'synced',
+          cloudId: syncedDoc?.id, // Store backend document ID
+          lastSyncedAt: syncedDoc?.updated_at || new Date().toISOString(),
+        });
+
+        // Dispatch event to update WorkspaceContext state (UI only)
+        window.dispatchEvent(new CustomEvent('document-sync-status-changed', {
+          detail: {
+            documentId,
+            syncStatus: 'synced',
+            cloudId: syncedDoc?.id,
+            lastSyncedAt: syncedDoc?.updated_at || new Date().toISOString(),
+          }
+        }));
+
+        console.log('✅ [pushDocument] Sync state persisted to IndexedDB: local → synced');
+      } catch (updateError) {
+        console.warn('⚠️ [pushDocument] Failed to update sync state:', updateError);
+        // Non-fatal - document is still synced to cloud
+      }
+
+      return {
+        success: true,
+        status: 'synced',
+      };
+    } catch (error: any) {
+      console.error('❌ Failed to push document:', error);
+      
+      // Provide user-friendly error message
+      let errorMessage = error.message || 'Unknown error';
+      
+      if (errorMessage.includes('Failed to fetch') || 
+          errorMessage.includes('CORS') ||
+          errorMessage.includes('ERR_FAILED') ||
+          errorMessage.includes('500')) {
+        errorMessage = 'Backend server error. Please check if the backend is running and CORS is configured correctly.';
+      }
+      
+      return {
+        success: false,
+        status: 'error',
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Pull document from cloud
+   * 
+   * Downloads cloud document to local cache (if it exists on cloud but not locally,
+   * or if cloud version is newer).
+   */
+  async pullDocument(documentId: string): Promise<SyncResult> {
+    try {
+      if (!authService.isAuthenticated()) {
+        return {
+          success: false,
+          status: 'error',
+          error: 'Not authenticated',
+        };
+      }
+
+      console.log('📥 Pulling document from cloud:', documentId);
+
+      // Fetch from cloud
+      console.log(`📥 [FIX 13] Fetching document from cloud: ${documentId} (sending ${toCloudId(documentId)})`);
+      const cloudDoc = await apiDocument.getDocument(toCloudId(documentId));
+
+      // Get local document from BackendWorkspaceService cache
+      const allDocs = await backendWorkspaceService.getDocuments();
+      const localDoc = allDocs.find(d => d.id === documentId);
+
+      if (localDoc) {
+        // Check for conflicts
+        const cloudUpdatedAt = new Date(cloudDoc.updated_at);
+        const localUpdatedAt = new Date(localDoc.updatedAt);
+
+        if (localUpdatedAt > cloudUpdatedAt) {
+          // Local is newer - conflict!
+          return {
+            success: false,
+            status: 'conflict',
+            error: 'Local version is newer',
+            conflictData: {
+              localUpdatedAt,
+              cloudUpdatedAt,
+            },
+          };
+        }
+
+        // Update local document with cloud data
+        await backendWorkspaceService.updateDocument(documentId, {
+          title: cloudDoc.title,
+          folderId: cloudDoc.folder_id || null,
+          starred: cloudDoc.is_starred || false,
+          tags: cloudDoc.tags || [],
+        });
+        
+        // Update sync status
+        await backendWorkspaceService.updateDocumentSyncStatus(
+          documentId,
+          'synced',
+          new Date().toISOString()
+        );
+      } else {
+        // Create local document from cloud data
+        await backendWorkspaceService.createDocument({
+          id: documentId,
+          workspaceId: cloudDoc.workspace_id,
+          title: cloudDoc.title,
+          type: cloudDoc.content_type === 'markdown' ? 'markdown' : 'markdown',
+          folderId: cloudDoc.folder_id || null,
+        });
+
+        // Update with cloud metadata
+        await backendWorkspaceService.updateDocument(documentId, {
+          starred: cloudDoc.is_starred || false,
+          tags: cloudDoc.tags || [],
+        });
+        
+        // Update sync status
+        await backendWorkspaceService.updateDocumentSyncStatus(
+          documentId,
+          'synced',
+          new Date().toISOString()
+        );
+      }
+
+      console.log('✅ Document pulled from cloud:', cloudDoc.title);
+
+      return {
+        success: true,
+        status: 'synced',
+      };
+    } catch (error: any) {
+      console.error('❌ Failed to pull document:', error);
+      return {
+        success: false,
+        status: 'error',
+        error: error.message || 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Push folder to cloud
+   */
+  async pushFolder(folderId: string): Promise<SyncResult> {
+    try {
+      if (!authService.isAuthenticated()) {
+        return {
+          success: false,
+          status: 'error',
+          error: 'Not authenticated',
+        };
+      }
+
+      const localFolder = guestWorkspaceService.getFolder(folderId);
+      if (!localFolder) {
+        return {
+          success: false,
+          status: 'error',
+          error: 'Folder not found locally',
+        };
+      }
+
+      console.log('☁️ Pushing folder to cloud:', localFolder.name);
+
+      // Check if folder exists on cloud
+      try {
+        await apiFolder.getFolder(folderId);
+        
+        // Update existing folder
+        await apiFolder.updateFolder(folderId, {
+          name: localFolder.name,
+          color: undefined, // Can be extended later
+        });
+
+        console.log('✅ Folder updated on cloud:', localFolder.name);
+      } catch (error: any) {
+        if (error.response?.status === 404) {
+          // Create new folder
+          await apiFolder.createFolder({
+            workspace_id: localFolder.workspaceId,
+            name: localFolder.name,
+            parent_id: localFolder.parentId || undefined,
+            color: undefined,
+          });
+
+          console.log('✅ Folder created on cloud:', localFolder.name);
+        } else {
+          throw error;
+        }
+      }
+
+      // Update local sync status (flat fields, not nested)
+      guestWorkspaceService.updateFolder(folderId, {
+        syncStatus: 'synced',
+        lastSyncedAt: new Date().toISOString(),
+      });
+
+      return {
+        success: true,
+        status: 'synced',
+      };
+    } catch (error: any) {
+      console.error('❌ Failed to push folder:', error);
+      return {
+        success: false,
+        status: 'error',
+        error: error.message || 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Push entire workspace (all folders + documents)
+   */
+  async pushWorkspace(workspaceId: string): Promise<SyncResult> {
+    try {
+      if (!authService.isAuthenticated()) {
+        return {
+          success: false,
+          status: 'error',
+          error: 'Not authenticated',
+        };
+      }
+
+      console.log('☁️ Pushing entire workspace to cloud...');
+
+      // Push all folders first (to maintain hierarchy)
+      const folders = guestWorkspaceService.getFolders();
+      for (const folder of folders) {
+        await this.pushFolder(folder.id);
+      }
+
+      // Push all documents
+      const documents = guestWorkspaceService.getDocuments();
+      for (const doc of documents) {
+        await this.pushDocument(doc.id);
+      }
+
+      console.log('✅ Workspace pushed to cloud');
+
+      return {
+        success: true,
+        status: 'synced',
+      };
+    } catch (error: any) {
+      console.error('❌ Failed to push workspace:', error);
+      return {
+        success: false,
+        status: 'error',
+        error: error.message || 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Mark document as local-only (prevent future syncs)
+   */
+  async markAsLocalOnly(documentId: string): Promise<void> {
+    const localDoc = guestWorkspaceService.getDocument(documentId);
+    if (localDoc) {
+      guestWorkspaceService.updateDocument(documentId, {
+        syncStatus: 'local',
+      });
+      console.log('💾 Document marked as local-only:', localDoc.title);
+    }
+  }
+
+  /**
+   * Get sync status for a document
+   */
+  getSyncStatus(documentId: string): SyncStatus {
+    const doc = guestWorkspaceService.getDocument(documentId);
+    return doc?.sync.status || 'local';
+  }
+}
+
+// Export singleton
+export const selectiveSyncService = new SelectiveSyncService();

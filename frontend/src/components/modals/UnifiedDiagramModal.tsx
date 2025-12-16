@@ -22,7 +22,7 @@ import MindmapGenerator from "@/services/MindmapGenerator";
 import { aiService } from "@/services/ai/AIService";
 import { sessionService } from "@/services/EditorStudioSession";
 import { isDesktop } from "@/utils/platform";
-import { workspaceService } from "@/services/workspace/WorkspaceService";
+import { workspaceService } from "@/services/workspace-legacy/WorkspaceService";
 import mermaid from "mermaid";
 import { 
   Sparkles, 

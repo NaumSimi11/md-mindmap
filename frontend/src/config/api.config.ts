@@ -8,7 +8,7 @@ const env = import.meta.env;
 export const API_CONFIG = {
   baseUrl: env.VITE_API_BASE_URL || 'http://localhost:7001',
   apiVersion: env.VITE_API_VERSION || 'v1',
-  wsUrl: env.VITE_WS_URL || 'ws://localhost:7001',
+  wsUrl: env.VITE_WS_URL || 'ws://localhost:1234',
   timeout: 30000, // 30 seconds
   retryAttempts: 3,
 } as const;

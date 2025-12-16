@@ -1,0 +1,51 @@
+# ============================================================
+# MDReader Backend v2 - Dependencies
+# Pattern-Based, Production-Ready
+# Last Updated: December 10, 2025
+# ============================================================
+
+# Core Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy==2.0.25
+alembic==1.13.1
+asyncpg==0.29.0          # PostgreSQL async driver
+psycopg2-binary==2.9.9   # PostgreSQL sync driver (for Alembic)
+
+# Authentication & Security
+python-jose[cryptography]==3.3.0  # JWT tokens
+passlib[bcrypt]==1.7.4            # Password hashing (bcrypt)
+python-dotenv==1.0.0              # Environment variables
+
+# Validation
+pydantic==2.5.3
+pydantic-settings==2.1.0
+email-validator==2.1.0
+
+# Redis (for caching - Phase 1)
+redis[hiredis]==5.0.1
+hiredis==2.3.2
+
+# Utilities
+python-dateutil==2.8.2
+pytz==2024.1
+
+# Observability (optional for Phase 0)
+# prometheus-client==0.19.0
+# sentry-sdk[fastapi]==1.39.2
+
+# Development & Testing
+pytest==7.4.4
+pytest-asyncio==0.23.3
+pytest-cov==4.1.0        # Code coverage
+pytest-timeout==2.2.0    # Test timeouts
+httpx==0.26.0            # For testing async endpoints
+black==24.1.1
+ruff==0.1.14
+mypy==1.8.0
+
+# Documentation
+markdown==3.5.2

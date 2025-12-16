@@ -13,7 +13,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { FileText, Brain, Presentation, Clock, Search } from 'lucide-react';
-import { workspaceService, type Document } from '@/services/workspace/WorkspaceService';
+import { workspaceService, type Document } from '@/services/workspace-legacy/WorkspaceService';
 import Fuse from 'fuse.js';
 
 interface QuickSwitcherProps {

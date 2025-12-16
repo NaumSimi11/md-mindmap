@@ -1,4 +1,4 @@
-import { workspaceService } from '@/services/workspace/WorkspaceService';
+import { workspaceService } from '@/services/workspace-legacy/WorkspaceService';
 
 export interface ToolDefinition {
     name: string;

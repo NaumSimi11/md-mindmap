@@ -1,6 +1,11 @@
 /**
  * VersionHistory - Document version history panel
  * Shows WHO made WHAT changes WHEN (collaboration-ready)
+ * 
+ * 🔴 CRITICAL POINT #13: Dual Mode Support
+ * - Guest mode: Load from GuestVersionManager (IndexedDB)
+ * - Authenticated mode: Load from backend API
+ * - MUST detect auth state and switch data source
  */
 
 import { useState, useEffect } from 'react';
@@ -9,6 +14,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Clock, User, RotateCcw, Eye, X } from 'lucide-react';
 import { documentVersionService, type DocumentVersion } from '@/services/api/DocumentVersionService';
+import { guestVersionManager } from '@/services/workspace-legacy/GuestVersionManager';
+import { useAuth } from '@/hooks/useAuth';
 // Simple time formatter (no external deps)
 const formatTimeAgo = (date: Date): string => {
   const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
@@ -32,6 +39,7 @@ interface VersionHistoryProps {
 }
 
 export function VersionHistory({ documentId, currentVersion, onRestore, onClose }: VersionHistoryProps) {
+  const { isAuthenticated } = useAuth();
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [previewVersion, setPreviewVersion] = useState<DocumentVersion | null>(null);
@@ -39,13 +47,38 @@ export function VersionHistory({ documentId, currentVersion, onRestore, onClose 
 
   useEffect(() => {
     loadVersions();
-  }, [documentId]);
+  }, [documentId, isAuthenticated]);
 
   const loadVersions = async () => {
     try {
       setIsLoading(true);
-      const response = await documentVersionService.getVersions(documentId);
-      setVersions(response.versions);
+      
+      if (isAuthenticated) {
+        // AUTHENTICATED MODE: Load from backend API
+        console.log('🔐 Loading versions from backend:', documentId);
+        const response = await documentVersionService.getVersions(documentId);
+        setVersions(response.versions);
+      } else {
+        // GUEST MODE: Load from GuestVersionManager
+        console.log('👤 Loading versions from guest storage:', documentId);
+        const guestVersions = guestVersionManager.getVersions(documentId);
+        
+        // Convert to DocumentVersion format
+        const converted: DocumentVersion[] = guestVersions.versions.map(v => ({
+          id: v.yjsDocId,
+          document_id: documentId,
+          version_number: v.versionNumber,
+          title: '', // Not stored in guest mode
+          content: '', // Loaded on demand
+          change_summary: v.comment,
+          word_count: v.wordCount,
+          created_by_id: null,
+          created_at: v.createdAt
+        }));
+        
+        setVersions(converted);
+        console.log(`✅ Loaded ${converted.length} guest versions`);
+      }
     } catch (error) {
       console.error('Failed to load versions:', error);
       toast.error('Failed to load version history');
@@ -55,7 +88,24 @@ export function VersionHistory({ documentId, currentVersion, onRestore, onClose 
   };
 
   const handlePreview = async (version: DocumentVersion) => {
-    setPreviewVersion(version);
+    // 🔴 CRITICAL POINT #14: Content Loading for Preview
+    // Guest mode: Need to load content from Yjs doc
+    // Authenticated mode: Content already in version object
+    
+    if (!isAuthenticated && !version.content) {
+      console.log('👤 Loading guest version content:', version.version_number);
+      const content = await guestVersionManager.getVersionContent(documentId, version.version_number);
+      
+      if (content) {
+        setPreviewVersion({ ...version, content });
+      } else {
+        toast.error('Failed to load version content');
+        return;
+      }
+    } else {
+      setPreviewVersion(version);
+    }
+    
     setShowPreview(true);
   };
 
@@ -65,7 +115,17 @@ export function VersionHistory({ documentId, currentVersion, onRestore, onClose 
     }
 
     try {
-      await documentVersionService.restoreVersion(documentId, versionNumber);
+      if (isAuthenticated) {
+        // AUTHENTICATED MODE: Use backend API
+        await documentVersionService.restoreVersion(documentId, versionNumber);
+      } else {
+        // GUEST MODE: Restore from local version
+        // ⚠️ TODO: Implement guest mode restore
+        // For now, just show error
+        toast.error('Guest mode restore not yet implemented');
+        return;
+      }
+      
       toast.success(`Restored to version ${versionNumber}`);
       onRestore(versionNumber);
       onClose();

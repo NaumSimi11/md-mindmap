@@ -37,7 +37,7 @@ import { presentationGenerator } from "@/services/presentation/PresentationGener
 import { safePresentationService, type ProgressUpdate } from "@/services/presentation/SafePresentationService";
 import { PresentationWizardModal, type GenerationSettings } from "@/components/presentation/PresentationWizardModal";
 import { PresentationLoadingScreen } from "@/components/presentation/PresentationLoadingScreen";
-import { workspaceService } from "@/services/workspace/WorkspaceService";
+import { workspaceService } from "@/services/workspace-legacy/WorkspaceService";
 import Studio2MindNode from "@/components/mindmap/Studio2MindNode";
 import Studio2MilestoneNode from "@/components/mindmap/Studio2MilestoneNode";
 import SimpleMindNode from "@/components/mindmap/SimpleMindNode";

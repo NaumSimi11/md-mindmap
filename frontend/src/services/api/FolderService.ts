@@ -46,7 +46,7 @@ export interface MoveFolderData {
   position?: number;
 }
 
-class FolderService {
+export class FolderService {
   /**
    * Create a new folder
    */
@@ -67,9 +67,60 @@ class FolderService {
 
   /**
    * Get folder tree (nested hierarchy)
+   * Builds tree from flat list on frontend (better performance)
    */
   async getFolderTree(workspaceId: string): Promise<FolderTree[]> {
-    return apiClient.get<FolderTree[]>(`/api/v1/folders/workspace/${workspaceId}/tree`);
+    // Get flat list from backend
+    const response = await apiClient.get<any>(`/api/v1/folders/workspace/${workspaceId}`);
+    const folders = response.items || [];
+    
+    // Build tree structure
+    return this.buildTree(folders);
+  }
+
+  /**
+   * Build tree from flat folder list
+   */
+  private buildTree(folders: Folder[]): FolderTree[] {
+    const folderMap = new Map<string, FolderTree>();
+    const rootFolders: FolderTree[] = [];
+
+    // First pass: Create all nodes
+    folders.forEach(folder => {
+      folderMap.set(folder.id, {
+        ...folder,
+        children: [],
+        document_count: 0
+      });
+    });
+
+    // Second pass: Build hierarchy
+    folders.forEach(folder => {
+      const node = folderMap.get(folder.id)!;
+      
+      if (folder.parent_id === null) {
+        // Root folder
+        rootFolders.push(node);
+      } else {
+        // Child folder
+        const parent = folderMap.get(folder.parent_id);
+        if (parent) {
+          parent.children.push(node);
+        } else {
+          // Parent not found, treat as root
+          rootFolders.push(node);
+        }
+      }
+    });
+
+    // Sort by position
+    const sortByPosition = (a: FolderTree, b: FolderTree) => a.position - b.position;
+    rootFolders.sort(sortByPosition);
+    rootFolders.forEach(folder => {
+      folder.children.sort(sortByPosition);
+    });
+
+    return rootFolders;
   }
 
   /**

@@ -1,0 +1,115 @@
+# ============================================================
+# MDReader - Git Ignore
+# ============================================================
+
+# ============================================================
+# Python (Backend)
+# ============================================================
+**/venv/
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+*.pyc
+backendv2/*.so
+backendv2/.Python
+backendv2/build/
+backendv2/develop-eggs/
+backendv2/dist/
+backendv2/downloads/
+backendv2/eggs/
+backendv2/.eggs/
+backendv2/lib/
+backendv2/lib64/
+backendv2/parts/
+backendv2/sdist/
+backendv2/var/
+backendv2/wheels/
+backendv2/*.egg-info/
+backendv2/.installed.cfg
+backendv2/*.egg
+backendv2/MANIFEST
+**/.env
+**/.env.local
+**/.env.production
+.env
+.env.local
+.env.production
+
+# ============================================================
+# Node.js (Frontend)
+# ============================================================
+**/node_modules/
+**/dist/
+**/build/
+**/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ============================================================
+# IDE & Editors
+# ============================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.cursor/
+*.code-workspace
+
+# ============================================================
+# Logs
+# ============================================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ============================================================
+# Operating System
+# ============================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# ============================================================
+# Testing
+# ============================================================
+coverage/
+.nyc_output/
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.hypothesis/
+
+# ============================================================
+# Database
+# ============================================================
+*.db
+*.sqlite
+*.sqlite3
+postgres_data/
+redis_data/
+
+# ============================================================
+# Misc
+# ============================================================
+*.bak
+*.tmp
+*.temp
+.cache/
+.temp/
+.tmp/
+

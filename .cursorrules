@@ -1,0 +1,224 @@
+# MDReader Project - Cursor AI Rules
+
+## Project Context
+This is the MDReader project - a collaborative markdown editor with real-time sync, workspace management, and version control.
+
+## Key Directories
+- `backendv2/` - FastAPI backend (PRIMARY, use this)
+- `frontend/` - React + Tauri frontend
+- `docs/` - Architecture and API contracts (SOURCE OF TRUTH)
+- `hocuspocus-server/` - Yjs collaboration server
+
+## Development Standards
+
+### When Implementing CRUD Phases
+
+**Trigger Phrases**:
+- "Start implementing [Resource] CRUD"
+- "Implement [Resource] CRUD following the standard patterns"
+- "Begin [Resource] CRUD phase"
+
+**AI Must**:
+1. Read `/docs/API_CONTRACTS.md` for requirements
+2. Follow three-layer architecture:
+   - Schemas: `app/schemas/[resource].py`
+   - Service: `app/services/[resource]_service.py`
+   - Router: `app/routers/[resource].py`
+   - Tests: `tests/test_[resource].py`
+3. Follow patterns from existing implementations (e.g., `app/routers/workspaces.py`)
+4. Use Pydantic for validation
+5. Use SQLAlchemy async ORM
+6. Implement all CRUD operations (Create, List, Get, Update, Delete)
+7. Add comprehensive tests (aim for 100% coverage)
+8. Register router in `app/main.py`
+
+### When Documenting CRUD Phases
+
+**Trigger Phrases**:
+- "Document the [Resource] CRUD phase"
+- "Document [Resource] using the standard template"
+- "Generate documentation for [Resource] CRUD"
+
+**AI Must**:
+1. Copy `/docs/CRUD_DOCUMENTATION_TEMPLATE.md` to `/docs/CRUD_[RESOURCE]_COMPLETE.md`
+2. Fill ALL sections with real data:
+   - Trigger (how action starts)
+   - Request flow (what's sent)
+   - Processing (router → service → database)
+   - Response (what's returned)
+   - All cases (success + all errors)
+   - Expected vs Real results
+   - Diagrams (sequence, flow, system)
+3. Extract real code snippets from implementation
+4. Generate Mermaid diagrams for each operation
+5. Document test results (must be 100% coverage)
+6. Add performance metrics
+7. Verify API contract compliance
+
+### When Testing CRUD Phases
+
+**Trigger Phrases**:
+- "Run tests for [Resource]"
+- "Test [Resource] CRUD"
+- "Verify [Resource] tests"
+
+**AI Must**:
+1. Check if PostgreSQL is running (port 5432)
+2. Ensure test database exists (`mdreader_test`)
+3. Run `pytest tests/test_[resource].py -v`
+4. Report pass/fail count
+5. Show any errors with context
+6. Suggest fixes if tests fail
+
+### When Verifying Phase Completeness
+
+**Trigger Phrases**:
+- "Verify [Resource] CRUD phase is complete"
+- "Check [Resource] completeness"
+- "Is [Resource] phase done?"
+
+**AI Must Check**:
+1. ✅ All endpoints implemented (Create, List, Get, Update, Delete)
+2. ✅ All tests passing (100% coverage)
+3. ✅ Router registered in `app/main.py`
+4. ✅ Documentation exists (`CRUD_[RESOURCE]_COMPLETE.md`)
+5. ✅ API contract compliance verified
+6. ✅ Security checklist complete
+7. ✅ Performance metrics documented
+
+## Architecture Patterns
+
+### Three-Layer Architecture
+```
+Router Layer (HTTP) → Service Layer (Business Logic) → Database Layer (ORM)
+```
+
+### Error Handling
+- Service layer raises `ValueError` for business logic errors
+- Router layer converts to HTTP exceptions (400, 403, 404, 409, 500)
+
+### Authentication
+- Use `get_current_user()` dependency
+- JWT tokens in Authorization header
+- Returns 403 if unauthorized
+
+### Validation
+- Pydantic schemas for request/response
+- Field validators for complex rules
+- Returns 422 for validation errors
+
+### Database
+- Async SQLAlchemy with asyncpg
+- Soft delete (is_deleted flag)
+- Optimistic locking (version field)
+- Timestamps (created_at, updated_at)
+
+## Key Files to Reference
+
+### Source of Truth
+- `/docs/API_CONTRACTS.md` - API specifications
+- `/docs/PATTERNS_ADOPTION.md` - Coding patterns
+- `/docs/DOCUMENTATION_STANDARD.md` - Documentation rules
+
+### Templates
+- `/docs/CRUD_DOCUMENTATION_TEMPLATE.md` - Documentation template
+- `/docs/QUICK_DOC_REFERENCE.md` - Quick reference
+
+### Examples
+- `backendv2/app/routers/workspaces.py` - Router example
+- `backendv2/app/services/workspace_service.py` - Service example
+- `backendv2/app/schemas/workspace.py` - Schema example
+- `backendv2/tests/test_workspaces.py` - Test example
+
+## Commands Reference
+
+See `/docs/AI_COMMANDS.md` for full command list.
+
+**Quick Commands**:
+- `"Start implementing [Resource] CRUD following the standard patterns"`
+- `"Document the [Resource] CRUD phase using the standard template"`
+- `"Run tests for [Resource] CRUD"`
+- `"Verify [Resource] CRUD phase is complete"`
+
+## Code Style
+
+### Python (Backend)
+- Use type hints
+- Async/await for database operations
+- Docstrings for all public functions
+- Follow PEP 8
+
+### TypeScript (Frontend)
+- Use TypeScript strict mode
+- React functional components with hooks
+- Proper error handling
+
+## Testing Standards
+
+### Backend Tests
+- Use pytest with pytest-asyncio
+- Test all CRUD operations
+- Test all error cases
+- Test permissions
+- Aim for 100% coverage
+
+### Test Structure
+```python
+@pytest.mark.asyncio
+async def test_operation_success(client, auth_headers):
+    # Test successful operation
+    
+@pytest.mark.asyncio
+async def test_operation_error(client, auth_headers):
+    # Test error case
+```
+
+## Documentation Standards
+
+### CRUD Phase Documentation
+- **Required**: After completing any CRUD phase
+- **Template**: `/docs/CRUD_DOCUMENTATION_TEMPLATE.md`
+- **Must Include**:
+  - Trigger (how action starts)
+  - Request/Response flow
+  - All error cases
+  - Diagrams (sequence, flow, system)
+  - Test results (100% coverage)
+  - Expected vs Real comparison
+
+### Diagrams
+- Use Mermaid syntax
+- Include all layers (Client → Router → Service → Database)
+- Show error paths (not just happy path)
+- Color code success/error states
+
+## Security
+
+- Always validate input (Pydantic)
+- Always check authentication (JWT)
+- Always check permissions (owner/public)
+- Never expose sensitive data (passwords, tokens)
+- Use parameterized queries (ORM prevents SQL injection)
+
+## Performance
+
+- Target: < 200ms response time
+- Use database indexes
+- Optimize N+1 queries
+- Use connection pooling
+
+## Git Workflow
+
+- Commit after each major feature
+- Use conventional commits: `feat:`, `fix:`, `docs:`, `test:`
+- Don't commit sensitive data (.env files)
+
+## When in Doubt
+
+1. Check `/docs/API_CONTRACTS.md` for requirements
+2. Look at existing implementations (Workspace CRUD)
+3. Follow the three-layer architecture
+4. Ask for clarification before proceeding
+
+## Version
+1.0 - Created December 12, 2025

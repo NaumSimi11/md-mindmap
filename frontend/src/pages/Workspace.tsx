@@ -2,16 +2,24 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useAuth } from '@/hooks/useAuth';
-import type { Document } from '@/services/workspace/BackendWorkspaceService';
+import type { Document } from '@/services/workspace-legacy/BackendWorkspaceService';
+import type { WebsocketProvider } from 'y-websocket';
 import { AdaptiveSidebar } from '@/components/workspace/AdaptiveSidebar';
 import { QuickSwitcher } from '@/components/workspace/QuickSwitcher';
+import { PresenceList } from '@/components/collaboration/PresenceList';
 import { NewDocumentModal } from '@/components/workspace/NewDocumentModal';
 import { WorkspaceSwitcher } from '@/components/workspace/WorkspaceSwitcher';
+import { SyncModeToggle } from '@/components/workspace/SyncModeToggle';
 import { CreateWorkspaceModal } from '@/components/workspace/CreateWorkspaceModal';
+import { RenameWorkspaceDialog } from '@/components/workspace/RenameWorkspaceDialog';
 import { DragDropZone } from '@/components/workspace/DragDropZone';
 import { DesktopWorkspaceSelector } from '@/components/workspace/DesktopWorkspaceSelector';
-import { SyncStatusIndicator } from '@/components/offline/SyncStatusIndicator';
+// import { SyncStatusIndicator } from '@/components/offline/SyncStatusIndicator'; // ⚠️ REMOVED - Now in WYSIWYGEditor
 import { WorkspaceHome } from '@/components/workspace/WorkspaceHome';
+import { FileWatcherIndicator } from '@/components/workspace/FileWatcherIndicator';
+import { CollaborationSidebar } from '@/components/workspace/CollaborationSidebar';
+import { QuickSwitcherModal } from '@/components/workspace/QuickSwitcherModal';
+import { useQuickSwitcher } from '@/hooks/useQuickSwitcher';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -21,7 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Search, Sparkles, Presentation as PresentationIcon, User, Settings, LogOut, Clock, Database } from 'lucide-react';
+import { Plus, Search, Sparkles, Presentation as PresentationIcon, User, Settings, LogOut, Clock, Database, Users } from 'lucide-react';
 import { getGuestCredits } from '@/lib/guestCredits';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { usePlatform } from '@/contexts/PlatformContext';
@@ -31,6 +39,7 @@ import { sessionService } from '@/services/EditorStudioSession';
 import { useScrollSpy } from '@/hooks/useScrollSpy';
 import { PresentationWizardModal, type GenerationSettings } from '@/components/presentation/PresentationWizardModal';
 import { PresentationLoadingScreen } from '@/components/presentation/PresentationLoadingScreen';
+import { htmlToMarkdown } from '@/utils/markdownConversion'; // 🔥 ADD: For outline generation
 import { safePresentationService, type ProgressUpdate } from '@/services/presentation/SafePresentationService';
 import { DEMO_PRESENTATION } from '@/data/demoPresentation';
 import { VersionHistory } from '@/components/editor/VersionHistory';
@@ -38,7 +47,10 @@ import { VersionHistory } from '@/components/editor/VersionHistory';
 // import { useConflicts } from '@/hooks/useConflicts';
 
 // Import document editors
+import { YjsEditor } from '@/components/editor/YjsEditor';
 import { WYSIWYGEditor } from '@/components/editor/WYSIWYGEditor';
+import { EditorErrorBoundary } from '@/components/errors/EditorErrorBoundary';
+import { SidebarErrorBoundary } from '@/components/errors/SidebarErrorBoundary';
 import MindmapStudio2 from './MindmapStudio2';
 import PresentationEditor from './PresentationEditor';
 import PresenterMode from './PresenterMode';
@@ -50,6 +62,7 @@ export default function Workspace() {
   const location = useLocation();
   const { isDesktop } = usePlatform();
   const { remaining, total } = getGuestCredits();
+  const { isOpen: isQuickSwitcherOpen, close: closeQuickSwitcher } = useQuickSwitcher();
   
   // Auth state
   const { user, logout } = useAuth();
@@ -87,12 +100,16 @@ export default function Workspace() {
   // const { conflicts, hasConflicts, isResolving, resolveConflict, dismissConflict } = useConflicts(currentDocument?.id || null);
   const [showNewDocModal, setShowNewDocModal] = useState(false);
   const [showCreateWorkspaceModal, setShowCreateWorkspaceModal] = useState(false);
+  const [showRenameWorkspaceDialog, setShowRenameWorkspaceDialog] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [showCollaborationSidebar, setShowCollaborationSidebar] = useState(false);
+  const [activityEvents, setActivityEvents] = useState<any[]>([]);
+  const [websocketProvider, setWebsocketProvider] = useState<WebsocketProvider | null>(null);
 
-  // Ref to track LIVE editor content (not stored content) - using ref to avoid re-renders
-  const liveEditorContentRef = React.useRef<string>('');
+  // 🔥 CHANGED: Use STATE instead of REF so sidebar re-renders when content changes!
+  const [liveEditorContent, setLiveEditorContent] = React.useState<string>('');
 
   // Editor instance ref for direct content insertion
   const editorInstanceRef = React.useRef<any>(null);
@@ -145,25 +162,37 @@ export default function Workspace() {
   // Load document if ID is in URL
   useEffect(() => {
     if (documentId) {
-      const doc = backendGetDocument(documentId);
-      if (doc) {
-        setCurrentDocument(doc);
-        // CRITICAL: Clear live editor content when loading new document
-        liveEditorContentRef.current = doc.content || '';
-        console.log('📄 Document loaded:', {
-          id: doc.id,
-          title: doc.title,
-          contentLength: doc.content?.length || 0,
-        });
-      } else {
-        // Document not found, go home
+      console.log('🔍 [Workspace] Looking for document:', documentId);
+      console.log('🔍 [Workspace] Available documents:', backendDocuments.length);
+      
+      // 🔥 FIX: getDocument is now async - must await it
+      backendGetDocument(documentId).then(doc => {
+        if (doc) {
+          console.log('📄 [Workspace] Document found:', {
+            id: doc.id,
+            title: doc.title,
+            hasContent: !!doc.content,
+            contentLength: doc.content?.length || 0,
+            contentPreview: doc.content?.substring(0, 100),
+            fullDoc: doc
+          });
+          setCurrentDocument(doc);
+          // CRITICAL: Clear live editor content when loading new document
+          setLiveEditorContent(doc.content || '');
+        } else {
+          console.error('❌ [Workspace] Document NOT found:', documentId);
+          // Document not found, go home
+          navigate('/workspace');
+        }
+      }).catch(err => {
+        console.error('❌ [Workspace] Error loading document:', err);
         navigate('/workspace');
-      }
+      });
     } else {
       setCurrentDocument(null);
-      liveEditorContentRef.current = ''; // Clear content when no document
+      setLiveEditorContent(''); // Clear content when no document
     }
-  }, [documentId, navigate]);
+  }, [documentId, navigate, backendGetDocument]);
 
   // Handle Cmd+K for quick switcher
   useEffect(() => {
@@ -274,9 +303,22 @@ export default function Workspace() {
   };
 
   // Handle document selection from sidebar or quick switcher
-  const handleDocumentSelect = (docId: string) => {
-    const doc = backendGetDocument(docId);
-    if (!doc) return;
+  const handleDocumentSelect = async (docId: string) => {
+    console.log('📄 Document selected:', docId);
+    console.log('📊 Available documents in context:', backendDocuments.length);
+    
+    // 🔥 FIX: getDocument is now async
+    const doc = await backendGetDocument(docId);
+    
+    if (!doc) {
+      console.error('❌ Document not found in context:', docId);
+      console.log('💡 Attempting direct navigation anyway...');
+      // 🔥 FIX: Navigate anyway (document exists in localStorage/IndexedDB)
+      navigate(`/workspace/doc/${docId}/edit`);
+      return;
+    }
+
+    console.log('✅ Document found:', doc.title, doc.type);
 
     // Navigate to appropriate view based on document type
     if (doc.type === 'markdown') {
@@ -300,7 +342,10 @@ export default function Workspace() {
       console.log('🏢 Creating new workspace:', data.name);
       const newWorkspace = await createWorkspace(data);
       console.log('✅ Workspace created and switched:', newWorkspace.name);
-      // Navigation stays on same page, just workspace changes
+      
+      // 🔥 Navigate to workspace root (clear document view)
+      navigate('/workspace');
+      console.log('✅ Navigated to new workspace');
     } catch (error) {
       console.error('❌ Failed to create workspace:', error);
       throw error;
@@ -409,9 +454,19 @@ export default function Workspace() {
     }
   };
 
-  const handleDocumentCreated = (docId: string) => {
+  const handleDocumentCreated = (docId: string, doc?: any) => {
     console.log('✅ Document created:', docId);
-    handleDocumentSelect(docId);
+    
+    // If we have the document object, use it directly (avoids race condition)
+    if (doc) {
+      console.log('📄 Setting document directly from creation:', doc);
+      setCurrentDocument(doc);
+      // Navigate to edit mode (viewMode is derived from URL)
+      navigate(`/workspace/doc/${docId}/edit`);
+    } else {
+      // Fallback: select by ID (will search in state)
+      handleDocumentSelect(docId);
+    }
   };
 
   // Handle content insertion from context files
@@ -429,15 +484,16 @@ export default function Workspace() {
 
   // Callback to receive live content updates from editors
   const handleContentChange = React.useCallback((content: string) => {
-    // Only save if content actually changed compared to what we already have in editor
-    if (liveEditorContentRef.current === content) {
-      return; // No change, skip
-    }
-    
-    liveEditorContentRef.current = content; // Update ref instead of state to avoid re-renders!
+    // Only save if content actually changed
+    setLiveEditorContent(prev => {
+      if (prev === content) return prev; // No change, skip
+      return content;
+    });
 
     // Auto-save to backend (debounced)
     if (currentDocument) {
+      // DEBUG: Log actual content being passed to save
+      console.log('[TEST PATCH PAYLOAD]', { id: currentDocument.id, length: content.length, preview: content.substring(0,100) });
       autoSaveDocument(currentDocument.id, content);
     }
   }, [currentDocument, autoSaveDocument]);
@@ -475,6 +531,18 @@ export default function Workspace() {
       let currentHeadingIndex = 0;
       let targetPos = -1;
 
+      // 🔍 DEBUG: Log all node types in document
+      const allNodes: Array<{type: string, text: string, pos: number}> = [];
+      doc.descendants((node, pos) => {
+        allNodes.push({
+          type: node.type.name,
+          text: node.textContent.substring(0, 50),
+          pos
+        });
+      });
+      console.log('📄 Document structure:', allNodes);
+      console.log(`🔍 Looking for heading index ${headingIndex} (total headings found: ${allNodes.filter(n => n.type === 'heading').length})`);
+
       // Find the Nth heading node
       doc.descendants((node, pos) => {
         if (targetPos !== -1) return false;
@@ -494,30 +562,35 @@ export default function Workspace() {
 
         setTimeout(() => {
           try {
-            // Focus editor first
+            // 🔥 NEW APPROACH: Use TipTap's built-in scrollIntoView + manual offset adjustment
+            
+            // 1. Set cursor position first
+            editor.commands.setTextSelection(targetPos);
+            
+            // 2. Focus editor
             editor.commands.focus();
-
-            // Get the DOM node at the target position
+            
+            // 3. Get the DOM element for manual scrolling
             const domNode = editor.view.domAtPos(targetPos);
             let element = domNode.node.nodeType === Node.ELEMENT_NODE
               ? (domNode.node as HTMLElement)
               : domNode.node.parentElement;
 
             // Find the actual heading element
+            let headingElement: HTMLElement | null = null;
+            
             if (element) {
-              let headingElement: HTMLElement | null = null;
-
-              // Strategy 1: Check if current element IS a heading
+              // Check if current element IS a heading
               if ((element as HTMLElement).tagName?.match(/^H[1-6]$/)) {
                 headingElement = element as HTMLElement;
               }
-
-              // Strategy 2: Look for heading in immediate children
+              
+              // Look for heading in children
               if (!headingElement) {
                 headingElement = element.querySelector('h1, h2, h3, h4, h5, h6');
               }
-
-              // Strategy 3: Look in siblings
+              
+              // Look in siblings
               if (!headingElement && element.parentElement) {
                 for (const sibling of Array.from(element.parentElement.children)) {
                   if ((sibling as HTMLElement).tagName?.match(/^H[1-6]$/)) {
@@ -526,30 +599,43 @@ export default function Workspace() {
                   }
                 }
               }
-
-              // Use the heading element if found, otherwise fall back to original
-              const targetElement = headingElement || element;
-
-              // Use native scrollIntoView with top positioning
-              targetElement.scrollIntoView({
-                behavior: 'smooth',
-                block: 'start',
-                inline: 'nearest'
-              });
-
-              // Set cursor position
-              editor.commands.setTextSelection(targetPos);
-
-              // Reset scrolling flag
-              setTimeout(() => {
-                isScrollingRef.current = false;
-                console.log('🔓 Scroll lock released');
-              }, 600);
-            } else {
-              // Fallback to TipTap scroll
-              editor.chain().focus().setTextSelection(targetPos).scrollIntoView().run();
-              setTimeout(() => isScrollingRef.current = false, 600);
             }
+
+            const targetElement = headingElement || element;
+
+            if (targetElement) {
+              // 4. Scroll with proper offset (accounting for header/toolbar)
+              const headerOffset = 120; // Adjust this based on your header height
+              const elementPosition = targetElement.getBoundingClientRect().top;
+              const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+
+              // Find the scrollable container (ProseMirror's parent)
+              const scrollContainer = targetElement.closest('.overflow-auto, .overflow-y-auto') 
+                || document.querySelector('.flex-1.overflow-auto') // Main content area
+                || window;
+
+              if (scrollContainer && scrollContainer !== window) {
+                // Scroll within container
+                (scrollContainer as HTMLElement).scrollTo({
+                  top: targetElement.offsetTop - headerOffset,
+                  behavior: 'smooth'
+                });
+              } else {
+                // Scroll window
+                window.scrollTo({
+                  top: offsetPosition,
+                  behavior: 'smooth'
+                });
+              }
+
+              console.log('✅ Scrolled to heading with offset');
+            }
+
+            // Reset scrolling flag
+            setTimeout(() => {
+              isScrollingRef.current = false;
+              console.log('🔓 Scroll lock released');
+            }, 600);
           } catch (scrollError) {
             console.error('❌ Scroll error:', scrollError);
             isScrollingRef.current = false;
@@ -579,20 +665,32 @@ export default function Workspace() {
     }
 
     if (viewMode === 'edit') {
-
+      // 🔥 Always use WYSIWYGEditor (now with Yjs integration)
       return (
-        <WYSIWYGEditor
-          key={currentDocument?.id} // Force re-render when document changes
-          documentId={currentDocument?.id}
-          documentTitle={currentDocument?.title || 'Untitled Document'}
-          initialContent={currentDocument?.content || ''}
-          onContentChange={handleContentChange}
-          onTitleChange={handleTitleChange}
-          onEditorReady={(editor) => {
-            editorInstanceRef.current = editor;
-          }}
-          contextFolders={contextFolders}
-        />
+        <EditorErrorBoundary documentId={currentDocument?.id}>
+          <WYSIWYGEditor
+            key={currentDocument?.id}
+            documentId={currentDocument?.id}
+            documentTitle={currentDocument?.title || 'Untitled Document'}
+            // ❌ STEP 4: Removed initialContent (hydration in WorkspaceContext)
+            // ❌ STEP 1: Removed onContentChange (no auto-save)
+            onTitleChange={handleTitleChange}
+            onEditorReady={(editor) => {
+              editorInstanceRef.current = editor;
+              
+              // 🔥 STEP 1: Extract initial content for outline only (no live updates during typing)
+              if (!editor.isEmpty) {
+                const initialMarkdown = htmlToMarkdown('', editor);
+                setLiveEditorContent(initialMarkdown);
+                console.log(`📋 Initial content extracted for outline (${initialMarkdown.length} chars)`);
+              } else {
+                // Editor is empty - this is expected for new documents
+                console.log('ℹ️ Editor is empty (new document or no content yet)');
+              }
+            }}
+            contextFolders={contextFolders}
+          />
+        </EditorErrorBoundary>
       );
     }
 
@@ -624,28 +722,35 @@ export default function Workspace() {
     <div className="flex h-screen bg-background relative">
       {/* Adaptive Sidebar - Hidden in Focus Mode and Presenter Mode */}
       {!focusMode && viewMode !== 'present' && (
-        <AdaptiveSidebar
-          isEditingDocument={viewMode === 'edit' || viewMode === 'mindmap' || viewMode === 'slides'}
-          documentContent={liveEditorContentRef.current || currentDocument?.content || ''}
-          onHeadingClick={(text, line, headingIndex) => {
-            console.log('📍 Scroll to heading index:', headingIndex, 'Text:', text);
-            // Trigger scroll in editor by index (more reliable)
-            if (editorInstanceRef.current && headingIndex !== undefined) {
-              scrollToHeading(headingIndex);
-            }
-          }}
-          currentLine={0}
-          activeHeadingText={activeHeadingText || undefined}
-          onDocumentSelect={handleDocumentSelect}
-          onNewDocument={handleNewDocument}
-          currentDocumentId={documentId}
-          contextFolders={contextFolders}
-          onLoadDemo={handleLoadDemoPresentation}
-          onContextFoldersChange={setContextFolders}
-          onInsertContent={handleInsertContent}
-          collapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-        />
+        <SidebarErrorBoundary>
+          <AdaptiveSidebar
+            isEditingDocument={viewMode === 'edit' || viewMode === 'mindmap' || viewMode === 'slides'}
+            documentContent={liveEditorContent || currentDocument?.content || ''}
+            onHeadingClick={(text, line, headingIndex) => {
+              console.log('📍 Outline clicked - Scroll to heading index:', headingIndex, 'Text:', text);
+              // Trigger scroll in editor by index (more reliable)
+              if (editorInstanceRef.current && headingIndex !== undefined) {
+                scrollToHeading(headingIndex);
+              } else {
+                console.warn('⚠️ Cannot scroll: editor not ready or headingIndex undefined', {
+                  hasEditor: !!editorInstanceRef.current,
+                  headingIndex,
+                });
+              }
+            }}
+            currentLine={0}
+            activeHeadingText={activeHeadingText || undefined}
+            onDocumentSelect={handleDocumentSelect}
+            onNewDocument={handleNewDocument}
+            currentDocumentId={documentId}
+            contextFolders={contextFolders}
+            onLoadDemo={handleLoadDemoPresentation}
+            onContextFoldersChange={setContextFolders}
+            onInsertContent={handleInsertContent}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          />
+        </SidebarErrorBoundary>
       )}
 
       {/* Focus Mode Exit Button */}
@@ -670,7 +775,13 @@ export default function Workspace() {
         {!focusMode && (
           <header className="flex items-center justify-between px-6 py-4 bg-card/30 backdrop-blur-sm mb-2">
             <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold text-glow">MD Creator</h1>
+              <h1 
+                className="text-xl font-bold text-glow cursor-pointer hover:opacity-80 transition-opacity" 
+                onClick={() => navigate('/')}
+                title="Go to Landing Page"
+              >
+                MD Creator
+              </h1>
               
               {/* Workspace Switcher */}
               {currentWorkspace && workspaces.length > 0 && (
@@ -717,8 +828,13 @@ export default function Workspace() {
             </div>
 
             <div className="flex items-center gap-3">
-              {/* Sync Status Indicator */}
-              <SyncStatusIndicator />
+              {/* Sync Mode Toggle */}
+              <SyncModeToggle />
+              
+              {/* Presence List - Show who's online */}
+              <PresenceList websocketProvider={websocketProvider} />
+              
+              {/* Sync Status Indicator - Now in WYSIWYGEditor */}
               
               {/* Version History Button - Only show when editing */}
               {currentDocument && viewMode === 'edit' && (
@@ -818,6 +934,20 @@ export default function Workspace() {
                 </Button>
               )}
 
+              {/* File Watcher Indicator (Desktop only) */}
+              <FileWatcherIndicator />
+              
+              {/* Collaboration Toggle */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowCollaborationSidebar(!showCollaborationSidebar)}
+                className="h-8 w-8 p-0"
+                title="Collaboration"
+              >
+                <Users className="h-4 w-4" />
+              </Button>
+              
               {/* Theme Toggle */}
               <ThemeToggle />
             </div>
@@ -886,6 +1016,34 @@ export default function Workspace() {
           />
         </div>
       )}
+
+      {/* Collaboration Sidebar */}
+      <CollaborationSidebar
+        isOpen={showCollaborationSidebar}
+        onClose={() => setShowCollaborationSidebar(false)}
+        collaborators={[]}
+        activityEvents={activityEvents}
+        currentDocumentTitle={currentDocument?.title}
+        onClearActivity={() => setActivityEvents([])}
+      />
+
+      {/* Quick Switcher (Cmd+K) */}
+      <QuickSwitcherModal
+        open={isQuickSwitcherOpen}
+        onClose={closeQuickSwitcher}
+        onDocumentSelect={(docId) => {
+          const doc = backendDocuments.find(d => d.id === docId);
+          if (doc) {
+            setCurrentDocument(doc);
+            navigate(`/workspace/doc/${docId}/edit`);
+          }
+        }}
+        onCreateDocument={() => setShowNewDocModal(true)}
+        onCreateFolder={() => {
+          // Trigger folder creation
+          console.log('Create folder from quick switcher');
+        }}
+      />
     </div>
   );
 }

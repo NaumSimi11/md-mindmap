@@ -85,10 +85,26 @@ export default function Signup() {
       
       navigate('/workspace');
     } catch (error: any) {
+      console.error('❌ Signup error caught:', error);
+      
+      // Extract error message from various error formats
+      let errorMessage = "Something went wrong. Please try again.";
+      
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.detail) {
+        errorMessage = error.detail;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      console.error('❌ Showing error toast:', errorMessage);
+      
       toast({
         variant: "destructive",
-        title: "❌ Signup failed",
-        description: error.message || "Something went wrong. Please try again.",
+        title: "❌ Signup Failed",
+        description: errorMessage,
+        duration: 5000, // Show for 5 seconds
       });
     }
   };

@@ -105,8 +105,10 @@ export const useEditorMode = ({
             } else {
                 console.log('📄 MARKDOWN:', part.substring(0, 40) + '...');
                 const html = markdownToHtml(part);
-                // Insert HTML content - TipTap will parse it
-                editor.chain().insertContent(html).run();
+                // 🔥 FIX: Parse HTML properly
+                editor.chain().insertContent(html, {
+                    parseOptions: { preserveWhitespace: false }
+                }).run();
             }
         });
 

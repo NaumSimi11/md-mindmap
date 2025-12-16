@@ -1,149 +1,290 @@
-# 🚀 How to Start MDReader Project
+# 🚀 **HOW TO START THE PROJECT**
 
-## Quick Start (Daily Use)
+**Complete guide to starting all services**
 
-### 1. Start Docker (if not running)
+---
+
+## 📋 **QUICK START (Recommended)**
+
+### **Option 1: One Command (Automated)**
 ```bash
-cd backend
-docker-compose up -d
+cd /Users/naum/Desktop/mdreader/mdreader-main
+./start-production.sh
 ```
 
-### 2. Start Backend API
-```bash
-cd backend
-source venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 7001 --reload
-```
-**Leave this terminal open!**
+This will start ALL services automatically:
+- ✅ PostgreSQL (Docker)
+- ✅ Backend (FastAPI)
+- ✅ Hocuspocus (WebSocket)
+- ✅ Frontend (Vite)
 
-### 3. Start Frontend (NEW TERMINAL)
+---
+
+## 🔧 **MANUAL START (Step by Step)**
+
+If you prefer to start services individually:
+
+### **Step 1: Start PostgreSQL**
 ```bash
+cd /Users/naum/Desktop/mdreader/mdreader-main
+docker-compose up -d postgres
+```
+
+**Verify**: 
+```bash
+docker ps | grep postgres
+# Should show container running on port 5432
+```
+
+---
+
+### **Step 2: Start Backend (FastAPI)**
+```bash
+cd /Users/naum/Desktop/mdreader/mdreader-main/backendv2
+source venv/bin/activate  # Activate virtual environment
+uvicorn app.main:app --reload --port 8000 > ../logs/backend.log 2>&1 &
+```
+
+**Verify**: 
+```bash
+curl http://localhost:8000/health
+# Should return: {"status":"ok"}
+```
+
+---
+
+### **Step 3: Start Hocuspocus Server (WebSocket)**
+```bash
+cd /Users/naum/Desktop/mdreader/mdreader-main/hocuspocus-server
+npm start > ../logs/hocuspocus.log 2>&1 &
+```
+
+**Verify**: 
+```bash
+curl -I http://localhost:1234
+# Should return HTTP headers (WebSocket server ready)
+```
+
+---
+
+### **Step 4: Start Frontend (Vite)**
+```bash
+cd /Users/naum/Desktop/mdreader/mdreader-main/frontend
+npm run dev > ../logs/frontend.log 2>&1 &
+```
+
+**Verify**: 
+```bash
+curl http://localhost:5173
+# Should return HTML
+```
+
+---
+
+## 🌐 **ACCESS POINTS**
+
+Once everything is running:
+
+| Service | URL | Status |
+|---------|-----|--------|
+| **Frontend** | http://localhost:5173 or 5174 | Main App |
+| **Backend API** | http://localhost:8000 | REST API |
+| **API Docs** | http://localhost:8000/docs | Swagger UI |
+| **Hocuspocus** | ws://localhost:1234 | WebSocket |
+| **PostgreSQL** | localhost:5432 | Database |
+
+---
+
+## ✅ **VERIFY ALL SERVICES**
+
+Run this to check everything is working:
+
+```bash
+cd /Users/naum/Desktop/mdreader/mdreader-main
+
+echo "🔍 Checking services..."
+echo ""
+
+# Check PostgreSQL
+if docker ps | grep -q postgres; then
+    echo "✅ PostgreSQL: RUNNING"
+else
+    echo "❌ PostgreSQL: NOT RUNNING"
+fi
+
+# Check Backend
+if curl -s http://localhost:8000/health > /dev/null 2>&1; then
+    echo "✅ Backend: RUNNING (port 8000)"
+else
+    echo "❌ Backend: NOT RUNNING"
+fi
+
+# Check Hocuspocus
+if lsof -i :1234 > /dev/null 2>&1; then
+    echo "✅ Hocuspocus: RUNNING (port 1234)"
+else
+    echo "❌ Hocuspocus: NOT RUNNING"
+fi
+
+# Check Frontend
+if curl -s http://localhost:5173 > /dev/null 2>&1; then
+    echo "✅ Frontend: RUNNING (port 5173)"
+elif curl -s http://localhost:5174 > /dev/null 2>&1; then
+    echo "✅ Frontend: RUNNING (port 5174)"
+else
+    echo "❌ Frontend: NOT RUNNING"
+fi
+
+echo ""
+echo "🎯 All checks complete!"
+```
+
+---
+
+## 🛑 **STOP ALL SERVICES**
+
+### **Option 1: One Command**
+```bash
+cd /Users/naum/Desktop/mdreader/mdreader-main
+./stop-production.sh
+```
+
+### **Option 2: Manual Stop**
+```bash
+# Stop Frontend
+pkill -f "vite.*517"
+
+# Stop Hocuspocus
+pkill -f "node.*hocuspocus"
+
+# Stop Backend
+pkill -f "uvicorn"
+
+# Stop PostgreSQL
+docker-compose down postgres
+```
+
+---
+
+## 📊 **LOGS**
+
+View logs for each service:
+
+```bash
+# Frontend logs
+tail -f logs/frontend.log
+
+# Backend logs
+tail -f logs/backend.log
+
+# Hocuspocus logs
+tail -f logs/hocuspocus.log
+
+# All logs at once
+tail -f logs/*.log
+```
+
+---
+
+## 🔥 **COMMON ISSUES**
+
+### **Issue 1: Port Already in Use**
+```bash
+# Kill process on port 5173 (Frontend)
+lsof -ti:5173 | xargs kill -9
+
+# Kill process on port 8000 (Backend)
+lsof -ti:8000 | xargs kill -9
+
+# Kill process on port 1234 (Hocuspocus)
+lsof -ti:1234 | xargs kill -9
+```
+
+### **Issue 2: PostgreSQL Not Starting**
+```bash
+# Remove old containers
+docker-compose down
+docker-compose up -d postgres
+```
+
+### **Issue 3: Frontend Not Loading**
+```bash
+# Clear cache and restart
 cd frontend
+rm -rf node_modules/.vite
 npm run dev
 ```
-**Leave this terminal open!**
-
-### 4. Open Browser
-- **Frontend**: http://localhost:5173
-- **API Docs**: http://localhost:7001/docs
 
 ---
 
-## Check What's Running
+## 🎯 **RECOMMENDED WORKFLOW**
 
+### **Development Mode**
 ```bash
-# Check all ports
-lsof -i :7001 -i :5173 -i :7432 -i :7379
+# Terminal 1: Backend
+cd backendv2 && source venv/bin/activate && uvicorn app.main:app --reload
 
-# Or check individual services
-docker ps                    # Docker services
-curl http://localhost:7001/health  # Backend
-curl http://localhost:5173   # Frontend
+# Terminal 2: Hocuspocus
+cd hocuspocus-server && npm start
+
+# Terminal 3: Frontend
+cd frontend && npm run dev
+
+# Terminal 4: PostgreSQL (already running)
+docker-compose up postgres
+```
+
+### **Production Mode**
+```bash
+# Single command
+./start-production.sh
+
+# Open browser
+open http://localhost:5173
 ```
 
 ---
 
-## Stop Everything
+## 📝 **FIRST TIME SETUP**
+
+If this is your first time running the project:
 
 ```bash
-# Stop backend
-pkill -f "uvicorn app.main"
-
-# Stop frontend
-pkill -f "vite"
-
-# Stop Docker
-cd backend && docker-compose down
-```
-
----
-
-## Ports Reference
-
-| Service | Port | URL |
-|---------|------|-----|
-| PostgreSQL | 7432 | localhost:7432 |
-| Redis | 7379 | localhost:7379 |
-| Backend API | 7001 | http://localhost:7001 |
-| API Docs | 7001 | http://localhost:7001/docs |
-| Frontend | 5173 | http://localhost:5173 |
-
----
-
-## Test Credentials
-
-**Username**: testuser  
-**Email**: test@mdreader.com  
-**Password**: TestPassword123!
-
-Or create a new account at: http://localhost:5173
-
----
-
-## Troubleshooting
-
-### Port Already in Use
-```bash
-# Kill process on specific port
-lsof -ti:7001 | xargs kill -9   # Backend
-lsof -ti:5173 | xargs kill -9   # Frontend
-```
-
-### Docker Not Running
-```bash
-cd backend
-docker-compose restart
-```
-
-### Backend Dependencies Missing
-```bash
-cd backend
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-### Frontend Dependencies Missing
-```bash
+# 1. Install Frontend dependencies
 cd frontend
 npm install
-```
 
----
+# 2. Install Hocuspocus dependencies
+cd ../hocuspocus-server
+npm install
 
-## Fresh Start (Clean Slate)
-
-```bash
-# 1. Stop everything
-pkill -f "uvicorn app.main"
-pkill -f "vite"
-cd backend && docker-compose down
-
-# 2. Restart Docker
-docker-compose up -d
-
-# 3. Start backend (Terminal 1)
+# 3. Setup Backend virtual environment
+cd ../backendv2
+python -m venv venv
 source venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 7001 --reload
+pip install -r requirements.txt
 
-# 4. Start frontend (Terminal 2)
-cd ../frontend
-npm run dev
+# 4. Run database migrations
+alembic upgrade head
+
+# 5. Start PostgreSQL
+cd ..
+docker-compose up -d postgres
+
+# 6. Now you can start all services
+./start-production.sh
 ```
 
 ---
 
-## Common Issues Fixed
+## ✅ **READY TO GO!**
 
-✅ **Port 8000 → 7001**: API now on correct port  
-✅ **CORS Errors**: Backend allows http://localhost:5173  
-✅ **Username Validation**: Auto-trims spaces  
-✅ **Error Messages**: Shows readable errors, not "[object Object]"  
-✅ **Infinite Loop**: Auto-save no longer spams backend  
+After starting everything, open:
+**http://localhost:5173** (or 5174)
 
----
+You should see:
+- ✅ Managers initialized
+- ✅ Workspace loaded
+- ✅ Ready to create documents
 
-**Need help? Check:**
-- `backend/CODE_WALKTHROUGH.md` - Backend architecture
-- `backend/TESTING.md` - How to run tests
-- `QUICK_START.md` - Detailed setup guide
-
+**Enjoy! 🎉**

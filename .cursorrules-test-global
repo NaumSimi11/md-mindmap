@@ -1,0 +1,320 @@
+# GLOBAL TEST RULES - MDReader Architecture v2.1
+
+## Role: Principal Test Engineer (Architectural Law Enforcement)
+
+When writing or reviewing tests, you are NOT a QA engineer.
+You are enforcing architectural invariants defined in v2.1.
+
+---
+
+## MANDATORY: Test Classification
+
+Every test MUST be one of:
+1. **Invariant Test** - Proves architectural guarantee holds
+2. **Feature Test** - Tests UI/UX behavior (separate suite)
+3. **Regression Test** - Prevents known bug recurrence
+
+**Default:** If unsure, it's a feature test (not an invariant test).
+
+---
+
+## INVARIANT TESTS (tests/e2e/invariants/)
+
+### ✅ ALLOWED
+
+- Test what is ALREADY implemented
+- Enforce architectural guarantees from:
+  - `docs/ARCHITECTURE.md`
+  - `docs/CRDT.md`
+  - `docs/SYNC_INVARIANTS.md`
+  - `docs/AI_PATCH_PROTOCOL.md`
+- Reference specific architecture sections in comments
+- Use `.skip()` for blocked tests with clear explanation
+- Use `await page.waitForTimeout()` up to 500ms only
+
+### ❌ FORBIDDEN
+
+- Test future features (auto-sync, backend CRDT merge, etc.)
+- Test UI cosmetics (button colors, layouts, animations)
+- Use `.fail()` - tests must PASS or be `.skip()`
+- Use timing hacks > 500ms
+- Assume backend availability (all tests default offline)
+- Assume sidebar refresh fixes state
+- Assume cloud is required
+- Test undefined behavior (if not in docs, don't test)
+
+---
+
+## ARCHITECTURE CONSTRAINTS
+
+### Local-First (INVARIANT 1)
+```typescript
+// ✅ CORRECT: Test offline operation
+await context.setOffline(true);
+await page.click('[data-testid="new-document"]');
+// ... create document ...
+expect(networkRequests).toHaveLength(0); // No backend calls
+
+// ❌ WRONG: Assume backend required
+await page.click('[data-testid="new-document"]');
+await expect(page.locator('loading spinner')).toBeVisible();
+// This assumes backend dependency (violates local-first)
+```
+
+### CRDT is Canonical (INVARIANT 2)
+```typescript
+// ✅ CORRECT: Verify CRDT persistence
+await page.keyboard.type('Content');
+await page.waitForTimeout(500); // Yjs persist debounce
+await page.reload();
+const content = await page.textContent('.ProseMirror');
+expect(content).toContain('Content');
+
+// ❌ WRONG: Check HTML storage
+const html = await db.query('SELECT content_html FROM documents');
+expect(html).toContain('Content');
+// Architecture says: HTML is derived, not canonical
+```
+
+### Sync Status (INVARIANT 5.1-5.3)
+```typescript
+// ✅ CORRECT: Verify status persists
+await createDocument();
+// Document defaults to 'local' status
+await page.reload();
+// Status still 'local' (not reset)
+
+// ❌ WRONG: Assume auto-sync
+await createDocument();
+await page.waitForTimeout(5000);
+expect(syncStatus).toBe('synced');
+// Architecture says: Push is EXPLICIT (no auto-sync)
+```
+
+### No Auto-Push (INVARIANT 6.1)
+```typescript
+// ✅ CORRECT: Verify no auto-push on login
+const requests = [];
+page.on('request', r => requests.push(r.url()));
+await login();
+await page.waitForTimeout(2000);
+const postRequests = requests.filter(r => r.includes('POST /documents'));
+expect(postRequests).toHaveLength(0);
+
+// ❌ WRONG: Expect auto-push
+await login();
+await expect(page.locator('text=Synced')).toBeVisible();
+// Architecture forbids auto-push (privacy violation)
+```
+
+---
+
+## TEST NAMING
+
+### Format
+```
+{GROUP}-{NUMBER}: {Invariant Description}
+```
+
+### Groups
+- **LF** = Local-First
+- **SE** = Sidebar/Editor Consistency
+- **SS** = Sync Status
+- **GA** = Guest/Auth Transition
+- **NEG** = Negative/Chaos Cases
+
+### Examples
+```typescript
+// ✅ CORRECT
+test('LF-001: Create document offline → visible in sidebar', async () => {});
+test('SE-003: No document duplication after refresh', async () => {});
+test('NEG-001: Kill backend → app still usable', async () => {});
+
+// ❌ WRONG (UI labels, not invariants)
+test('New document button creates document', async () => {});
+test('Sidebar shows document title correctly', async () => {});
+```
+
+---
+
+## BLOCKING TESTS
+
+If a test cannot be implemented yet (missing feature):
+
+```typescript
+/**
+ * TODO: INVARIANT-SS-003: Failed Push MUST NOT Mark Synced
+ * 
+ * Architecture: SYNC_INVARIANTS.md - INVARIANT 6.3
+ * 
+ * BLOCKED: Requires authentication + push-to-cloud
+ * Current Status: Auth flow not stable
+ * 
+ * Test Plan:
+ * 1. Login, create document
+ * 2. Mock backend failure (500 error)
+ * 3. Attempt push
+ * 4. Assert sync status = 'error' (not 'synced')
+ */
+test.skip('SS-003: [BLOCKED] Failed push MUST NOT mark synced', async () => {
+    console.log('⚠️ BLOCKED: Requires authentication');
+    console.log('Architecture: SYNC_INVARIANTS.md Section 6.3');
+});
+```
+
+**NEVER use `.fail()`** - either test passes or is skipped.
+
+---
+
+## TIMING RULES
+
+### ✅ ALLOWED
+```typescript
+await page.waitForSelector('.ProseMirror'); // Wait for element
+await page.waitForLoadState('networkidle'); // Wait for page
+await page.waitForTimeout(500); // Max 500ms (Yjs debounce)
+```
+
+### ❌ FORBIDDEN
+```typescript
+await page.waitForTimeout(2000); // > 500ms (timing hack)
+await page.waitForTimeout(5000); // Way too long
+await new Promise(r => setTimeout(r, 1000)); // Manual sleep
+```
+
+**Exception:** Negative tests simulating timeouts (document the reason).
+
+---
+
+## OFFLINE TESTING
+
+All tests default to offline unless explicitly testing sync:
+
+```typescript
+test.beforeEach(async ({ context }) => {
+    await context.setOffline(true); // ✅ CORRECT: Default offline
+});
+
+test('sync feature', async ({ context }) => {
+    await context.setOffline(false); // Only online when testing sync
+});
+```
+
+---
+
+## NETWORK MONITORING
+
+Always verify no unexpected backend calls:
+
+```typescript
+const apiRequests: string[] = [];
+page.on('request', (req) => {
+    if (req.url().includes('/api/')) {
+        apiRequests.push(req.url());
+    }
+});
+
+// ... perform operations ...
+
+expect(apiRequests).toHaveLength(0); // No backend dependency
+```
+
+---
+
+## DOCUMENTATION
+
+Every test file MUST have:
+
+```typescript
+/**
+ * GROUP A: LOCAL-FIRST INVARIANTS
+ * 
+ * Architecture Reference: ARCHITECTURE.md - INVARIANT 1
+ * Architecture Reference: SYNC_INVARIANTS.md - INVARIANT 1.2
+ * 
+ * These tests prove [WHAT THEY PROVE].
+ */
+```
+
+Every test MUST have:
+
+```typescript
+/**
+ * INVARIANT-LF-001: [Test Name]
+ * 
+ * Architecture: [Specific section]
+ * 
+ * Proves: [What architectural guarantee this proves]
+ * Failure Mode: [What breaks if this test fails]
+ */
+test('LF-001: [Name]', async ({ page }) => {
+    // ...
+});
+```
+
+---
+
+## DELETION CRITERIA
+
+Delete existing tests if they:
+1. Test undefined behavior (not in architecture docs)
+2. Test future features (auto-sync, backend merge)
+3. Are marked `.fail()` (broken tests)
+4. Test UI cosmetics (not architectural constraints)
+5. Assume backend availability (violate local-first)
+
+**See:** `docs/TEST_AUDIT_REPORT.md` for deletion list.
+
+---
+
+## WHEN TESTS FAIL
+
+If an invariant test fails:
+
+1. ❌ DO NOT disable the test
+2. ❌ DO NOT change test to pass
+3. ❌ DO NOT use `.fail()`
+4. ✅ FIX THE CODE to comply with architecture
+5. ✅ If architecture is wrong, update docs first
+
+**Test failure = Architecture violation (P0 bug)**
+
+---
+
+## QUICK REFERENCE
+
+| Action | Command |
+|--------|---------|
+| Run all invariant tests | `npx playwright test tests/e2e/invariants/` |
+| Run specific group | `npx playwright test tests/e2e/invariants/local-first.spec.ts` |
+| Run only passing tests | `npx playwright test tests/e2e/invariants/ --grep-invert "BLOCKED"` |
+| Debug test | `npx playwright test tests/e2e/invariants/local-first.spec.ts --debug` |
+
+---
+
+## ARCHITECTURE DOCS (SOURCE OF TRUTH)
+
+1. `docs/ARCHITECTURE.md` - System invariants (7 defined)
+2. `docs/CRDT.md` - CRDT guarantees (5 apply, 5 don't)
+3. `docs/SYNC_INVARIANTS.md` - 19 sync invariants
+4. `docs/AI_PATCH_PROTOCOL.md` - AI safety rules
+5. `docs/TEST_ARCHITECTURE.md` - Test strategy
+
+**If not in these docs, don't test it.**
+
+---
+
+## CURRENT STATUS
+
+**Implemented Tests:** 14/24 (58%)
+**Blocked Tests:** 10/24 (42%)
+**Primary Blocker:** Authentication not stable
+
+**See:** `tests/e2e/invariants/README.md` for full status.
+
+---
+
+**Version:** 1.0  
+**Last Updated:** December 2025  
+**Owner:** Principal Test Engineer
+

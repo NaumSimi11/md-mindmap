@@ -135,6 +135,109 @@ pub async fn delete_file(file_path: String) -> Result<(), String> {
 }
 
 // ========================================
+// FILE MANAGEMENT OPERATIONS
+// ========================================
+
+#[command]
+pub async fn rename_file(old_path: String, new_path: String) -> Result<(), String> {
+    let old = PathBuf::from(&old_path);
+    let new = PathBuf::from(&new_path);
+    
+    if !old.exists() {
+        return Err(format!("File does not exist: {}", old_path));
+    }
+    
+    fs::rename(&old, &new)
+        .map_err(|e| format!("Failed to rename file: {}", e))?;
+    
+    println!("✅ Renamed: {} → {}", old_path, new_path);
+    Ok(())
+}
+
+#[command]
+pub async fn rename_directory(old_path: String, new_path: String) -> Result<(), String> {
+    let old = PathBuf::from(&old_path);
+    let new = PathBuf::from(&new_path);
+    
+    if !old.exists() {
+        return Err(format!("Directory does not exist: {}", old_path));
+    }
+    
+    if !old.is_dir() {
+        return Err(format!("Path is not a directory: {}", old_path));
+    }
+    
+    fs::rename(&old, &new)
+        .map_err(|e| format!("Failed to rename directory: {}", e))?;
+    
+    println!("✅ Renamed directory: {} → {}", old_path, new_path);
+    Ok(())
+}
+
+#[command]
+pub async fn delete_directory(path: String, recursive: bool) -> Result<(), String> {
+    let path_buf = PathBuf::from(&path);
+    
+    if !path_buf.exists() {
+        return Err(format!("Directory does not exist: {}", path));
+    }
+    
+    if !path_buf.is_dir() {
+        return Err(format!("Path is not a directory: {}", path));
+    }
+    
+    if recursive {
+        fs::remove_dir_all(&path_buf)
+            .map_err(|e| format!("Failed to delete directory recursively: {}", e))?;
+        println!("🗑️ Deleted directory (recursive): {}", path);
+    } else {
+        fs::remove_dir(&path_buf)
+            .map_err(|e| format!("Failed to delete directory: {}", e))?;
+        println!("🗑️ Deleted directory: {}", path);
+    }
+    
+    Ok(())
+}
+
+#[command]
+pub async fn copy_file(source_path: String, dest_path: String) -> Result<(), String> {
+    let source = PathBuf::from(&source_path);
+    let dest = PathBuf::from(&dest_path);
+    
+    if !source.exists() {
+        return Err(format!("Source file does not exist: {}", source_path));
+    }
+    
+    fs::copy(&source, &dest)
+        .map_err(|e| format!("Failed to copy file: {}", e))?;
+    
+    println!("📋 Copied: {} → {}", source_path, dest_path);
+    Ok(())
+}
+
+#[command]
+pub async fn move_file(source_path: String, dest_path: String) -> Result<(), String> {
+    let source = PathBuf::from(&source_path);
+    let dest = PathBuf::from(&dest_path);
+    
+    if !source.exists() {
+        return Err(format!("Source file does not exist: {}", source_path));
+    }
+    
+    fs::rename(&source, &dest)
+        .map_err(|e| format!("Failed to move file: {}", e))?;
+    
+    println!("📦 Moved: {} → {}", source_path, dest_path);
+    Ok(())
+}
+
+#[command]
+pub async fn file_exists(path: String) -> Result<bool, String> {
+    let path_buf = PathBuf::from(&path);
+    Ok(path_buf.exists())
+}
+
+// ========================================
 // WORKSPACE CONFIGURATION
 // ========================================
 

@@ -2,14 +2,82 @@
  * WorkspaceContext - Shared workspace state across the app
  */
 
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { backendWorkspaceService, type Workspace, type Document } from '@/services/workspace/BackendWorkspaceService';
-import { OfflineWorkspaceService } from '@/services/offline/OfflineWorkspaceService';
+import { backendWorkspaceService, guestWorkspaceService } from '@/services/workspace';
+import type { Workspace as WorkspaceType, DocumentMeta } from '@/services/workspace/types';
 import { syncManager } from '@/services/offline/SyncManager';
+import { authService } from '@/services/api';
+import { markdownToHtml } from '@/utils/markdownConversion';
+import * as Y from 'yjs';
 
-// Create offline-aware wrapper
-const offlineWorkspaceService = new OfflineWorkspaceService(backendWorkspaceService);
+// Type alias for consistency with existing code
+type Workspace = WorkspaceType;
+
+// Legacy Document type (for compatibility with existing components)
+interface Document {
+  id: string;
+  type: 'markdown' | 'mindmap' | 'presentation';
+  title: string;
+  content: string;
+  folderId: string | null;
+  workspaceId: string;
+  starred: boolean;
+  tags: string[];
+  createdAt: Date;
+  updatedAt: Date;
+  lastOpenedAt?: Date;
+  metadata: Record<string, any>;
+  sync: {
+    status: 'local' | 'synced' | 'syncing' | 'conflict';
+    cloudId?: string;
+    lastSyncedAt?: Date;
+    cloudVersion?: number;
+    localVersion?: number;
+  };
+}
+
+// Map DocumentMeta to Document (content is in Yjs, not in metadata)
+function mapDocumentMetaToDocument(meta: DocumentMeta | any): Document {
+  return {
+    id: meta.id,
+    type: meta.type,
+    title: meta.title,
+    content: meta.content || '', // 🔥 Preserve content from IndexedDB (guest mode) or backend
+    folderId: meta.folderId,
+    workspaceId: meta.workspaceId,
+    starred: meta.starred,
+    tags: meta.tags,
+    createdAt: new Date(meta.createdAt),
+    updatedAt: new Date(meta.updatedAt),
+    lastOpenedAt: meta.lastOpenedAt ? new Date(meta.lastOpenedAt) : undefined,
+    metadata: {},
+    sync: {
+      status: meta.syncStatus,
+      cloudId: meta.cloudId,
+      lastSyncedAt: meta.lastSyncedAt ? new Date(meta.lastSyncedAt) : undefined,
+      localVersion: meta.version,
+    },
+  };
+}
+
+// Map WorkspaceType to legacy Workspace format
+function mapWorkspaceType(ws: WorkspaceType): any {
+  return {
+    id: ws.id,
+    name: ws.name,
+    icon: ws.icon,
+    description: ws.description,
+    createdAt: new Date(ws.createdAt),
+    updatedAt: new Date(ws.updatedAt),
+    sync: {
+      status: ws.syncStatus,
+      lastSyncedAt: ws.lastSyncedAt ? new Date(ws.lastSyncedAt) : undefined,
+      cloudVersion: ws.version,
+      localVersion: ws.version,
+    },
+  };
+}
 
 interface WorkspaceContextType {
   workspaces: Workspace[];
@@ -20,10 +88,10 @@ interface WorkspaceContextType {
   
   switchWorkspace: (workspace: Workspace) => Promise<void>;
   createWorkspace: (data: { name: string; description: string; icon: string }) => Promise<Workspace>;
-  createDocument: (type: Document['type'], title: string, content?: string) => Promise<Document>;
+  createDocument: (type: Document['type'], title: string, content?: string, folderId?: string | null) => Promise<Document>;
   updateDocument: (documentId: string, updates: Partial<Document>) => Promise<void>;
   deleteDocument: (documentId: string) => Promise<void>;
-  getDocument: (documentId: string) => Document | undefined;
+  getDocument: (documentId: string) => Promise<Document | undefined>;  // 🔥 Now async!
   refreshDocuments: () => Promise<void>;
   autoSaveDocument: (documentId: string, content: string) => void;
 }
@@ -42,10 +110,26 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [initCounter, setInitCounter] = useState(0); // Force re-init counter
 
   // Initialize on auth
+  // 🔥 FIX 11: Auth epoch gate to prevent triple-initialization
+  const initEpochRef = useRef<string | null>(null);
+
   useEffect(() => {
     const init = async () => {
-      console.log('🔵 WorkspaceContext init triggered:', { 
-        isAuthenticated, 
+      // 🔥 FIX 11: Auth epoch gate - prevent duplicate initialization
+      const authCheck = authService.isAuthenticated();
+      const userId = user?.id || 'guest';
+      const epoch = authCheck ? `auth:${userId}` : 'guest';
+      
+      if (initEpochRef.current === epoch) {
+        console.log('[WorkspaceContext] 🛑 [FIX 11] Init skipped (already initialized for this epoch):', epoch);
+        return;
+      }
+      
+      console.log('🔵 [FIX 11] WorkspaceContext init triggered:', { 
+        epoch,
+        previousEpoch: initEpochRef.current,
+        isAuthenticated,           // React state (may be stale)
+        authCheck,                 // Direct check (always current)
         hasUser: !!user, 
         userId: user?.id,
         email: user?.email,
@@ -54,37 +138,124 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         initCounter 
       });
       
-      // Wait for auth to finish loading
-      if (authLoading) {
+      // 🔥 FIX: Check auth state directly (bypass React state timing)
+      const hasUserDirect = !!user || authCheck;
+      
+      // Wait for auth to finish loading (but only on initial load)
+      if (authLoading && !authCheck) {
         console.log('⏳ Waiting for auth to finish loading...', { authLoading });
         setIsLoading(false);
         return;
       }
       
-      if (!isAuthenticated) {
-        console.log('⚠️ Not authenticated, clearing state', { isAuthenticated });
-        setWorkspaces([]);
-        setCurrentWorkspace(null);
-        setDocuments([]);
+      // 🔥 FIX: Use direct auth check OR React state (whichever is true)
+      // This handles the race condition where React state hasn't updated yet
+      const shouldUseBackend = authCheck || isAuthenticated;
+      
+      if (!shouldUseBackend) {
+        console.log('🌐 Guest mode: Loading guest workspaces', { 
+          isAuthenticated, 
+          authCheck,
+          'using': 'guest'
+        });
+        
+        // Load ALL guest workspaces (NEW service with UUIDs)
+        const allWorkspaces = await guestWorkspaceService.getAllWorkspaces();
+        setWorkspaces(allWorkspaces as any);
+        
+        // Load current workspace
+        const guestWs = await guestWorkspaceService.getCurrentWorkspace();
+        if (guestWs) {
+          setCurrentWorkspace(guestWs as any);
+          
+          // Load guest documents for CURRENT workspace only
+          const guestDocs = await guestWorkspaceService.getDocuments(guestWs.id);
+          setDocuments(guestDocs as any);
+          
+          console.log('✅ Guest workspaces loaded:', allWorkspaces.length, 'total, current:', guestWs.name, `(${guestDocs.length} docs for this workspace)`);
+        } else {
+          console.warn('⚠️ No current guest workspace found');
+        }
+        
         setIsLoading(false);
         return;
       }
       
-      if (!user) {
-        console.log('⚠️ No user object yet, waiting...', { user });
+      // 🔥 FIX: If authenticated but no user object yet, wait a bit for React state to catch up
+      if (!user && authCheck) {
+        console.log('⏳ Authenticated but user object not ready yet, waiting 100ms...');
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Re-check after delay
+        if (!user) {
+          console.log('⚠️ Still no user object after delay, proceeding with auth check');
+          // Continue anyway - backend service will handle auth
+        }
+      }
+      
+      if (!user && !authCheck) {
+        console.log('⚠️ No user object and not authenticated, waiting...', { user });
         setIsLoading(false);
         return;
       }
 
       try {
-        console.log('🔄 Initializing workspace for user:', user.username || user.email);
+        const userInfo = user ? (user.username || user.email) : 'authenticated user';
+        console.log('🔄 Initializing workspace for authenticated user:', userInfo, {
+          'React isAuthenticated': isAuthenticated,
+          'Direct auth check': authCheck,
+          'Has user object': !!user
+        });
         setIsLoading(true);
-        await offlineWorkspaceService.init();
         
-        const allWorkspaces = await offlineWorkspaceService.getAllWorkspaces();
-        const uniqueWorkspaces = Array.from(new Map(allWorkspaces.map(w => [w.id, w])).values());
-        setWorkspaces(uniqueWorkspaces);
+        // ✅ LOCAL-FIRST: Load BOTH guest workspaces (local) AND backend workspaces (cloud)
+        // Per local_first.md section 8.2: "Migration = Sync. Merge local and cloud data."
+        
+        // 1. Load guest workspaces (local IndexedDB - MDReaderGuest)
+        const guestWorkspaces = await guestWorkspaceService.getAllWorkspaces();
+        console.log(`📦 Loaded ${guestWorkspaces.length} guest workspace(s) from local IndexedDB`);
+        
+        // 2. Initialize backend service and load cloud workspaces
+        await backendWorkspaceService.init();
+        const backendWorkspaces = await backendWorkspaceService.getAllWorkspaces();
+        console.log(`☁️ Loaded ${backendWorkspaces.length} backend workspace(s) from cloud/cache`);
+        
+        // 3. Merge workspaces (guest + backend)
+        // Guest workspaces are marked as 'local' (not synced)
+        // Backend workspaces are marked as 'synced' (from cloud)
+        const guestMapped = guestWorkspaces.map(ws => ({
+          ...mapWorkspaceType(ws as any),
+          syncStatus: 'local' as const, // ✅ Mark guest workspaces as local-only
+          sync: {
+            status: 'local' as const,
+            localVersion: (ws as any).version || 1,
+            cloudVersion: undefined,
+          },
+        }));
+        
+        const backendMapped = backendWorkspaces.map(mapWorkspaceType);
+        
+        // Combine and deduplicate (if same ID exists in both, prefer backend version)
+        const workspaceMap = new Map<string, any>();
+        
+        // Add guest workspaces first (local)
+        guestMapped.forEach(ws => {
+          workspaceMap.set(ws.id, ws);
+        });
+        
+        // Add backend workspaces (cloud) - will overwrite if same ID
+        backendMapped.forEach(ws => {
+          workspaceMap.set(ws.id, ws);
+        });
+        
+        const allWorkspaces = Array.from(workspaceMap.values());
+        setWorkspaces(allWorkspaces);
+        
+        console.log(`✅ Merged workspaces: ${guestMapped.length} local + ${backendMapped.length} cloud = ${allWorkspaces.length} total`);
+        console.log(`   - Local-only (can push to cloud): ${guestMapped.length}`);
+        console.log(`   - Synced to cloud: ${backendMapped.length}`);
 
+        // 4. Load current workspace (prefer last used, or first available)
         const lastWorkspaceId = localStorage.getItem(LAST_WORKSPACE_KEY);
         let workspace = allWorkspaces.find(w => w.id === lastWorkspaceId) || allWorkspaces[0];
 
@@ -92,28 +263,39 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           // Set workspace in context
           setCurrentWorkspace(workspace);
           
-          // Check if service needs to switch workspace
-          try {
-            const serviceWorkspace = offlineWorkspaceService.getCurrentWorkspace();
-            if (serviceWorkspace.id !== workspace.id) {
-              console.log('🔄 Service has different workspace, switching...');
-              await offlineWorkspaceService.switchWorkspace(workspace.id);
+          // Determine which service to use based on sync status
+          const isLocalOnly = workspace.syncStatus === 'local';
+          
+          if (isLocalOnly) {
+            // Load from guest service (local IndexedDB)
+            console.log('📂 Loading local workspace:', workspace.name);
+            await guestWorkspaceService.switchWorkspace(workspace.id);
+            const docs = await guestWorkspaceService.getDocuments(workspace.id);
+            // ✅ FIX: Don't overwrite sync state from IndexedDB
+            const mappedDocs = docs.map(mapDocumentMetaToDocument);
+            setDocuments(mappedDocs);
+            console.log(`✅ Loaded ${mappedDocs.length} local document(s) from guest service`);
+          } else {
+            // Load from backend service (cloud/cache)
+            console.log('☁️ Loading cloud workspace:', workspace.name);
+            const workspaceType = backendWorkspaces.find(w => w.id === workspace.id);
+            if (workspaceType) {
+              await backendWorkspaceService.switchWorkspace(workspaceType.id);
+              const docs = await backendWorkspaceService.getDocuments(workspaceType.id);
+              const mappedDocs = docs.map(mapDocumentMetaToDocument);
+              setDocuments(mappedDocs);
+              console.log(`✅ Loaded ${mappedDocs.length} cloud document(s) from backend service`);
             }
-          } catch (err) {
-            // Service might not have workspace yet, switch it
-            console.log('🔄 Service has no workspace, switching...');
-            await offlineWorkspaceService.switchWorkspace(workspace.id);
           }
           
-          const docs = offlineWorkspaceService.getAllDocuments();
-          setDocuments(docs);
           localStorage.setItem(LAST_WORKSPACE_KEY, workspace.id);
           
-          console.log('✅ Workspace context initialized:', workspace.name, 'with', docs.length, 'docs');
+          console.log('✅ Workspace context initialized:', workspace.name);
           console.log('📊 Final state:', {
-            workspaces: uniqueWorkspaces.length,
+            workspaces: allWorkspaces.length,
             currentWorkspace: workspace.name,
-            documents: docs.length
+            documents: documents.length,
+            isLocalOnly,
           });
         } else {
           console.warn('⚠️ No workspace found for user');
@@ -122,6 +304,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         console.error('❌ Workspace init failed:', err);
         setError(err.message || 'Failed to load workspaces');
       } finally {
+        // 🔥 FIX 11: Mark this epoch as initialized
+        const authCheck = authService.isAuthenticated();
+        const userId = user?.id || 'guest';
+        const epoch = authCheck ? `auth:${userId}` : 'guest';
+        initEpochRef.current = epoch;
+        console.log('✅ [FIX 11] Epoch locked:', epoch);
+        
         setIsLoading(false);
         console.log('✅ WorkspaceContext initialization complete (isLoading = false)');
       }
@@ -132,17 +321,42 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   
   // Listen for login events to FORCE re-init
   useEffect(() => {
-    const handleLoginSuccess = (event: Event) => {
+    const handleLoginSuccess = async (event: Event) => {
       const customEvent = event as CustomEvent;
-      console.log('🔔 Login event detected, FORCING workspace re-init for user:', customEvent.detail?.user?.username);
+      const loginUser = customEvent.detail?.user;
+      console.log('🔔 Login event detected, FORCING workspace re-init for user:', loginUser?.username || loginUser?.email);
       
-      // Force re-init by incrementing counter
-      setInitCounter(prev => prev + 1);
+      // 🔥 FIX: Wait a bit for React state to update, then force re-init
+      // This ensures isAuthenticated and user state are ready
+      await new Promise(resolve => setTimeout(resolve, 150));
+      
+      // Verify auth is actually set
+      const authCheck = authService.isAuthenticated();
+      console.log('🔍 Post-login auth check:', {
+        'Direct auth check': authCheck,
+        'Has login user': !!loginUser,
+        'React isAuthenticated': isAuthenticated,
+        'React user': !!user
+      });
+      
+      if (authCheck) {
+        // Force re-init by incrementing counter
+        setInitCounter(prev => prev + 1);
+        console.log('✅ Forcing workspace re-init after login');
+      } else {
+        console.warn('⚠️ Login event received but auth check failed, retrying...');
+        // Retry once more after another delay
+        setTimeout(() => {
+          if (authService.isAuthenticated()) {
+            setInitCounter(prev => prev + 1);
+          }
+        }, 200);
+      }
     };
     
     window.addEventListener('auth:login', handleLoginSuccess);
     return () => window.removeEventListener('auth:login', handleLoginSuccess);
-  }, []);
+  }, [isAuthenticated, user]); // Include dependencies to access latest state
   
   // Listen for document sync events (when offline docs get real IDs from backend)
   useEffect(() => {
@@ -165,16 +379,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         createdAt: new Date(doc.created_at),
         updatedAt: new Date(doc.updated_at),
         lastOpenedAt: doc.last_opened_at ? new Date(doc.last_opened_at) : undefined,
-        metadata: {}
+        metadata: {},
+        sync: {
+          status: 'synced',
+          lastSyncedAt: new Date(),
+        }
       };
       
-      // Update backend service's internal state
-      const backendDocs = (offlineWorkspaceService as any).backendService.documents;
-      const oldIndex = backendDocs.findIndex((d: Document) => d.id === oldId);
-      if (oldIndex >= 0) {
-        backendDocs.splice(oldIndex, 1, mappedDoc);
-        console.log('✅ Updated backend service state with synced document');
-      }
+      // Note: Backend service manages its own state via IndexedDB cache
+      // No need to manually update internal state
       
       // Update context state
       setDocuments(prev => {
@@ -188,133 +401,550 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       });
     };
     
-    const handleOfflineDataLoaded = () => {
+    // ✅ FIX 2: Listen for sync status changes (after push to cloud)
+    const handleSyncStatusChanged = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { documentId, syncStatus, cloudId, lastSyncedAt } = customEvent.detail;
+      
+      console.log(`✅ [FIX 2] Document sync status changed: ${documentId} → ${syncStatus}`);
+      
+      // Update only the sync status of the existing document
+      setDocuments(prev => prev.map(doc => {
+        if (doc.id === documentId) {
+          return {
+            ...doc,
+            sync: {
+              status: syncStatus,
+              cloudId,
+              lastSyncedAt: lastSyncedAt ? new Date(lastSyncedAt) : new Date(),
+            }
+          };
+        }
+        return doc;
+      }));
+    };
+    
+    const handleOfflineDataLoaded = async () => {
       console.log('🔄 Offline data loaded event, refreshing documents...');
-      const docs = offlineWorkspaceService.getAllDocuments();
-      setDocuments([...docs]);
-      console.log(`✅ Refreshed: ${docs.length} documents`);
+      if (currentWorkspace) {
+        const docs = await backendWorkspaceService.getDocuments(currentWorkspace.id);
+        const mappedDocs = docs.map(mapDocumentMetaToDocument);
+        setDocuments(mappedDocs);
+        console.log(`✅ Refreshed: ${mappedDocs.length} documents`);
+      }
     };
     
     window.addEventListener('document-synced', handleDocumentSynced);
+    window.addEventListener('document-sync-status-changed', handleSyncStatusChanged);
     window.addEventListener('offline-data-loaded', handleOfflineDataLoaded);
     
     return () => {
       window.removeEventListener('document-synced', handleDocumentSynced);
+      window.removeEventListener('document-sync-status-changed', handleSyncStatusChanged);
       window.removeEventListener('offline-data-loaded', handleOfflineDataLoaded);
     };
   }, []);
+  
+  // ✅ FIX 5: Dev-mode invariant check for document integrity
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return;
+    
+    documents.forEach(doc => {
+      if (!doc.id) {
+        console.error('[INVARIANT VIOLATION] Document without id:', doc);
+      }
+      if (!doc.workspaceId) {
+        console.error('[INVARIANT VIOLATION] Document without workspaceId:', doc);
+      }
+      // Check for duplicate IDs
+      const duplicates = documents.filter(d => d.id === doc.id);
+      if (duplicates.length > 1) {
+        console.error('[INVARIANT VIOLATION] Duplicate document IDs:', doc.id, duplicates);
+      }
+    });
+  }, [documents]);
 
   const switchWorkspace = useCallback(async (workspace: Workspace) => {
     try {
       console.log('🔄 [Context] Switching workspace:', workspace.name, workspace.id);
-      
-      // If switching to a different workspace, sync pending changes first
-      const oldWorkspaceId = currentWorkspace?.id;
-      if (oldWorkspaceId && oldWorkspaceId !== workspace.id) {
-        console.log('🔄 [Context] Syncing pending changes before switch...');
-        
-        // Try to sync with 3-second timeout
-        await Promise.race([
-          syncManager.syncNow(),
-          new Promise(resolve => setTimeout(resolve, 3000))
-        ]).catch(err => {
-          console.warn('⚠️ Failed to sync before workspace switch:', err);
-        });
-        
-        // Dispatch event after sync attempt
-        window.dispatchEvent(new CustomEvent('workspace:switch', {
-          detail: { oldWorkspaceId, newWorkspaceId: workspace.id }
-        }));
-      }
-      
       setIsLoading(true);
       
-      // Clear old state
-      setCurrentWorkspace(null);
-      setDocuments([]);
-      console.log('🧹 [Context] Cleared old state');
+      // ✅ LOCAL-FIRST: Check workspace sync status to determine which service to use
+      const isLocalOnly = workspace.syncStatus === 'local';
       
-      // Load new workspace
-      await offlineWorkspaceService.switchWorkspace(workspace.id);
-      const docs = offlineWorkspaceService.getAllDocuments();
-      console.log('📦 [Context] Loaded from backend:', docs.length, 'docs');
+      // 🔥 FIX: Check auth directly (bypass React state timing)
+      const authCheck = authService.isAuthenticated();
+      const shouldUseBackend = authCheck || isAuthenticated;
       
-      // Update state
+      console.log('🔵 switchWorkspace called:', {
+        'React isAuthenticated': isAuthenticated,
+        'Direct auth check': authCheck,
+        'Workspace sync status': workspace.syncStatus,
+        'Is local-only': isLocalOnly,
+        'Using': isLocalOnly ? 'guest (local)' : shouldUseBackend ? 'backend (cloud)' : 'guest',
+        'Workspace ID': workspace.id
+      });
+      
+      // Guest mode OR local-only workspace: Use guest service
+      if (!shouldUseBackend || isLocalOnly) {
+        console.log('📂 Loading local workspace:', workspace.name, isLocalOnly ? '(local-only)' : '(guest mode)');
+        await guestWorkspaceService.switchWorkspace(workspace.id);
+        
+        // Load documents for THIS workspace only
+        const docs = await guestWorkspaceService.getDocuments(workspace.id);
+        const mappedDocs = docs.map((d: any) => ({
+          ...mapDocumentMetaToDocument(d),
+          sync: { status: 'local' as const, localVersion: 1 },
+        }));
+        
+        setCurrentWorkspace({...workspace});
+        setDocuments(mappedDocs);
+        localStorage.setItem(LAST_WORKSPACE_KEY, workspace.id);
+        console.log('✅ Local workspace switched:', workspace.name, `(${mappedDocs.length} docs for this workspace)`);
+        return;
+      }
+      
+      // Authenticated mode + synced workspace: Use backend service
+      console.log('☁️ Loading cloud workspace:', workspace.name);
+      await backendWorkspaceService.switchWorkspace(workspace.id);
+      
+      // Load documents for THIS workspace only
+      const docs = await backendWorkspaceService.getDocuments(workspace.id);
+      const mappedDocs = docs.map(mapDocumentMetaToDocument);
+      
       setCurrentWorkspace({...workspace});
-      setDocuments([...docs]);
+      setDocuments(mappedDocs);
       localStorage.setItem(LAST_WORKSPACE_KEY, workspace.id);
-      console.log('✅ [Context] State updated:', workspace.name);
+      console.log('✅ Cloud workspace switched:', workspace.name, `(${mappedDocs.length} docs for this workspace)`);
     } catch (err) {
       console.error('❌ [Context] Switch failed:', err);
       throw err;
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [isAuthenticated, currentWorkspace]);
 
   const createWorkspace = useCallback(async (data: { name: string; description: string; icon: string }) => {
-    const newWorkspace = await offlineWorkspaceService.createWorkspace(data);
-    const allWorkspaces = await offlineWorkspaceService.getAllWorkspaces();
-    setWorkspaces(allWorkspaces);
-    await switchWorkspace(newWorkspace);
-    return newWorkspace;
-  }, [switchWorkspace]);
+    // 🔥 FIX: Check auth directly (bypass React state timing)
+    const authCheck = authService.isAuthenticated();
+    const shouldUseBackend = authCheck || isAuthenticated;
+    
+    console.log('🔵 createWorkspace called:', {
+      'React isAuthenticated': isAuthenticated,
+      'Direct auth check': authCheck,
+      'Using': shouldUseBackend ? 'backend' : 'guest'
+    });
+    
+    // Guest mode: Use guest service
+    if (!shouldUseBackend) {
+      console.log('🌐 Guest mode: Creating workspace in IndexedDB');
+      const newWorkspace = await guestWorkspaceService.createWorkspace({
+        name: data.name,
+        icon: data.icon,
+        description: data.description
+      });
+      
+      // Switch to new workspace
+      await guestWorkspaceService.switchWorkspace(newWorkspace.id);
+      
+      // Load workspaces and documents for NEW workspace
+      const allWorkspaces = await guestWorkspaceService.getAllWorkspaces();
+      const docs = await guestWorkspaceService.getDocuments(newWorkspace.id);
+      
+      setWorkspaces(allWorkspaces as any);
+      setCurrentWorkspace(newWorkspace as any);
+      setDocuments(docs as any); // Clear old docs, show only new workspace docs
+      
+      console.log('✅ Guest workspace created:', newWorkspace.name, `(${docs.length} docs)`);
+      return newWorkspace as any;
+    }
+    
+    // Authenticated mode: Use new backend service
+    console.log('🔐 Backend mode: Creating workspace via API');
+    const newWorkspace = await backendWorkspaceService.createWorkspace({
+      name: data.name,
+      icon: data.icon,
+      description: data.description,
+    });
+    
+    const allWorkspaces = await backendWorkspaceService.getAllWorkspaces();
+    const mappedWorkspaces = allWorkspaces.map(mapWorkspaceType);
+    const mappedNewWorkspace = mapWorkspaceType(newWorkspace);
+    
+    setWorkspaces(mappedWorkspaces);
+    
+    // Load documents for NEW workspace
+    const docs = await backendWorkspaceService.getDocuments(newWorkspace.id);
+    const mappedDocs = docs.map(mapDocumentMetaToDocument);
+    
+    setCurrentWorkspace(mappedNewWorkspace);
+    setDocuments(mappedDocs);
+    
+    console.log('✅ Backend workspace created:', newWorkspace.name, `(${mappedDocs.length} docs)`);
+    return mappedNewWorkspace;
+  }, [switchWorkspace, isAuthenticated]);
 
-  const createDocument = useCallback(async (type: Document['type'], title: string, content: string = '') => {
+  const createDocument = useCallback(async (type: Document['type'], title: string, content: string = '', folderId: string | null = null) => {
     if (!currentWorkspace) {
       console.error('❌ Cannot create document: No workspace loaded');
       throw new Error('No workspace selected. Please wait for workspace to load.');
     }
     
-    console.log('🔵 WorkspaceContext.createDocument() called:', { type, title, currentWorkspace: currentWorkspace?.name });
+    console.log('🔵 WorkspaceContext.createDocument() called:', { type, title, folderId, currentWorkspace: currentWorkspace?.name });
     
-    const doc = await offlineWorkspaceService.createDocument(type, title, content);
+    // 🔥 LOCAL-FIRST: ALWAYS create documents locally using guest service
+    // Regardless of auth status, documents are LOCAL until explicitly synced to cloud
+    console.log('📝 LOCAL-FIRST: Creating document in local IndexedDB (MDReaderGuest)');
     
-    console.log('📄 Document created by service:', {
-      id: doc.id,
-      title: doc.title,
-      workspaceId: doc.workspaceId
+      const guestDoc = await guestWorkspaceService.createDocument({
+        workspaceId: currentWorkspace.id,
+        title,
+        type,
+        folderId
+      });
+      
+    // Map to Document type (content will be in Yjs, not here)
+      const doc: Document = {
+        id: guestDoc.id,
+        type: guestDoc.type,
+        title: guestDoc.title,
+        content: '', // Content is in Yjs, not here
+        folderId: guestDoc.folderId,
+        workspaceId: guestDoc.workspaceId,
+        starred: guestDoc.starred,
+        tags: guestDoc.tags,
+        createdAt: new Date(guestDoc.createdAt),
+        updatedAt: new Date(guestDoc.updatedAt),
+        lastOpenedAt: guestDoc.lastOpenedAt ? new Date(guestDoc.lastOpenedAt) : undefined,
+        metadata: {},
+        sync: { 
+          status: guestDoc.syncStatus || 'local', 
+          localVersion: guestDoc.version || 1 
+        }
+      };
+      
+    // 🔥 CRITICAL: Register document in local index (sidebar depends on this)
+    setDocuments(prev => {
+      // Prevent duplicates
+      if (prev.some(d => d.id === doc.id)) return prev;
+      return [...prev, doc];
     });
     
-    // Force refresh from service to get latest state (includes our new doc)
-    const latestDocs = offlineWorkspaceService.getAllDocuments();
-    console.log(`📊 getAllDocuments() returned ${latestDocs.length} documents`);
-    
-    setDocuments(latestDocs);
-    console.log(`✅ State updated with ${latestDocs.length} documents`);
-    
+    console.log('✅ Document created locally and registered in sidebar index:', doc.title, `(id: ${doc.id}, folderId: ${folderId})`);
     return doc;
-  }, [currentWorkspace]);
+  }, [currentWorkspace, isAuthenticated]);
 
   const updateDocument = useCallback(async (documentId: string, updates: Partial<Document>) => {
-    await offlineWorkspaceService.updateDocument(documentId, updates);
-    setDocuments(prev => prev.map(d => d.id === documentId ? { ...d, ...updates } : d));
-  }, []);
+    // Check if document exists in current documents list to determine which service to use
+    const existingDoc = documents.find(d => d.id === documentId);
+    const isLocalDocument = existingDoc?.sync?.status === 'local' || 
+                           (!existingDoc && !isAuthenticated);
+    
+    // Guest mode OR local document: Use guest service
+    if (!isAuthenticated || isLocalDocument) {
+      try {
+        await guestWorkspaceService.updateDocument(documentId, updates as any);
+        setDocuments(prev => prev.map(d => d.id === documentId ? { ...d, ...updates } : d));
+        return;
+      } catch (error: any) {
+        // If document not found in guest service and authenticated, try backend service
+        if (error.message?.includes('not found') && isAuthenticated) {
+          console.log('⚠️ Document not found in guest service, trying backend service...');
+          // Fall through to backend service below
+        } else {
+          throw error;
+        }
+      }
+    }
+    
+    // Authenticated mode: Use new backend service
+    try {
+      const updateInput: any = {};
+      if (updates.title !== undefined) updateInput.title = updates.title;
+      if (updates.folderId !== undefined) updateInput.folderId = updates.folderId;
+      if (updates.starred !== undefined) updateInput.starred = updates.starred;
+      if (updates.tags !== undefined) updateInput.tags = updates.tags;
+      
+      await backendWorkspaceService.updateDocument(documentId, updateInput);
+      setDocuments(prev => prev.map(d => d.id === documentId ? { ...d, ...updates } : d));
+    } catch (error: any) {
+      // If document not found in backend, try guest service (might be local-only)
+      if (error.message?.includes('not found')) {
+        console.log('⚠️ Document not found in backend service, trying guest service...');
+        try {
+          await guestWorkspaceService.updateDocument(documentId, updates as any);
+          setDocuments(prev => prev.map(d => d.id === documentId ? { ...d, ...updates } : d));
+        } catch (guestError) {
+          throw new Error(`Document not found in either service: ${documentId}`);
+        }
+      } else {
+        throw error;
+      }
+    }
+  }, [isAuthenticated, documents]);
 
   const deleteDocument = useCallback(async (documentId: string) => {
-    await offlineWorkspaceService.deleteDocument(documentId);
+    // Guest mode: Use guest service
+    if (!isAuthenticated) {
+      await guestWorkspaceService.deleteDocument(documentId);
+      setDocuments(prev => prev.filter(d => d.id !== documentId));
+      return;
+    }
+    
+    // Authenticated mode: Use new backend service
+    await backendWorkspaceService.deleteDocument(documentId);
     setDocuments(prev => prev.filter(d => d.id !== documentId));
-  }, []);
+  }, [isAuthenticated]);
 
-  const getDocument = useCallback((documentId: string) => {
-    return documents.find(d => d.id === documentId);
-  }, [documents]);
+  // 🔥 STEP 4: ONE-TIME CONTENT HYDRATION INTO Yjs
+  // This function writes initial markdown content into a Yjs document EXACTLY ONCE
+  // ✅ Location: WorkspaceContext (data layer, not view layer)
+  // ✅ Gate: fragment.length === 0 (ONLY allowed check)
+  // ✅ Write: Directly to Yjs (NOT through TipTap)
+  const hydrateYjsDocument = async (documentId: string, markdown: string) => {
+    if (!markdown) return; // No content to hydrate
+    
+    // Get Yjs document from manager
+    const { yjsDocumentManager } = await import('@/services/yjs/YjsDocumentManager');
+    const instance = yjsDocumentManager.getDocument(documentId, {
+      enableWebSocket: false,
+      isAuthenticated: authService.isAuthenticated(),
+    });
+    
+    const { ydoc } = instance;
+    
+    // 🔥 THE HYDRATION GATE (ONLY ALLOWED CHECK)
+    const fragment = ydoc.getXmlFragment('content');
+    
+    if (fragment.length > 0) {
+      // ❌ DO NOTHING - content already exists
+      console.log('ℹ️ [STEP 4] Yjs document already has content, skipping hydration:', documentId);
+      return;
+    }
+    
+    // Empty fragment → proceed with one-time hydration
+    console.log('🧬 [STEP 4] Hydrating Yjs document from markdown:', documentId, `(${markdown.length} chars)`);
+    
+    try {
+      // Step 1: Convert Markdown → HTML
+      const html = markdownToHtml(markdown);
+      
+      // Step 2: Store in temporary field for TipTap to pick up
+      // TipTap's Collaboration extension will sync this to the XmlFragment
+      ydoc.transact(() => {
+        const tempText = ydoc.getText('_init_markdown');
+        // Clear existing temp content (if any)
+        if (tempText.length > 0) {
+          tempText.delete(0, tempText.length);
+        }
+        // Insert markdown
+        tempText.insert(0, html); // Store HTML (ready for TipTap)
+      });
+      
+      console.log('✅ [STEP 4] Hydrated Yjs document from initial content:', documentId);
+    } catch (error) {
+      console.error('❌ [STEP 4] Hydration failed:', error);
+    }
+  };
+
+  const getDocument = useCallback(async (documentId: string): Promise<Document | undefined> => {
+    // 🔥 FIX: Actually fetch the document from the service (with content!)
+    // Don't just search the in-memory array (which has no content from list endpoint)
+    
+    const authCheck = authService.isAuthenticated();
+    const shouldUseBackend = authCheck || isAuthenticated;
+    
+    let document: Document | undefined;
+    
+    if (!shouldUseBackend) {
+      // Guest mode: Get from guest service
+      const guestDoc = await guestWorkspaceService.getDocument(documentId);
+      document = guestDoc ? mapDocumentMetaToDocument(guestDoc) : undefined;
+    } else {
+      // 🔥 LOCAL-FIRST FIX: When authenticated, check BOTH services!
+      // Guest documents (created before login) are still in GuestWorkspaceService.
+      // Cloud documents are in BackendWorkspaceService.
+      // Check guest first (local-first), then backend (cloud).
+      
+      // First, try guest service (for documents created before login)
+      const guestDoc = await guestWorkspaceService.getDocument(documentId);
+      if (guestDoc) {
+        console.log(`✅ [getDocument] Found in guest service: ${documentId}`);
+        document = mapDocumentMetaToDocument(guestDoc);
+      } else {
+        // If not in guest service, try backend service (cloud documents)
+        const doc = await backendWorkspaceService.getDocument(documentId);
+        
+        // Update in-memory array if we got the document
+        if (doc) {
+          const mappedDoc = mapDocumentMetaToDocument(doc);
+          setDocuments(prev => {
+            const exists = prev.some(d => d.id === documentId);
+            if (exists) {
+              // Update existing
+              return prev.map(d => d.id === documentId ? mappedDoc : d);
+            } else {
+              // Add new
+              return [...prev, mappedDoc];
+            }
+          });
+          document = mappedDoc;
+        }
+      }
+    }
+    
+    // 🔥 STEP 4: ONE-TIME CONTENT HYDRATION (if document has content)
+    if (document && document.content) {
+      await hydrateYjsDocument(documentId, document.content);
+    }
+    
+    return document;
+  }, [isAuthenticated]);
 
   const refreshDocuments = useCallback(async () => {
     if (!currentWorkspace) return;
     
     try {
-      await offlineWorkspaceService.init();
-      const docs = offlineWorkspaceService.getAllDocuments();
-      setDocuments(docs);
+      // ✅ LOCAL-FIRST: Check workspace sync status to determine which service to use
+      const isLocalOnly = currentWorkspace.syncStatus === 'local';
+      const authCheck = authService.isAuthenticated();
+      const shouldUseBackend = authCheck || isAuthenticated;
+      
+      console.log('🔄 [refreshDocuments] Starting...', { 
+        workspace: currentWorkspace.name, 
+        isLocalOnly, 
+        shouldUseBackend 
+      });
+      
+      // 🔥 FIX: If logged in, check workspace mapping FIRST, then fetch documents
+      // Documents saved to cloud might be in a different workspace
+      if (shouldUseBackend) {
+        let workspaceIdToFetch = currentWorkspace.id;
+        
+        // Check for workspace mapping (local → cloud)
+        try {
+          const { selectiveSyncService } = await import('@/services/sync/SelectiveSyncService');
+          const cloudWorkspaceId = await selectiveSyncService.getCloudWorkspaceId(currentWorkspace.id);
+          if (cloudWorkspaceId && cloudWorkspaceId !== currentWorkspace.id) {
+            console.log(`🆔 [refreshDocuments] Found workspace mapping: ${currentWorkspace.id} → ${cloudWorkspaceId}`);
+            workspaceIdToFetch = cloudWorkspaceId; // Use cloud workspace ID to fetch documents
+          }
+        } catch (err) {
+          console.warn('⚠️ Failed to check workspace mapping:', err);
+        }
+        
+        // Get documents from backend service using the correct workspace ID
+        const backendDocs = await backendWorkspaceService.getDocuments(workspaceIdToFetch);
+        console.log(`📥 [refreshDocuments] Backend: Got ${backendDocs.length} docs from backendWorkspaceService (workspace: ${workspaceIdToFetch})`);
+        
+        // If we have backend docs, use them (they have the latest cloud content)
+        if (backendDocs.length > 0) {
+          console.log(`📥 [refreshDocuments] Backend: First doc:`, {
+            id: backendDocs[0].id,
+            title: backendDocs[0].title,
+            hasContent: !!backendDocs[0].content,
+            contentLength: backendDocs[0].content?.length || 0,
+            contentPreview: backendDocs[0].content?.substring(0, 50)
+          });
+          const mappedDocs = backendDocs.map(mapDocumentMetaToDocument);
+          console.log(`📥 [refreshDocuments] Backend: After mapping, first doc content length: ${mappedDocs[0]?.content?.length || 0}`);
+          
+          // 🔥 FIX 1: Merge-by-id instead of replace (preserves local-only docs)
+          setDocuments(prev => {
+            const map = new Map<string, Document>();
+            // Add existing docs
+            prev.forEach(d => map.set(d.id, d));
+            // Merge incoming docs (override metadata but preserve local fields)
+            mappedDocs.forEach(d => {
+              const existing = map.get(d.id);
+              map.set(d.id, {
+                ...existing, // Preserve local-only fields
+                ...d,        // Override with fresh metadata
+              });
+            });
+            return Array.from(map.values());
+          });
+          return;
+        }
+        
+        // If no backend docs, fall through to guest service (for truly local-only docs)
+        console.log('⚠️ [refreshDocuments] No backend docs found, falling back to guest service');
+      }
+      
+      // Guest mode OR no backend docs: Use guest service
+      const docs = await guestWorkspaceService.getDocuments(currentWorkspace.id);
+      console.log(`📥 [refreshDocuments] Guest: Got ${docs.length} docs from guestWorkspaceService`);
+      if (docs.length > 0) {
+        console.log(`📥 [refreshDocuments] Guest: First doc content length: ${docs[0].content?.length || 0}`);
+      }
+      const mappedDocs = docs.map((d: any) => ({
+        ...mapDocumentMetaToDocument(d),
+        sync: { status: 'local' as const, localVersion: 1 },
+      }));
+      console.log(`📥 [refreshDocuments] Guest: After mapping, first doc content length: ${mappedDocs[0]?.content?.length || 0}`);
+      
+      // 🔥 FIX 1: Merge-by-id instead of replace (preserves local-only docs)
+      setDocuments(prev => {
+        const map = new Map<string, Document>();
+        // Add existing docs
+        prev.forEach(d => map.set(d.id, d));
+        // Merge incoming docs (override metadata but preserve local fields)
+        mappedDocs.forEach(d => {
+          const existing = map.get(d.id);
+          map.set(d.id, {
+            ...existing, // Preserve local-only fields
+            ...d,        // Override with fresh metadata
+          });
+        });
+        return Array.from(map.values());
+      });
     } catch (err) {
       console.error('Failed to refresh documents:', err);
     }
-  }, [currentWorkspace]);
+  }, [currentWorkspace, isAuthenticated]);
 
   const autoSaveDocument = useCallback((documentId: string, content: string) => {
-    offlineWorkspaceService.autoSave(documentId, content);
-  }, []);
+    console.log(`💾 autoSaveDocument called: ${documentId}, ${content.length} chars`);
+    
+    // Guest mode: Save content to IndexedDB
+    if (!isAuthenticated) {
+      guestWorkspaceService.updateDocument(documentId, { 
+        content
+      });
+      
+      // 🔥 CRITICAL: Update local state so getDocument() returns fresh content
+      setDocuments(prev => prev.map(doc => 
+        doc.id === documentId 
+          ? { ...doc, content, updatedAt: new Date() }
+          : doc
+      ));
+      
+      console.log(`✅ Saved to IndexedDB + updated state: ${content.length} chars`);
+      return;
+    }
+    
+    // Authenticated mode: Save to backend
+    backendWorkspaceService.getDocuments().then(docs => {
+      const docExists = docs.some(d => d.id === documentId);
+      if (docExists) {
+        backendWorkspaceService.updateDocument(documentId, { content }).then(() => {
+          // 🔥 CRITICAL: Update local state so getDocument() returns fresh content
+          setDocuments(prev => prev.map(doc => 
+            doc.id === documentId 
+              ? { ...doc, content, updatedAt: new Date() }
+              : doc
+          ));
+          console.log(`✅ Saved to backend + updated state: ${content.length} chars`);
+        }).catch(err => {
+          console.warn('⚠️ Failed to save document:', err);
+        });
+      } else {
+        console.log('ℹ️ Document not in cache yet');
+      }
+    }).catch(err => {
+      console.warn('⚠️ Failed to check document existence:', err);
+    });
+  }, [isAuthenticated]);
 
   return (
     <WorkspaceContext.Provider value={{

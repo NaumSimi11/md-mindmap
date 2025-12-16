@@ -12,7 +12,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { workspaceService } from '@/services/workspace/WorkspaceService';
+import { workspaceService } from '@/services/workspace-legacy/WorkspaceService';
 import { Button } from '@/components/ui/button';
 import { 
   Presentation as PresentationIcon, 

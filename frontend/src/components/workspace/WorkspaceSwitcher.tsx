@@ -2,7 +2,7 @@
  * WorkspaceSwitcher - Dropdown to switch between workspaces
  */
 
-import { Check, ChevronDown, Plus, Settings } from 'lucide-react';
+import { Check, ChevronDown, Plus, Settings, Edit } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,13 +12,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import type { Workspace } from '@/services/workspace/BackendWorkspaceService';
+import type { Workspace } from '@/services/workspace-legacy/BackendWorkspaceService';
 
 interface WorkspaceSwitcherProps {
   workspaces: Workspace[];
   currentWorkspace: Workspace;
   onSwitch: (workspace: Workspace) => void;
   onCreate: () => void;
+  onRename?: () => void;
   onSettings?: () => void;
 }
 
@@ -27,6 +28,7 @@ export function WorkspaceSwitcher({
   currentWorkspace,
   onSwitch,
   onCreate,
+  onRename,
   onSettings,
 }: WorkspaceSwitcherProps) {
   return (
@@ -78,6 +80,13 @@ export function WorkspaceSwitcher({
         <DropdownMenuSeparator />
 
         {/* Actions */}
+        {onRename && (
+          <DropdownMenuItem onClick={onRename} className="cursor-pointer">
+            <Edit className="h-4 w-4 mr-2" />
+            Rename Workspace
+          </DropdownMenuItem>
+        )}
+        
         <DropdownMenuItem onClick={onCreate} className="cursor-pointer">
           <Plus className="h-4 w-4 mr-2" />
           Create Workspace

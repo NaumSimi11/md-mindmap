@@ -19,7 +19,7 @@ import { BeautifulSlideRenderer } from '@/components/presentation/BeautifulSlide
 import { getBeautifulTheme, getAllBeautifulThemes } from '@/services/presentation/BeautifulThemes';
 import { convertToBeautifulTheme } from '@/services/presentation/ThemeConverter';
 import type { BeautifulTheme } from '@/services/presentation/BeautifulThemeSystem';
-import { workspaceService } from '@/services/workspace/WorkspaceService';
+import { workspaceService } from '@/services/workspace-legacy/WorkspaceService';
 import type { Presentation, Slide } from '@/services/presentation/PresentationGenerator';
 
 export default function PresenterMode() {

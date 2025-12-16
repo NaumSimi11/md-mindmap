@@ -71,6 +71,12 @@ export class ApiClient {
       try {
         const data = await response.json();
         
+        console.error('❌ API Error Response:', {
+          status: response.status,
+          statusText: response.statusText,
+          data,
+        });
+        
         // Handle Pydantic validation errors (FastAPI 422)
         if (response.status === 422 && data.detail && Array.isArray(data.detail)) {
           // Extract validation error messages
@@ -88,12 +94,16 @@ export class ApiClient {
           error.message = data.message;
           error.details = data;
         } else {
-          error.message = response.statusText;
+          error.message = response.statusText || 'Request failed';
           error.details = data;
         }
-      } catch {
-        // Response is not JSON
+      } catch (parseError) {
+        // Response is not JSON or couldn't be parsed
+        console.error('❌ Failed to parse error response:', parseError);
+        error.message = response.statusText || `Request failed with status ${response.status}`;
       }
+
+      console.error('❌ Throwing API Error:', error);
 
       // Handle unauthorized
       if (response.status === 401) {
@@ -128,13 +138,22 @@ export class ApiClient {
    * POST request
    */
   async post<T>(endpoint: string, data?: unknown): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: data ? JSON.stringify(data) : undefined,
-    });
-
-    return this.handleResponse<T>(response);
+    const url = `${this.baseUrl}${endpoint}`;
+    console.log('🌐 POST request starting:', { url, hasData: !!data });
+    
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: data ? JSON.stringify(data) : undefined,
+      });
+      
+      console.log('✅ POST response received:', { status: response.status, statusText: response.statusText });
+      return this.handleResponse<T>(response);
+    } catch (error) {
+      console.error('❌ POST request failed (network error):', error);
+      throw error;
+    }
   }
 
   /**

@@ -14,6 +14,7 @@ import { EditorContent } from '@tiptap/react';
 
 // Hooks
 import { useTipTapEditor } from '@/hooks/useTipTapEditor';
+import { useYjsDocument } from '@/hooks/useYjsDocument'; // ✅ STEP 3: Yjs integration
 import { useEditorMode } from './handlers/useEditorMode';
 import { useSyntaxHighlighting } from './handlers/useSyntaxHighlighting';
 import { htmlToMarkdown, markdownToHtml } from '@/utils/markdownConversion';
@@ -43,10 +44,16 @@ import { useCommentStore } from '@/stores/commentStore';
 import { autoFormatText, generateAIFormatPrompt, needsFormatting } from '@/utils/autoFormat';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { useEditorUIStore } from '@/stores/editorUIStore';
 import { UnifiedAIModal } from '@/components/modals/UnifiedAIModal';
 import UnifiedDiagramModal from '@/components/modals/UnifiedDiagramModal';
+import { useAuth } from '@/hooks/useAuth';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { selectiveSyncService } from '@/services/sync/SelectiveSyncService';
+import { documentExportService } from '@/services/export/DocumentExportService';
 import {
   Undo,
   Redo,
@@ -61,6 +68,8 @@ import {
   Download,
   Save,
   Share,
+  Cloud,
+  HardDrive,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -68,13 +77,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
 
 interface WYSIWYGEditorProps {
   documentId?: string;
   documentTitle?: string;
-  initialContent?: string;
-  onContentChange?: (content: string) => void;
+  // ❌ STEP 4: Removed initialContent (hydration handled by WorkspaceContext)
+  // ❌ STEP 1: Removed onContentChange (Yjs handles persistence)
   onTitleChange?: (title: string) => void;
   onEditorReady?: (editor: any) => void;
   contextFolders?: Array<{
@@ -96,12 +108,26 @@ interface WYSIWYGEditorProps {
 export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
   documentId,
   documentTitle = 'Untitled Document',
-  initialContent = '',
-  onContentChange,
+  // ❌ STEP 4: Removed initialContent (hydration in WorkspaceContext)
+  // ❌ STEP 1: Removed onContentChange
   onTitleChange,
   onEditorReady,
   contextFolders = [],
 }) => {
+  // 🔥 ISSUE 1 FIX: Early return if no documentId
+  // Prevents TipTap from ever mounting without ydoc
+  // NOTE: This is before hooks (Rules of Hooks exception for deterministic guards)
+  if (!documentId) {
+    return (
+      <div className="flex items-center justify-center h-screen text-muted-foreground">
+        <div className="text-center">
+          <p className="text-lg">Waiting for document...</p>
+          <p className="text-sm mt-2">No document ID provided</p>
+        </div>
+      </div>
+    );
+  }
+
   const navigate = useNavigate();
   const [title, setTitle] = useState(documentTitle);
 
@@ -122,7 +148,16 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
   // Local State
   const [aiSuggestionsEnabled, setAiSuggestionsEnabled] = useState(false);
   const [aiAutocompleteEnabled, setAiAutocompleteEnabled] = useState(true);
+  const [autoSaveToCloud, setAutoSaveToCloud] = useState(false); // Auto-save toggle (OFF by default)
   const { toast } = useToast();
+
+  // Auth & Workspace
+  const { isAuthenticated } = useAuth();
+  const { refreshDocuments } = useWorkspace();
+
+  // Auto-save to cloud debounce ref
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedContentRef = useRef<string>('');
 
   // File open/insert helpers
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -152,10 +187,15 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
   const [commentButtonPosition, setCommentButtonPosition] = useState({ x: 0, y: 0 });
   const [selectedTextForComment, setSelectedTextForComment] = useState('');
 
-  // Initialize Editor Hook
+  // 🔥 RULES OF HOOKS FIX: ALL hooks must run unconditionally
+  // Get Yjs document (may be undefined initially)
+  const { ydoc, websocketProvider, status } = useYjsDocument(documentId);
+  
+  console.log('✅ [STEP 3] Yjs document status:', status, 'for document:', documentId);
+
+  // 🔥 Initialize TipTap with Yjs (ydoc may be undefined initially, that's OK)
+  // When ydoc changes from undefined → defined, editor will re-initialize
   const { editor, isProgrammaticUpdateRef } = useTipTapEditor({
-    initialContent,
-    onContentChange,
     onEditorReady,
     aiSuggestionsEnabled,
     aiAutocompleteEnabled,
@@ -164,6 +204,8 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
     setShowTableModal,
     setShowTableMenu,
     setContextMenu,
+    ydoc, // May be undefined initially (will trigger re-init when defined)
+    provider: websocketProvider,
   });
 
   // Editor Mode Hook
@@ -180,6 +222,9 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
 
   // Syntax Highlighting Hook
   useSyntaxHighlighting(editor);
+
+  // ✅ STEP 4: Hydration moved to WorkspaceContext (data layer)
+  // Editor is now a pure renderer - receives only ydoc, no initialContent
 
   // Update title (only when title changes, not when callback changes)
   const prevTitleRef = useRef<string>(title);
@@ -237,9 +282,7 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
   const handleMarkdownChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newMarkdown = e.target.value;
     setMarkdownContent(newMarkdown);
-    if (onContentChange) {
-      onContentChange(newMarkdown);
-    }
+    // ❌ STEP 1: No auto-save on change (Yjs will handle in STEP 3)
   };
 
   // Toolbar actions
@@ -338,8 +381,7 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
         requestAnimationFrame(() => {
           isProgrammaticUpdateRef.current = false;
           try { editor.commands.focus(); } catch { }
-          const md = htmlToMarkdown('', editor);
-          onContentChange?.(md);
+          // ❌ STEP 1: No auto-save on import (manual save only)
         });
         toast({ title: 'File imported', description: `Replaced document with "${file.name}"` });
       } else if (editor) {
@@ -415,6 +457,131 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
     }
   };
 
+  // Save Handlers
+  const handleSaveToCloud = async () => {
+    if (!documentId || !isAuthenticated) {
+      toast({ 
+        title: 'Cannot save to cloud', 
+        description: 'Please log in to save documents to the cloud.', 
+        variant: 'destructive' 
+      });
+      return;
+    }
+
+    if (!editor) {
+      toast({ 
+        title: 'Cannot save', 
+        description: 'Editor is not ready.', 
+        variant: 'destructive' 
+      });
+      return;
+    }
+
+    try {
+      toast({ title: 'Saving to cloud...', description: 'Please wait...' });
+      
+      // 🔥 FIX: Get live content from editor, not stale cache
+      const liveContent = htmlToMarkdown('', editor);
+      console.log('☁️ [Cloud Save] Sending content:', liveContent.substring(0, 100) + '...');
+      
+      const result = await selectiveSyncService.pushDocument(documentId, liveContent);
+      
+      if (result.success) {
+        toast({ title: 'Saved to cloud', description: 'Document synced successfully.' });
+        
+        // 🔥 Refresh documents to update sync status icon in sidebar
+        // The sync status is already updated in IndexedDB by pushDocument
+        // We just need to reload the documents list to reflect the change
+        await refreshDocuments();
+      } else if (result.status === 'conflict') {
+        toast({ 
+          title: 'Conflict detected', 
+          description: 'Cloud version is newer. Please resolve conflicts.', 
+          variant: 'destructive' 
+        });
+      } else {
+        toast({ 
+          title: 'Save failed', 
+          description: result.error || 'Failed to save to cloud.', 
+          variant: 'destructive' 
+        });
+      }
+    } catch (err) {
+      console.error('Failed to save to cloud:', err);
+      toast({ 
+        title: 'Save failed', 
+        description: 'An error occurred while saving to cloud.', 
+        variant: 'destructive' 
+      });
+    }
+  };
+
+  const handleSaveAsLocal = async () => {
+    if (!documentId) {
+      toast({ 
+        title: 'Cannot save', 
+        description: 'No document selected.', 
+        variant: 'destructive' 
+      });
+      return;
+    }
+
+    try {
+      toast({ title: 'Saving to local machine...', description: 'Please wait...' });
+      
+      // Get content from editor directly (most reliable)
+      let editorContent: string | undefined;
+      if (editor) {
+        // Convert editor HTML to markdown
+        editorContent = htmlToMarkdown('', editor);
+      }
+      
+      const result = await documentExportService.exportToLocalMachine(
+        documentId,
+        title || 'Untitled Document',
+        { format: 'markdown' },
+        editorContent // Pass editor content directly
+      );
+
+      if (result.success) {
+        toast({ 
+          title: 'Saved successfully', 
+          description: result.path ? `Saved to: ${result.path}` : 'Document saved to local machine.' 
+        });
+      } else {
+        toast({ 
+          title: 'Save failed', 
+          description: result.error || 'Failed to save document.', 
+          variant: 'destructive' 
+        });
+      }
+    } catch (err) {
+      console.error('Failed to save as local:', err);
+      toast({ 
+        title: 'Save failed', 
+        description: 'An error occurred while saving.', 
+        variant: 'destructive' 
+      });
+    }
+  };
+
+  const handleSaveLocally = () => {
+    // ❌ STEP 1: Manual save disabled (no persistence layer yet)
+    // Will be re-implemented in STEP 5 via Yjs snapshot export
+    toast({ 
+      title: 'Save disabled (STEP 1)', 
+      description: 'Persistence will be re-enabled in STEP 3 via Yjs.', 
+      variant: 'destructive' 
+    });
+  };
+
+  // ❌ STEP 1: Auto-save to cloud DISABLED
+  // Will be re-implemented in STEP 5 using ydoc.on('update') instead of editor.on('update')
+  // 
+  // useEffect(() => {
+  //   // DISABLED for STEP 1 baseline
+  // }, []);
+
   // Context Menu Handlers
   const handleContextFormat = (format: string) => {
     if (!editor) return;
@@ -459,8 +626,21 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
     }
   };
 
+  // 🔥 RULES OF HOOKS FIX: Conditional rendering AFTER all hooks
+  // This prevents mounting TipTap without Yjs, but doesn't violate Rules of Hooks
+  if (!ydoc) {
+    return (
+      <div className="flex items-center justify-center h-screen text-muted-foreground">
+        <div className="text-center">
+          <p className="text-lg">Loading document...</p>
+          <p className="text-sm mt-2">Initializing IndexedDB storage...</p>
+        </div>
+      </div>
+    );
+  }
+  
   if (!editor) {
-    return <div className="flex items-center justify-center h-screen">Loading editor...</div>;
+    return <div className="flex items-center justify-center h-screen text-muted-foreground">Initializing editor...</div>;
   }
 
   return (
@@ -475,10 +655,7 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
         onAIFormat={handleAIFormat}
         onShowDiagramMenu={() => setShowDiagramMenu(true)}
         onShowMindmapChoice={() => {
-          if (editor && onContentChange) {
-            const markdown = htmlToMarkdown('', editor);
-            onContentChange(markdown);
-          }
+          // ❌ STEP 1: No auto-save before mindmap (Yjs will handle in STEP 3)
           setShowMindmapChoiceModal(true);
         }}
         onShowKeyboardShortcuts={() => setShowKeyboardShortcuts(true)}
@@ -490,11 +667,16 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
         onAIHintsChange={setAiSuggestionsEnabled}
         onImportFile={triggerOpenFile}
         onExportMarkdown={exportAsMarkdown}
+        onSaveToCloud={handleSaveToCloud}
+        onSaveAsLocal={handleSaveAsLocal}
+        onSaveLocally={handleSaveLocally}
         onSave={() => {
-          if (onContentChange && editor) {
-            const markdown = htmlToMarkdown('', editor);
-            onContentChange(markdown);
-          }
+          // ❌ STEP 1: Legacy save disabled (no persistence)
+          toast({ 
+            title: 'Save disabled (STEP 1)', 
+            description: 'Use "Save to Cloud" or "Save As Local" buttons.', 
+            variant: 'destructive' 
+          });
         }}
         onShare={() => console.log('Share clicked')}
       />
@@ -521,10 +703,7 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
               AI Assistant
             </Button>
             <Button size="sm" variant="outline" className="border-primary/50 hover:bg-primary/10" onClick={() => {
-                if (editor && onContentChange) {
-                  const markdown = htmlToMarkdown('', editor);
-                  onContentChange(markdown);
-                }
+                // ❌ STEP 1: No auto-save before mindmap (Yjs will handle in STEP 3)
                 setShowMindmapChoiceModal(true);
             }} title="Open Mindmap Studio">
               <Network className="h-4 w-4 mr-1" />
@@ -544,15 +723,30 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
               <FileText className="h-4 w-4" />
               <span className="text-xs">{editorMode === 'wysiwyg' ? 'Markdown' : 'WYSIWYG'}</span>
             </Button>
-            <Separator orientation="vertical" className="h-6 mx-1" />
-            <Button size="sm" variant="ghost" onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()} title="Undo (Ctrl+Z)">
+            {/* ❌ STEP 3: Undo/Redo buttons disabled - Yjs Collaboration provides undo/redo via keyboard shortcuts (Ctrl+Z/Ctrl+Y) */}
+            {/* Will be re-enabled in STEP 4 with proper Yjs undo/redo commands */}
+            {/* <Separator orientation="vertical" className="h-6 mx-1" /> */}
+            {/* <Button size="sm" variant="ghost" onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()} title="Undo (Ctrl+Z)">
               <Undo className="h-4 w-4" />
             </Button>
             <Button size="sm" variant="ghost" onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()} title="Redo (Ctrl+Y)">
               <Redo className="h-4 w-4" />
-            </Button>
+            </Button> */}
           </div>
           <div className="flex items-center gap-3">
+            {isAuthenticated && documentId && (
+              <div className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-accent transition-colors">
+                <Switch
+                  id="auto-save-cloud"
+                  checked={autoSaveToCloud}
+                  onCheckedChange={setAutoSaveToCloud}
+                  disabled={!isAuthenticated || !documentId}
+                />
+                <Label htmlFor="auto-save-cloud" className="text-xs cursor-pointer">
+                  Auto-save to Cloud
+                </Label>
+              </div>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" variant="ghost"><MoreVertical className="h-4 w-4" /></Button>
@@ -574,7 +768,31 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
                   <div className="flex flex-col"><span>Export as Markdown</span><span className="text-xs text-muted-foreground">Download as .md file</span></div>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem><Save className="h-4 w-4 mr-2" />Save<span className="ml-auto text-xs text-muted-foreground">Ctrl+S</span></DropdownMenuItem>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <Save className="h-4 w-4 mr-2" />
+                    <span>Save</span>
+                    <span className="ml-auto text-xs text-muted-foreground">Ctrl+S</span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {isAuthenticated && (
+                      <DropdownMenuItem onClick={handleSaveToCloud}>
+                        <Cloud className="h-4 w-4 mr-2" />
+                        <div className="flex flex-col">
+                          <span>Save to Cloud</span>
+                          <span className="text-xs text-muted-foreground">Sync to cloud storage</span>
+                        </div>
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={handleSaveAsLocal}>
+                      <HardDrive className="h-4 w-4 mr-2" />
+                      <div className="flex flex-col">
+                        <span>Save Locally</span>
+                        <span className="text-xs text-muted-foreground">Save to computer disk</span>
+                      </div>
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
                 <DropdownMenuItem><Share className="h-4 w-4 mr-2" />Share</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -582,11 +800,11 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto bg-background">
+      <div className="flex-1 overflow-y-auto bg-background" data-testid="editor-container">
         {editorMode === 'wysiwyg' ? (
           <>
             <FixedToolbar editor={editor} />
-            <EditorContent editor={editor} />
+            <EditorContent editor={editor} data-testid="wysiwyg-editor" />
             {editor && <FloatingToolbar editor={editor} />}
             {editor && <LinkHoverToolbar editor={editor} />}
           </>
@@ -598,6 +816,7 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
             className="w-full h-full p-6 resize-none border-0 focus:outline-none font-mono text-sm leading-relaxed bg-background"
             placeholder="# Start writing in Markdown..."
             spellCheck="true"
+            data-testid="markdown-editor"
           />
         )}
       </div>
@@ -731,6 +950,9 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
           onClose={() => setShowCommentButton(false)}
         />
       )}
+      
+      {/* Collaboration UI - DISABLED (Yjs removed) */}
+      {/* Sync Status Indicator - DISABLED (Yjs removed) */}
     </div>
   );
 };

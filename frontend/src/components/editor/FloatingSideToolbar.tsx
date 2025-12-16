@@ -59,6 +59,8 @@ import {
   Share,
   ChevronDown,
   FolderOpen,
+  Cloud,
+  HardDrive,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -67,11 +69,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   DropdownMenuLabel,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
 import type { Editor } from '@tiptap/react';
 
 import { useEditorUIStore } from '@/stores/editorUIStore';
+import { useAuth } from '@/hooks/useAuth';
 
 interface FloatingSideToolbarProps {
   editor: Editor;
@@ -90,7 +96,10 @@ interface FloatingSideToolbarProps {
   onAIHintsChange?: (enabled: boolean) => void;
   onImportFile?: (replaceDocument: boolean) => void;
   onExportMarkdown?: () => void;
-  onSave?: () => void;
+  onSave?: () => void; // Legacy: kept for backward compatibility
+  onSaveToCloud?: () => void;
+  onSaveAsLocal?: () => void;
+  onSaveLocally?: () => void;
   onShare?: () => void;
   onAIFormat?: () => void; // Added onAIFormat to props
   onAutoFormat?: () => void; // Kept onAutoFormat as it's used in the expanded panel
@@ -150,6 +159,9 @@ export const FloatingSideToolbar: React.FC<FloatingSideToolbarProps> = ({
   onImportFile,
   onExportMarkdown,
   onSave,
+  onSaveToCloud,
+  onSaveAsLocal,
+  onSaveLocally,
   onShare,
   onAIFormat,
 }) => {
@@ -157,6 +169,7 @@ export const FloatingSideToolbar: React.FC<FloatingSideToolbarProps> = ({
   const [, forceUpdate] = React.useReducer((x) => x + 1, 0);
 
   const { setShowAIModal } = useEditorUIStore();
+  const { isAuthenticated } = useAuth();
 
   // State for UI interactions
   const [hoveredButton, setHoveredButton] = useState<string | null>(null);
@@ -607,68 +620,9 @@ export const FloatingSideToolbar: React.FC<FloatingSideToolbarProps> = ({
         {/* Divider */}
         <div className="w-full h-px bg-border/30 my-1" />
 
-        {/* Tools - Undo/Redo (Direct JSX) */}
-        <TooltipProvider delayDuration={100}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={() => editor.chain().focus().undo().run()}
-                disabled={!editor.can().undo()}
-                onMouseEnter={() => setHoveredButton('undo')}
-                onMouseLeave={() => setHoveredButton(null)}
-                className={`
-                  relative w-8 h-8 rounded-lg
-                  flex items-center justify-center
-                  transition-all duration-150 ease-out
-                  group
-                  flex-shrink-0
-                  ${!editor.can().undo() ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}
-                  text-foreground/60 hover:text-foreground hover:bg-muted/50
-                  ${hoveredButton === 'undo' ? 'scale-105' : ''}
-                `}
-              >
-                <Undo className="h-3.5 w-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="left" className="bg-popover/95 backdrop-blur-xl border border-border/50 shadow-xl px-3 py-2">
-              <div className="flex flex-col gap-0.5">
-                <span className="font-semibold text-sm">Undo</span>
-                <span className="text-xs text-muted-foreground font-mono">Ctrl+Z</span>
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-
-        <TooltipProvider delayDuration={100}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={() => editor.chain().focus().redo().run()}
-                disabled={!editor.can().redo()}
-                onMouseEnter={() => setHoveredButton('redo')}
-                onMouseLeave={() => setHoveredButton(null)}
-                className={`
-                  relative w-8 h-8 rounded-lg
-                  flex items-center justify-center
-                  transition-all duration-150 ease-out
-                  group
-                  flex-shrink-0
-                  ${!editor.can().redo() ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}
-                  text-foreground/60 hover:text-foreground hover:bg-muted/50
-                  ${hoveredButton === 'redo' ? 'scale-105' : ''}
-                `}
-              >
-                <Redo className="h-3.5 w-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="left" className="bg-popover/95 backdrop-blur-xl border border-border/50 shadow-xl px-3 py-2">
-              <div className="flex flex-col gap-0.5">
-                <span className="font-semibold text-sm">Redo</span>
-                <span className="text-xs text-muted-foreground font-mono">Ctrl+Y</span>
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        {/* ❌ STEP 3: Undo/Redo buttons disabled - Yjs Collaboration provides undo/redo via keyboard shortcuts (Ctrl+Z/Ctrl+Y) */}
+        {/* Will be re-enabled in STEP 4 with proper Yjs undo/redo commands */}
+        {/* NOTE: Yjs undo/redo works via Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) automatically */}
 
         {/* More Tools Dropdown */}
         <DropdownMenu>
@@ -691,7 +645,7 @@ export const FloatingSideToolbar: React.FC<FloatingSideToolbarProps> = ({
           <DropdownMenuContent
             side="left"
             align="start"
-            className="w-64 bg-popover/95 backdrop-blur-xl border border-border/50 shadow-2xl rounded-2xl p-2"
+            className="w-64 bg-popover/95 backdrop-blur-xl border border-border/50 shadow-2xl rounded-2xl p-2 z-[55] overflow-visible"
           >
             {/* Import Section */}
             <DropdownMenuLabel className="text-xs px-2 py-1.5">Import Document</DropdownMenuLabel>
@@ -740,15 +694,66 @@ export const FloatingSideToolbar: React.FC<FloatingSideToolbarProps> = ({
             <DropdownMenuSeparator />
 
             {/* Other Actions */}
-            {onSave && (
-              <DropdownMenuItem
-                onClick={() => onSave()}
-                className="rounded-xl px-3 py-2.5 mb-1 hover:bg-muted/60 transition-all"
-              >
-                <Save className="h-4 w-4 mr-3" />
-                <span className="flex-1">Save</span>
-                <span className="text-xs text-muted-foreground font-mono ml-2">Ctrl+S</span>
-              </DropdownMenuItem>
+            {(onSave || onSaveToCloud || onSaveAsLocal || onSaveLocally) && (
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger 
+                  className="rounded-xl px-3 py-2.5 mb-1 hover:bg-muted/60 transition-all"
+                  onClick={() => console.log('🔄 FloatingSideToolbar: Save submenu opened', { 
+                    isAuthenticated, 
+                    onSaveToCloud: !!onSaveToCloud, 
+                    onSaveAsLocal: !!onSaveAsLocal, 
+                    onSaveLocally: !!onSaveLocally,
+                    onSave: !!onSave 
+                  })}
+                >
+                  <Save className="h-4 w-4 mr-3" />
+                  <span className="flex-1">Save</span>
+                  <span className="text-xs text-muted-foreground font-mono ml-2">Ctrl+S</span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent 
+                  side="left"
+                  align="start"
+                  className="min-w-[200px] bg-popover/95 backdrop-blur-xl border border-border/50 shadow-2xl rounded-2xl !z-[9999]"
+                  style={{ 
+                    marginLeft: '-8px'
+                  }}
+                >
+                  {isAuthenticated && onSaveToCloud && (
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('🔄 FloatingSideToolbar: Save to Cloud clicked');
+                        onSaveToCloud();
+                      }}
+                      className="rounded-xl px-3 py-2.5 mb-1 hover:bg-muted/60 transition-all"
+                    >
+                      <Cloud className="h-4 w-4 mr-3" />
+                      <div className="flex flex-col">
+                        <span>Save to Cloud</span>
+                        <span className="text-xs text-muted-foreground">Sync to cloud storage</span>
+                      </div>
+                    </DropdownMenuItem>
+                  )}
+                  {onSaveAsLocal && (
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('🔄 FloatingSideToolbar: Save Locally (to disk) clicked');
+                        onSaveAsLocal();
+                      }}
+                      className="rounded-xl px-3 py-2.5 mb-1 hover:bg-muted/60 transition-all"
+                    >
+                      <HardDrive className="h-4 w-4 mr-3" />
+                      <div className="flex flex-col">
+                        <span>Save Locally</span>
+                        <span className="text-xs text-muted-foreground">Save to computer disk</span>
+                      </div>
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
             )}
             {onShare && (
               <DropdownMenuItem

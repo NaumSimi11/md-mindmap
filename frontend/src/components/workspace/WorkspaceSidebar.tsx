@@ -13,6 +13,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -29,15 +30,25 @@ import {
   ChevronDown,
   MoreVertical,
   Edit,
+  Edit2,
   Trash2,
   FolderPlus,
+  Cloud,
+  CloudOff,
+  Download,
+  Upload,
 } from 'lucide-react';
-import { workspaceService, type Document, type Folder as WorkspaceFolder } from '@/services/workspace/WorkspaceService';
+import { workspaceService, type Document, type Folder as WorkspaceFolder } from '@/services/workspace-legacy/WorkspaceService';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useBackendFolders } from '@/hooks/useBackendFolders';
 import { useDragAndDrop } from '@/hooks/useDragAndDrop';
 import { CreateFolderModal } from './CreateFolderModal';
 import { ImportDocumentButton } from './ImportDocumentButton';
+import { ConfirmDeleteDialog } from './ConfirmDeleteDialog';
+import { SyncStatusIcon } from './SyncStatusIcon';
+import { selectiveSyncService } from '@/services/sync/SelectiveSyncService';
+import { useAuth } from '@/hooks/useAuth';
+import { useSyncMode } from '@/hooks/useSyncMode';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,6 +56,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { NewDocumentModal } from './NewDocumentModal';
+import { RenameWorkspaceDialog } from './RenameWorkspaceDialog';
+import { guestWorkspaceService } from '@/services/workspace/GuestWorkspaceService';
 
 interface WorkspaceSidebarProps {
   onDocumentSelect: (documentId: string) => void;
@@ -57,13 +70,22 @@ export function WorkspaceSidebar({
   currentDocumentId,
   onLoadDemo,
 }: WorkspaceSidebarProps) {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
+  const { isAuthenticated } = useAuth();
+  const { isOnlineMode } = useSyncMode();
   // 🔥 USE SHARED WORKSPACE CONTEXT
-  const { documents: backendDocuments, currentWorkspace, updateDocument: backendUpdateDocument } = useWorkspace();
+  const { 
+    documents: backendDocuments, 
+    currentWorkspace, 
+    updateDocument: backendUpdateDocument, 
+    refreshDocuments,
+    deleteDocument: contextDeleteDocument,
+    createDocument, // 🔥 ADD: Need this for document creation
+  } = useWorkspace();
   const { folderTree, createFolder, updateFolder, deleteFolder } = useBackendFolders();
   
-  // Force re-render on workspace change
-  const workspaceKey = currentWorkspace?.id || 'no-workspace';
+  // Force re-render on workspace change (controlled by state for rename)
   
   // Calculate document distribution
   const rootDocs = backendDocuments.filter(doc => !doc.folderId);
@@ -97,6 +119,10 @@ export function WorkspaceSidebar({
   const [activeSection, setActiveSection] = useState<'all' | 'recent' | 'starred'>('all');
   const [showNewDocModal, setShowNewDocModal] = useState(false);
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [documentToDelete, setDocumentToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [showRenameWorkspace, setShowRenameWorkspace] = useState(false);
+  const [workspaceKey, setWorkspaceKey] = useState(0);
   
   // Auto-expand all folders when they load
   useEffect(() => {
@@ -214,8 +240,23 @@ export function WorkspaceSidebar({
   };
 
   const handleDeleteDocument = async (documentId: string) => {
-    if (confirm('Delete this document? This cannot be undone.')) {
-      await workspaceService.deleteDocument(documentId);
+    // Find document name for confirmation dialog
+    const doc = backendDocuments.find(d => d.id === documentId);
+    setDocumentToDelete({ id: documentId, name: doc?.title || 'this document' });
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDeleteDocument = async () => {
+    if (!documentToDelete) return;
+    
+    try {
+      await contextDeleteDocument(documentToDelete.id);
+      console.log('✅ Document deleted successfully');
+    } catch (error) {
+      console.error('❌ Failed to delete document:', error);
+      alert('Failed to delete document. Please try again.');
+    } finally {
+      setDocumentToDelete(null);
     }
   };
 
@@ -237,6 +278,91 @@ export function WorkspaceSidebar({
       console.log(`✅ Moved document to folder: ${folderId || 'root'}`);
     } catch (error) {
       console.error('Failed to move document:', error);
+    }
+  };
+
+  // Sync handlers
+  const handlePushToCloud = async (documentId: string) => {
+    // Check if online mode is enabled
+    if (!isOnlineMode) {
+      alert('Cannot push to cloud in Offline mode.\n\nSwitch to Online mode to sync.');
+      return;
+    }
+    
+    try {
+      const result = await selectiveSyncService.pushDocument(documentId);
+      if (result.success) {
+        console.log('✅ Document pushed to cloud');
+        // ✅ FIX 1: Removed refreshDocuments() - push must NOT touch sidebar
+        // The document is already in the local index
+        // Sync state will be updated via FIX 2
+      } else if (result.status === 'conflict') {
+        alert(`Conflict: ${result.error}\n\nPlease resolve the conflict manually.`);
+      } else {
+        alert(`Failed to push: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('❌ Failed to push document:', error);
+      alert('Failed to push document to cloud');
+    }
+  };
+
+  const handlePullFromCloud = async (documentId: string) => {
+    // Check if online mode is enabled
+    if (!isOnlineMode) {
+      alert('Cannot pull from cloud in Offline mode.\n\nSwitch to Online mode to sync.');
+      return;
+    }
+    
+    try {
+      const result = await selectiveSyncService.pullDocument(documentId);
+      if (result.success) {
+        console.log('✅ Document pulled from cloud');
+        await refreshDocuments();
+      } else if (result.status === 'conflict') {
+        alert(`Conflict: ${result.error}\n\nPlease resolve the conflict manually.`);
+      } else {
+        alert(`Failed to pull: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('❌ Failed to pull document:', error);
+      alert('Failed to pull document from cloud');
+    }
+  };
+
+  const handleMarkLocalOnly = async (documentId: string) => {
+    try {
+      await selectiveSyncService.markAsLocalOnly(documentId);
+      console.log('✅ Document marked as local-only');
+      await refreshDocuments();
+    } catch (error) {
+      console.error('❌ Failed to mark as local-only:', error);
+      alert('Failed to mark document as local-only');
+    }
+  };
+
+  const handleRenameWorkspace = async (newName: string) => {
+    console.log('🔄 Renaming workspace to:', newName);
+    
+    if (!currentWorkspace) {
+      console.error('❌ No current workspace to rename');
+      return;
+    }
+    
+    try {
+      // Update workspace in IndexedDB
+      await guestWorkspaceService.updateWorkspace(currentWorkspace.id, { name: newName });
+      console.log('✅ Workspace renamed successfully');
+      
+      // Close the dialog
+      setShowRenameWorkspace(false);
+      
+      // Force a page reload to refresh the context
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
+    } catch (error) {
+      console.error('❌ Failed to rename workspace:', error);
     }
   };
 
@@ -268,14 +394,23 @@ export function WorkspaceSidebar({
         : backendDocuments;
 
   return (
-    <div key={workspaceKey} className="w-72 border-r border-border bg-card flex flex-col h-full">
+    <div key={`workspace-${workspaceKey}`} className="w-72 border-r border-border bg-card flex flex-col h-full" data-testid="workspace-sidebar">
       {/* Header */}
       <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-lg flex items-center gap-2">
             <span>{currentWorkspace?.icon || '🚀'}</span>
-            <span>{currentWorkspace?.name || 'My Workspace'}</span>
+            <span>{currentWorkspace?.name || 'Workspace'}</span>
           </h2>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setShowRenameWorkspace(true)}
+            className="h-7 w-7 p-0"
+            title="Rename workspace"
+          >
+            <Edit2 className="h-4 w-4" />
+          </Button>
         </div>
 
         {/* Search */}
@@ -293,6 +428,7 @@ export function WorkspaceSidebar({
         <div className="flex flex-col gap-2">
           <div className="flex gap-2">
             <Button
+              data-testid="new-document"
               size="sm"
               className="flex-1"
               onClick={() => setShowNewDocModal(true)}
@@ -301,6 +437,7 @@ export function WorkspaceSidebar({
               New Doc
             </Button>
             <Button
+              data-testid="new-folder"
               size="sm"
               variant="outline"
               onClick={handleCreateFolder}
@@ -310,7 +447,7 @@ export function WorkspaceSidebar({
           </div>
           
           {/* Import Button */}
-          <ImportDocumentButton variant="outline" size="sm" className="w-full" />
+          <ImportDocumentButton variant="outline" size="sm" className="w-full" data-testid="import-document-button" />
         </div>
       </div>
 
@@ -318,9 +455,12 @@ export function WorkspaceSidebar({
       <NewDocumentModal
         isOpen={showNewDocModal}
         onClose={() => setShowNewDocModal(false)}
-        onDocumentCreated={(docId) => {
-          onDocumentSelect(docId);
+        onDocumentCreated={(docId, doc) => {
+          console.log('✅ Document created in sidebar:', docId, doc);
+          // Navigate directly - document is already in WorkspaceContext state
+          navigate(`/workspace/doc/${docId}/edit`);
         }}
+        createDocument={createDocument} // 🔥 PASS: createDocument function
       />
 
       {/* Create Folder Modal */}
@@ -330,6 +470,28 @@ export function WorkspaceSidebar({
         onCreate={async (data) => {
           await createFolder(data);
         }}
+      />
+
+      {/* Rename Workspace Dialog */}
+      <RenameWorkspaceDialog
+        open={showRenameWorkspace}
+        onClose={() => setShowRenameWorkspace(false)}
+        onRename={handleRenameWorkspace}
+        currentName={currentWorkspace?.name || 'My Local Workspace'}
+      />
+
+      {/* Confirm Delete Dialog */}
+      <ConfirmDeleteDialog
+        open={showDeleteDialog}
+        onClose={() => {
+          setShowDeleteDialog(false);
+          setDocumentToDelete(null);
+        }}
+        onConfirm={confirmDeleteDocument}
+        title="Delete Document?"
+        description="This action cannot be undone. The document will be permanently deleted."
+        itemName={documentToDelete?.name}
+        destructiveActionLabel="Delete"
       />
 
       {/* Section Tabs */}
@@ -388,6 +550,11 @@ export function WorkspaceSidebar({
                     onToggleStar={() => handleToggleStar(doc.id)}
                     onDelete={() => handleDeleteDocument(doc.id)}
                     getIcon={getDocumentIcon}
+                    onPushToCloud={() => handlePushToCloud(doc.id)}
+                    onPullFromCloud={() => handlePullFromCloud(doc.id)}
+                    onMarkLocalOnly={() => handleMarkLocalOnly(doc.id)}
+                    isAuthenticated={isAuthenticated}
+                    isOnlineMode={isOnlineMode}
                   />
                 ))
               )}
@@ -412,6 +579,11 @@ export function WorkspaceSidebar({
                     onToggleStar={() => handleToggleStar(doc.id)}
                     onDelete={() => handleDeleteDocument(doc.id)}
                     getIcon={getDocumentIcon}
+                    onPushToCloud={() => handlePushToCloud(doc.id)}
+                    onPullFromCloud={() => handlePullFromCloud(doc.id)}
+                    onMarkLocalOnly={() => handleMarkLocalOnly(doc.id)}
+                    isAuthenticated={isAuthenticated}
+                    isOnlineMode={isOnlineMode}
                   />
                 ))
               )}
@@ -428,6 +600,7 @@ export function WorkspaceSidebar({
                   document={doc}
                   isActive={doc.id === currentDocumentId}
                   onClick={() => {
+                    console.log('📄 [Sidebar] Document clicked:', doc.id, doc.title);
                     onDocumentSelect(doc.id);
                   }}
                   onToggleStar={() => handleToggleStar(doc.id)}
@@ -437,6 +610,11 @@ export function WorkspaceSidebar({
                   onDragStart={() => handleDragStart({ type: 'document', id: doc.id, title: doc.title })}
                   onDragEnd={handleDragEnd}
                   isDragging={draggedItem?.id === doc.id}
+                  onPushToCloud={() => handlePushToCloud(doc.id)}
+                  onPullFromCloud={() => handlePullFromCloud(doc.id)}
+                  onMarkLocalOnly={() => handleMarkLocalOnly(doc.id)}
+                  isAuthenticated={isAuthenticated}
+                  isOnlineMode={isOnlineMode}
                 />
               ))}
 
@@ -450,6 +628,13 @@ export function WorkspaceSidebar({
                     onToggle={() => toggleFolder(folder.id)}
                     onRename={(name) => handleRenameFolder(folder.id, name)}
                     onDelete={() => handleDeleteFolder(folder.id)}
+                    onDeleteDocument={handleDeleteDocument} // 🔥 FIX: Pass delete handler
+                    onToggleStar={handleToggleStar} // 🔥 FIX: Pass star handler
+                    onPushToCloud={handlePushToCloud}
+                    onPullFromCloud={handlePullFromCloud}
+                    onMarkLocalOnly={handleMarkLocalOnly}
+                    isAuthenticated={isAuthenticated}
+                    isOnlineMode={isOnlineMode}
                     currentDocumentId={currentDocumentId}
                     onDocumentSelect={onDocumentSelect}
                     getDocumentIcon={getDocumentIcon}
@@ -512,6 +697,8 @@ interface BackendFolderItemProps {
   onToggle: () => void;
   onRename: (currentName: string) => void;
   onDelete: () => void;
+  onDeleteDocument: (documentId: string) => void; // 🔥 ADD: For deleting documents inside folder
+  onToggleStar: (documentId: string) => void; // 🔥 ADD: For starring documents inside folder
   currentDocumentId?: string;
   onDocumentSelect: (documentId: string) => void;
   getDocumentIcon: (type: Document['type']) => JSX.Element;
@@ -527,6 +714,12 @@ interface BackendFolderItemProps {
   onDragLeave: () => void;
   onDrop: (e: React.DragEvent, targetId: string | null, callback: (draggedId: string, targetId: string | null) => void) => void;
   onMoveDocument: (documentId: string, folderId: string | null) => void;
+  // Sync props
+  onPushToCloud: (documentId: string) => void;
+  onPullFromCloud: (documentId: string) => void;
+  onMarkLocalOnly: (documentId: string) => void;
+  isAuthenticated: boolean;
+  isOnlineMode: boolean;
 }
 
 function BackendFolderItem({
@@ -535,6 +728,13 @@ function BackendFolderItem({
   onToggle,
   onRename,
   onDelete,
+  onDeleteDocument, // 🔥 ADD
+  onToggleStar, // 🔥 ADD
+  onPushToCloud,
+  onPullFromCloud,
+  onMarkLocalOnly,
+  isAuthenticated,
+  isOnlineMode,
   currentDocumentId,
   onDocumentSelect,
   getDocumentIcon,
@@ -603,11 +803,17 @@ function BackendFolderItem({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onRename(folder.name)}>
+            <DropdownMenuItem onClick={(e) => {
+              e.stopPropagation();
+              onRename(folder.name);
+            }}>
               <Edit className="h-3.5 w-3.5 mr-2" />
               Rename
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={onDelete} className="text-red-600">
+            <DropdownMenuItem onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }} className="text-red-600">
               <Trash2 className="h-3.5 w-3.5 mr-2" />
               Delete
             </DropdownMenuItem>
@@ -625,14 +831,19 @@ function BackendFolderItem({
               document={doc}
               isActive={doc.id === currentDocumentId}
               onClick={() => onDocumentSelect(doc.id)}
-              onToggleStar={() => {}}
-              onDelete={() => {}}
+              onToggleStar={() => onToggleStar(doc.id)} // 🔥 FIX: Use passed prop
+              onDelete={() => onDeleteDocument(doc.id)} // 🔥 FIX: Use passed prop
               getIcon={getDocumentIcon}
               level={level + 1}
               draggable={true}
               onDragStart={() => onDragStart({ type: 'document', id: doc.id, title: doc.title })}
               onDragEnd={onDragEnd}
               isDragging={draggedItem?.id === doc.id}
+              onPushToCloud={() => onPushToCloud(doc.id)}
+              onPullFromCloud={() => onPullFromCloud(doc.id)}
+              onMarkLocalOnly={() => onMarkLocalOnly(doc.id)}
+              isAuthenticated={isAuthenticated}
+              isOnlineMode={isOnlineMode}
             />
           ))}
 
@@ -645,6 +856,13 @@ function BackendFolderItem({
               onToggle={() => {}}
               onRename={onRename}
               onDelete={onDelete}
+              onDeleteDocument={onDeleteDocument} // 🔥 FIX: Pass through to subfolders
+              onToggleStar={onToggleStar} // 🔥 FIX: Pass through to subfolders
+              onPushToCloud={onPushToCloud}
+              onPullFromCloud={onPullFromCloud}
+              onMarkLocalOnly={onMarkLocalOnly}
+              isAuthenticated={isAuthenticated}
+              isOnlineMode={isOnlineMode}
               currentDocumentId={currentDocumentId}
               onDocumentSelect={onDocumentSelect}
               getDocumentIcon={getDocumentIcon}
@@ -683,6 +901,11 @@ interface DocumentItemProps {
   onDragStart?: () => void;
   onDragEnd?: () => void;
   isDragging?: boolean;
+  onPushToCloud?: () => void;
+  onPullFromCloud?: () => void;
+  onMarkLocalOnly?: () => void;
+  isAuthenticated?: boolean;
+  isOnlineMode?: boolean;
 }
 
 function DocumentItem({
@@ -697,14 +920,27 @@ function DocumentItem({
   onDragStart,
   onDragEnd,
   isDragging = false,
+  onPushToCloud,
+  onPullFromCloud,
+  onMarkLocalOnly,
+  isAuthenticated = false,
+  isOnlineMode = false,
 }: DocumentItemProps) {
+  const slug = document.title
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+
   return (
     <div
       draggable={draggable}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      onClick={onClick}
+      data-testid={`document-item-${slug}`}
       className={`
-        flex items-center gap-2 px-2 py-1.5 rounded group
+        flex items-center gap-2 px-2 py-1.5 rounded group cursor-pointer
         ${isActive ? 'bg-primary/10 text-primary' : 'hover:bg-accent'}
         ${isDragging ? 'opacity-50' : ''}
       `}
@@ -712,18 +948,22 @@ function DocumentItem({
       title={document.title}
     >
       {/* Icon */}
-      <div className="flex-shrink-0" onClick={onClick}>
+      <div className="flex-shrink-0">
         {getIcon(document.type)}
       </div>
 
       {/* Title - fixed max-width, truncates */}
       <span 
-        className="text-sm truncate flex-1 cursor-pointer" 
-        style={{ maxWidth: '130px' }}
-        onClick={onClick}
+        className="text-sm truncate flex-1" 
+        style={{ maxWidth: '110px' }}
       >
         {document.title}
       </span>
+
+      {/* Sync Status Icon */}
+      {document.sync && (
+        <SyncStatusIcon status={document.sync.status} size="sm" />
+      )}
 
       {/* 3-dot menu - ALWAYS VISIBLE */}
       <DropdownMenu>
@@ -731,16 +971,59 @@ function DocumentItem({
           <button
             onClick={(e) => e.stopPropagation()}
             className="ml-auto p-1 hover:bg-muted rounded flex-shrink-0"
+            data-testid={`document-menu-${slug}`}
           >
             <MoreVertical className="h-3.5 w-3.5" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={onToggleStar}>
+          <DropdownMenuItem onClick={(e) => {
+            e.stopPropagation();
+            onToggleStar();
+          }}>
             <Star className={`h-3.5 w-3.5 mr-2 ${document.starred ? 'fill-yellow-500 text-yellow-500' : ''}`} />
             {document.starred ? 'Unstar' : 'Star'}
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={onDelete} className="text-red-600">
+          
+          {/* Sync Actions - Only for authenticated users in online mode */}
+          {isAuthenticated && isOnlineMode && document.sync && (
+            <>
+              {document.sync.status === 'local' && onPushToCloud && (
+                <DropdownMenuItem onClick={(e) => {
+                  e.stopPropagation();
+                  onPushToCloud();
+                }}>
+                  <Upload className="h-3.5 w-3.5 mr-2" />
+                  Push to Cloud
+                </DropdownMenuItem>
+              )}
+              
+              {document.sync.status === 'synced' && onPullFromCloud && (
+                <DropdownMenuItem onClick={(e) => {
+                  e.stopPropagation();
+                  onPullFromCloud();
+                }}>
+                  <Download className="h-3.5 w-3.5 mr-2" />
+                  Pull from Cloud
+                </DropdownMenuItem>
+              )}
+              
+              {document.sync.status === 'synced' && onMarkLocalOnly && (
+                <DropdownMenuItem onClick={(e) => {
+                  e.stopPropagation();
+                  onMarkLocalOnly();
+                }}>
+                  <CloudOff className="h-3.5 w-3.5 mr-2" />
+                  Keep Local Only
+                </DropdownMenuItem>
+              )}
+            </>
+          )}
+          
+          <DropdownMenuItem onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }} className="text-red-600">
             <Trash2 className="h-3.5 w-3.5 mr-2" />
             Delete
           </DropdownMenuItem>

@@ -47,10 +47,25 @@ export default function Login() {
       console.log('✅ Navigation called');
     } catch (error: any) {
       console.error('❌ Login error caught:', error);
+      
+      // Extract error message from various error formats
+      let errorMessage = "Invalid email or password. Please try again.";
+      
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.detail) {
+        errorMessage = error.detail;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      console.error('❌ Showing error toast:', errorMessage);
+      
       toast({
         variant: "destructive",
-        title: "❌ Login failed",
-        description: error.message || "Invalid credentials. Please try again.",
+        title: "❌ Login Failed",
+        description: errorMessage,
+        duration: 5000, // Show for 5 seconds
       });
     }
   };

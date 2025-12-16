@@ -10,9 +10,21 @@ import type { Workspace, WorkspaceCreate, WorkspaceMember } from '@/types/api.ty
 export class WorkspaceService {
   /**
    * Get all workspaces for current user
+   * Returns paginated response, extracts items array
    */
   async listWorkspaces(): Promise<Workspace[]> {
-    return apiClient.get<Workspace[]>(API_ENDPOINTS.workspaces.list);
+    const response = await apiClient.get<any>(API_ENDPOINTS.workspaces.list);
+    // Handle paginated response: { items: [], total, page, page_size, has_more }
+    if (response.items && Array.isArray(response.items)) {
+      return response.items;
+    }
+    // Fallback: if response is already an array (backward compatibility)
+    if (Array.isArray(response)) {
+      return response;
+    }
+    // If neither, return empty array
+    console.warn('⚠️ Unexpected workspace list response format:', response);
+    return [];
   }
 
   /**
