@@ -30,6 +30,7 @@ import Signup from "./pages/Signup";
 import WorkspaceTest from "./pages/WorkspaceTest";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { WorkspaceProvider } from "./contexts/WorkspaceContext";
+import { SyncHealthPanel } from "./components/sync/SyncHealthPanel"; // Task 5: Sync diagnostics
 
 const queryClient = new QueryClient();
 
@@ -86,6 +87,10 @@ const App = () => (
             <Route path="/install" element={<Install />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/support" element={<Support />} />
+            
+            {/* Task 5: Sync Health Diagnostics */}
+            <Route path="/sync-health" element={<SyncHealthPanel />} />
+            
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

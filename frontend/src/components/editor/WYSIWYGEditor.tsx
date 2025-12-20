@@ -15,6 +15,7 @@ import { EditorContent } from '@tiptap/react';
 // Hooks
 import { useTipTapEditor } from '@/hooks/useTipTapEditor';
 import { useYjsDocument } from '@/hooks/useYjsDocument'; // ✅ STEP 3: Yjs integration
+import { useSyncStatus } from '@/hooks/useSyncStatus'; // Task 2: Sync status tracking
 import { useEditorMode } from './handlers/useEditorMode';
 import { useSyntaxHighlighting } from './handlers/useSyntaxHighlighting';
 import { htmlToMarkdown, markdownToHtml } from '@/utils/markdownConversion';
@@ -39,6 +40,7 @@ import { AIModalErrorBoundary } from '../modals/AIModalErrorBoundary';
 import { CommentSidebar } from '../comments/CommentSidebar';
 import { AddCommentButton } from '../comments/AddCommentButton';
 import { useCommentStore } from '@/stores/commentStore';
+import { SyncStatusBadge } from './SyncStatusBadge'; // Task 2: Sync status display
 
 // Utils & Services
 import { autoFormatText, generateAIFormatPrompt, needsFormatting } from '@/utils/autoFormat';
@@ -155,6 +157,9 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
   const { isAuthenticated } = useAuth();
   const { refreshDocuments } = useWorkspace();
 
+  // Task 2: Sync status tracking
+  const syncStatus = useSyncStatus(documentId);
+
   // Auto-save to cloud debounce ref
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedContentRef = useRef<string>('');
@@ -222,6 +227,26 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
 
   // Syntax Highlighting Hook
   useSyntaxHighlighting(editor);
+
+  // 🔥 Track when TipTap view is actually mounted and ready
+  const [viewReady, setViewReady] = useState(false);
+  useEffect(() => {
+    if (!editor || viewReady) return;
+    
+    const checkInterval = setInterval(() => {
+      try {
+        if (editor.view && editor.view.dom) {
+          console.log('✅ [STEP 3] TipTap View is now ready for', documentId);
+          setViewReady(true);
+          clearInterval(checkInterval);
+        }
+      } catch (e) {
+        // View not ready yet
+      }
+    }, 50);
+    
+    return () => clearInterval(checkInterval);
+  }, [editor, viewReady, documentId]);
 
   // ✅ STEP 4: Hydration moved to WorkspaceContext (data layer)
   // Editor is now a pure renderer - receives only ydoc, no initialContent
@@ -645,54 +670,58 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
 
   return (
     <div className="h-screen flex flex-col bg-background relative">
-      <FloatingSideToolbar
-        editor={editor}
-        onInsertTable={insertTable}
-        onInsertLink={insertLink}
-        onInsertImage={insertImage}
-        onAutoFormat={handleAutoFormat}
-        onAutoFormatAll={handleAutoFormatAll}
-        onAIFormat={handleAIFormat}
-        onShowDiagramMenu={() => setShowDiagramMenu(true)}
-        onShowMindmapChoice={() => {
-          // ❌ STEP 1: No auto-save before mindmap (Yjs will handle in STEP 3)
-          setShowMindmapChoiceModal(true);
-        }}
-        onShowKeyboardShortcuts={() => setShowKeyboardShortcuts(true)}
-        onToggleEditorMode={toggleEditorMode}
-        editorMode={editorMode}
-        aiAutocompleteEnabled={aiAutocompleteEnabled}
-        onAIAutocompleteChange={setAiAutocompleteEnabled}
-        aiHintsEnabled={aiSuggestionsEnabled}
-        onAIHintsChange={setAiSuggestionsEnabled}
-        onImportFile={triggerOpenFile}
-        onExportMarkdown={exportAsMarkdown}
-        onSaveToCloud={handleSaveToCloud}
-        onSaveAsLocal={handleSaveAsLocal}
-        onSaveLocally={handleSaveLocally}
-        onSave={() => {
-          // ❌ STEP 1: Legacy save disabled (no persistence)
-          toast({ 
-            title: 'Save disabled (STEP 1)', 
-            description: 'Use "Save to Cloud" or "Save As Local" buttons.', 
-            variant: 'destructive' 
-          });
-        }}
-        onShare={() => console.log('Share clicked')}
-      />
+      {viewReady && (
+        <FloatingSideToolbar
+          editor={editor}
+          onInsertTable={insertTable}
+          onInsertLink={insertLink}
+          onInsertImage={insertImage}
+          onAutoFormat={handleAutoFormat}
+          onAutoFormatAll={handleAutoFormatAll}
+          onAIFormat={handleAIFormat}
+          onShowDiagramMenu={() => setShowDiagramMenu(true)}
+          onShowMindmapChoice={() => {
+            // ❌ STEP 1: No auto-save before mindmap (Yjs will handle in STEP 3)
+            setShowMindmapChoiceModal(true);
+          }}
+          onShowKeyboardShortcuts={() => setShowKeyboardShortcuts(true)}
+          onToggleEditorMode={toggleEditorMode}
+          editorMode={editorMode}
+          aiAutocompleteEnabled={aiAutocompleteEnabled}
+          onAIAutocompleteChange={setAiAutocompleteEnabled}
+          aiHintsEnabled={aiSuggestionsEnabled}
+          onAIHintsChange={setAiSuggestionsEnabled}
+          onImportFile={triggerOpenFile}
+          onExportMarkdown={exportAsMarkdown}
+          onSaveToCloud={handleSaveToCloud}
+          onSaveAsLocal={handleSaveAsLocal}
+          onSaveLocally={handleSaveLocally}
+          onSave={() => {
+            // ❌ STEP 1: Legacy save disabled (no persistence)
+            toast({ 
+              title: 'Save disabled (STEP 1)', 
+              description: 'Use "Save to Cloud" or "Save As Local" buttons.', 
+              variant: 'destructive' 
+            });
+          }}
+          onShare={() => console.log('Share clicked')}
+        />
+      )}
 
       <div className="bg-card/40 backdrop-blur-sm px-6 py-3 flex-shrink-0 mb-2">
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-2">
-            <FormatDropdown
-              editor={editor}
-              onInsertTable={insertTable}
-              onInsertLink={insertLink}
-              onInsertImage={insertImage}
-              onAutoFormat={handleAutoFormat}
-              onAutoFormatAll={handleAutoFormatAll}
-              onAIFormat={handleAIFormat}
-            />
+            {viewReady && (
+              <FormatDropdown
+                editor={editor}
+                onInsertTable={insertTable}
+                onInsertLink={insertLink}
+                onInsertImage={insertImage}
+                onAutoFormat={handleAutoFormat}
+                onAutoFormatAll={handleAutoFormatAll}
+                onAIFormat={handleAIFormat}
+              />
+            )}
             <Separator orientation="vertical" className="h-6 mx-1" />
             <Button size="sm" variant="outline" onClick={() => setShowDiagramMenu(true)} title="Insert Diagram" className="gap-1">
               <Library className="h-4 w-4" />
@@ -734,6 +763,16 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
             </Button> */}
           </div>
           <div className="flex items-center gap-3">
+            {/* Task 2: Sync Status Badge */}
+            {isAuthenticated && documentId && (
+              <SyncStatusBadge
+                lastSyncedAt={syncStatus.lastSyncedAt}
+                lastSyncSuccess={syncStatus.lastSyncSuccess}
+                pendingCount={syncStatus.pendingCount}
+                isOnline={syncStatus.isOnline}
+              />
+            )}
+            
             {isAuthenticated && documentId && (
               <div className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-accent transition-colors">
                 <Switch
@@ -803,10 +842,10 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
       <div className="flex-1 overflow-y-auto bg-background" data-testid="editor-container">
         {editorMode === 'wysiwyg' ? (
           <>
-            <FixedToolbar editor={editor} />
+            {viewReady && <FixedToolbar editor={editor} />}
             <EditorContent editor={editor} data-testid="wysiwyg-editor" />
-            {editor && <FloatingToolbar editor={editor} />}
-            {editor && <LinkHoverToolbar editor={editor} />}
+            {viewReady && editor && <FloatingToolbar editor={editor} />}
+            {viewReady && editor && <LinkHoverToolbar editor={editor} />}
           </>
         ) : (
           <textarea
@@ -824,8 +863,8 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
       <div className="bg-muted/50 backdrop-blur-sm px-6 py-2 flex-shrink-0 mt-2">
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <div className="flex items-center gap-4">
-            <span>Words: {editor.storage.characterCount?.words() || editor.getText().split(/\s+/).filter(w => w.length > 0).length}</span>
-            <span>Characters: {editor.storage.characterCount?.characters() || editor.getText().length}</span>
+            <span>Words: {viewReady ? (editor.storage.characterCount?.words() || editor.getText().split(/\s+/).filter(w => w.length > 0).length) : 0}</span>
+            <span>Characters: {viewReady ? (editor.storage.characterCount?.characters() || editor.getText().length) : 0}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-success rounded-full"></div>
@@ -853,17 +892,17 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
         open={showMindmapChoiceModal}
         onOpenChange={setShowMindmapChoiceModal}
         editor={editor}
-        documentContent={editor ? htmlToMarkdown('', editor) : ''}
+        documentContent={viewReady && editor ? htmlToMarkdown('', editor) : ''}
         documentId={documentId}
         documentTitle={title}
-        selectedText={editor?.state.selection.empty ? undefined : editor?.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ')}
+        selectedText={viewReady && editor?.state.selection.empty ? undefined : (viewReady ? editor?.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ') : undefined)}
       />
 
       <DiagramInsertMenu
         isOpen={showDiagramMenu}
         onClose={() => setShowDiagramMenu(false)}
         onInsert={insertMermaidDiagram}
-        selectedText={editor?.state.selection.empty ? '' : editor?.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ') || ''}
+        selectedText={viewReady && editor?.state.selection.empty ? '' : (viewReady ? editor?.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ') : '') || ''}
       />
 
       <TableInsertModal
@@ -872,7 +911,7 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
         onInsert={handleTableInsert}
       />
 
-      {showTableMenu && (
+      {showTableMenu && viewReady && (
         <TableMenu
           editor={editor}
           isOpen={showTableMenu}
@@ -894,13 +933,13 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
 
       <AISidebarChat
         editor={editor}
-        documentContent={editor?.getText() || ''}
+        documentContent={viewReady ? (editor?.getText() || '') : ''}
         documentTitle={title}
         isOpen={isSidebarOpen}
         onToggle={toggleSidebar}
       />
 
-      {contextMenu.visible && (
+      {contextMenu.visible && viewReady && (
         <EditorContextMenu
           position={{ x: contextMenu.x, y: contextMenu.y }}
           selectedText={contextMenu.selectedText}
@@ -921,8 +960,8 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
         isOpen={showLinkModal}
         onClose={() => setShowLinkModal(false)}
         onInsert={handleLinkInsert}
-        initialUrl={editor?.getAttributes('link').href}
-        initialText={editor?.state.selection.empty ? '' : editor?.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ')}
+        initialUrl={viewReady ? editor?.getAttributes('link').href : ''}
+        initialText={viewReady && !editor?.state.selection.empty ? editor?.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ') : ''}
       />
 
       <ImageInsertModal
@@ -940,9 +979,9 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
       />
       
       {/* 💬 Comment System */}
-      <CommentSidebar editor={editor} />
+      {viewReady && <CommentSidebar editor={editor} />}
       
-      {showCommentButton && (
+      {showCommentButton && viewReady && (
         <AddCommentButton
           editor={editor}
           position={commentButtonPosition}

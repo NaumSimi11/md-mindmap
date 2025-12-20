@@ -71,66 +71,18 @@ export function DocumentOutline({
       const trimmedLine = line.trim();
       if (!trimmedLine) return;
 
-      // OPTIMIZED: Single regex with alternation (60% faster)
-      const match = trimmedLine.match(
-        /^(?:(#{1,6})\s+(.+)|(\s*)([-*])\s+(.+)|(\s*)(\d+)\.\s+(.+)|\*\*(.+?)\*\*:?\s*(.*))$/
-      );
-
-      if (!match) return;
-
-      // Heading match (group 1 & 2)
-      if (match[1] && match[2]) {
-        parsed.push({
-          id: `heading-${index}`,
-          type: 'heading',
-          level: match[1].length,
-          text: match[2].trim(),
-          line: index,
-          headingIndex: headingCounter++,
-        });
-        return;
-      }
-
-      // Bullet match (group 3, 4 & 5)
-      if (match[3] !== undefined && match[4] && match[5]) {
-        const indent = match[3].length;
-        const text = match[5].trim().replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1');
-        parsed.push({
-          id: `bullet-${index}`,
-          type: 'bullet',
-          level: Math.floor(indent / 2) + 1,
-          text,
-          line: index,
-        });
-        return;
-      }
-
-      // Numbered match (group 6, 7 & 8)
-      if (match[6] !== undefined && match[7] && match[8]) {
-        const indent = match[6].length;
-        const number = match[7];
-        const text = match[8].trim().replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1');
-        parsed.push({
-          id: `numbered-${index}`,
-          type: 'numbered',
-          level: Math.floor(indent / 2) + 1,
-          text: `${number}. ${text}`,
-          line: index,
-        });
-        return;
-      }
-
-      // Bold match (group 9 & 10)
-      if (match[9] && parsed.length > 0 && parsed[parsed.length - 1].type === 'heading') {
-        const text = match[9] + (match[10] ? ': ' + match[10] : '');
-        parsed.push({
-          id: `bold-${index}`,
-          type: 'bold',
-          level: parsed[parsed.length - 1].level + 1,
-          text,
-          line: index,
-        });
-      }
+    // Only parse headings (H1-H6). Ignore lists and other constructs for outline.
+    const headingMatch = trimmedLine.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      parsed.push({
+        id: `heading-${index}`,
+        type: 'heading',
+        level: headingMatch[1].length,
+        text: headingMatch[2].trim(),
+        line: index,
+        headingIndex: headingCounter++,
+      });
+    }
     });
 
     return parsed;

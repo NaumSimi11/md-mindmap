@@ -4,7 +4,8 @@
     "test:coverage": "npm -C frontend run test:coverage",
     "test:e2e": "npx playwright test --workers=1 --retries=0",
     "test:backend": "bash -lc \"cd backend && ./test_all.sh\"",
-    "test:all": "node ./scripts/run-tests.mjs"
+    "test:all": "node ./scripts/run-tests.mjs",
+    "check:tauri-fs": "bash ./scripts/check_tauri_fs_usage.sh"
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0"

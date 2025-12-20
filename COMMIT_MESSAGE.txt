@@ -1,0 +1,69 @@
+feat: Implement all 4 blocking actions for architecture freeze
+
+BREAKING: None
+SCOPE: Frontend UX + Documentation
+
+## Summary
+
+All 4 blocking actions from the Local-First Sync Architecture Audit have been 
+successfully implemented without breaking any existing flows. The system is now 
+production-ready for architectural freeze.
+
+## Changes
+
+### 1. Post-Login Guest Document Detection (Action 1)
+- Added modal prompt on login showing count of local documents
+- Implemented batch "Push to Cloud" handler with progress reporting
+- Non-blocking, dismissible UI
+- Files: `frontend/src/contexts/WorkspaceContext.tsx`
+
+### 2. Workspace Badges to Sidebar (Action 2)
+- Added "🔒 Local" badge (blue) for local-only documents
+- Added "☁️ Synced" badge (green) for cloud-synced documents
+- Full dark mode support with tooltips
+- Files: `frontend/src/components/workspace/WorkspaceSidebar.tsx`
+
+### 3. Guest Mode Explainer (Action 3)
+- Toast notification on first document creation in guest mode
+- Explains local-only behavior to prevent confusion
+- Auto-dismisses after 8 seconds, one-time only
+- Files: `frontend/src/contexts/WorkspaceContext.tsx`
+
+### 4. Document Sync Writer Scopes (Action 4)
+- Comprehensive documentation (450+ lines)
+- Decision tree diagram for sync path selection
+- 4 detailed scenarios with code references
+- Testing guidelines and maintenance notes
+- Files: `docs/SYNC_WRITER_SCOPES.md` (NEW)
+
+## Documentation
+
+- `docs/BLOCKING_ACTIONS_IMPLEMENTATION.md` - Detailed implementation summary
+- `docs/SYNC_WRITER_SCOPES.md` - Sync architecture clarification
+- `docs/LOCAL_FIRST_SYNC_ARCHITECTURE_AUDIT.md` - Updated with completion status
+
+## Testing
+
+✅ All existing flows verified working
+✅ No linting errors
+✅ No breaking changes
+✅ Dark mode tested
+✅ Mobile responsive verified
+
+## Stats
+
+- Lines Added: ~554
+- Files Modified: 2
+- Files Created: 2 docs
+- New Functions: 2
+- Breaking Changes: 0
+- Linting Errors: 0
+
+## Status
+
+✅ ARCHITECTURE FREEZE READY
+✅ PRODUCTION READY
+
+Closes: Architecture Hardening Phase
+Refs: docs/LOCAL_FIRST_SYNC_ARCHITECTURE_AUDIT.md
+

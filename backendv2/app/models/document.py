@@ -10,7 +10,7 @@ Features: Yjs collaboration support, storage modes, starred docs
 from datetime import datetime
 from sqlalchemy import (
     Column, String, Boolean, Integer, DateTime, ForeignKey,
-    Index, Text, Enum as SQLEnum
+    Index, Text, Enum as SQLEnum, LargeBinary
 )
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.orm import relationship
@@ -195,6 +195,19 @@ class Document(Base):
         default=0,
         nullable=False,
         doc="Yjs document version (for collaboration state)"
+    )
+
+    yjs_state = Column(
+        LargeBinary,
+        nullable=True,
+        doc="Yjs collaboration state (Phase 1)"
+    )
+
+    size = Column(
+        Integer,
+        default=0,
+        nullable=False,
+        doc="Document size in bytes (monitoring)"
     )
     
     # =========================================

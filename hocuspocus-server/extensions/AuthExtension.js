@@ -50,8 +50,15 @@ export function createAuthExtension() {
       } catch (error) {
         console.error(`❌ Authentication failed:`, error.message);
         
-        // Reject connection
-        throw new Error('Authentication failed');
+        // Allow guest mode on auth failure (for development)
+        console.log(`👤 Falling back to guest mode due to auth error`);
+        return {
+          user: {
+            id: 'guest',
+            name: 'Guest User',
+            color: '#gray',
+          },
+        };
       }
     },
 

@@ -114,6 +114,11 @@ class DocumentCreate(BaseModel):
         default=StorageMode.HYBRID_SYNC,
         description="Storage mode"
     )
+
+    yjs_state_b64: Optional[str] = Field(
+        None,
+        description="Yjs document state (Base64 encoded binary)"
+    )
     
     @field_validator('tags')
     @classmethod
@@ -180,6 +185,16 @@ class DocumentUpdate(BaseModel):
         None,
         description="Public visibility flag"
     )
+
+    yjs_state_b64: Optional[str] = Field(
+        None,
+        description="Yjs document state (Base64 encoded binary)"
+    )
+
+    expected_yjs_version: Optional[int] = Field(
+        None,
+        description="Expected Yjs version for optimistic concurrency"
+    )
     
     @field_validator('tags')
     @classmethod
@@ -241,6 +256,8 @@ class DocumentResponse(BaseModel):
     is_starred: bool = False
     storage_mode: str
     version: int
+    yjs_version: int
+    yjs_state_b64: Optional[str] = None
     word_count: int
     created_by_id: str
     created_at: datetime
@@ -292,6 +309,8 @@ class DocumentDetail(BaseModel):
     is_starred: bool = False
     storage_mode: str
     version: int
+    yjs_version: int
+    yjs_state_b64: Optional[str] = None
     word_count: int
     created_by: DocumentCreator
     created_at: datetime
@@ -339,6 +358,7 @@ class DocumentListItem(BaseModel):
     is_starred: bool = False
     storage_mode: str
     version: int
+    yjs_version: int
     word_count: int
     created_at: datetime
     updated_at: datetime

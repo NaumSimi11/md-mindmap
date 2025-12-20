@@ -47,37 +47,10 @@ export function createDatabaseExtension() {
      * Fetch document from database
      */
     fetch: async ({ documentName, context }) => {
-      const client = await pool.connect();
-      
-      try {
-        console.log(`📖 Fetching document: ${documentName}`);
-
-        const result = await client.query(
-          'SELECT yjs_state, version FROM documents WHERE id = $1',
-          [documentName]
-        );
-
-        if (result.rows.length === 0) {
-          console.log(`📝 Document not found (will create): ${documentName}`);
-          return null;
-        }
-
-        const { yjs_state, version } = result.rows[0];
-        
-        if (!yjs_state) {
-          console.log(`📝 Document has no state: ${documentName}`);
-          return null;
-        }
-
-        console.log(`✅ Document fetched: ${documentName} (version: ${version})`);
-        return yjs_state;
-
-      } catch (error) {
-        console.error(`❌ Fetch failed for ${documentName}:`, error);
-        throw error;
-      } finally {
-        client.release();
-      }
+      // DON'T fetch from database - let clients sync their state to server
+      // Database state may be corrupted or incompatible
+      console.log(`📖 [HOCUSPOCUS] Client requesting document: ${documentName} - returning NULL (starting fresh)`);
+      return null;
     },
 
     /**
@@ -92,17 +65,23 @@ export function createDatabaseExtension() {
         // Calculate size
         const size = state.byteLength;
 
-        // Upsert document
-        await client.query(`
-          INSERT INTO documents (id, yjs_state, yjs_version, size, updated_at)
-          VALUES ($1, $2, 1, $3, NOW())
-          ON CONFLICT (id) 
-          DO UPDATE SET 
+        // Update existing document (only update yjs_state, don't insert)
+        const result = await client.query(`
+          UPDATE documents 
+          SET 
             yjs_state = $2,
-            yjs_version = documents.yjs_version + 1,
+            yjs_version = yjs_version + 1,
             size = $3,
             updated_at = NOW()
+          WHERE id = $1
+          RETURNING id
         `, [documentName, state, size]);
+        
+        if (result.rowCount === 0) {
+          console.warn(`⚠️  Document ${documentName} not found in database, skipping Yjs state update`);
+          // Don't throw error - document might not exist yet in backend
+          return;
+        }
 
         console.log(`✅ Document stored: ${documentName} (${size} bytes)`);
 

@@ -106,13 +106,20 @@ export class AuthService {
       throw new Error('No refresh token available');
     }
 
-    const response = await apiClient.post<{ access_token: string }>(
+    const response = await apiClient.post<any>(
       API_ENDPOINTS.auth.refresh,
       { refresh_token: refreshToken }
     );
 
-    apiClient.setToken(response.access_token);
-    return response.access_token;
+    // Persist rotated tokens (server rotates refresh tokens)
+    if (response.access_token) {
+      apiClient.setToken(response.access_token);
+    }
+    if (response.refresh_token) {
+      localStorage.setItem('refresh_token', response.refresh_token);
+    }
+
+    return response;
   }
 
   /**

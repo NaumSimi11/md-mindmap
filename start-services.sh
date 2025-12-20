@@ -24,10 +24,10 @@ BOLD='\033[1m'
 # Configuration
 BACKEND_PORT=7001
 FRONTEND_PORT=5173
-POSTGRES_PORT=7432
-REDIS_PORT=7379
+POSTGRES_PORT=5432
+REDIS_PORT=6379
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKEND_DIR="$PROJECT_ROOT/backend"
+BACKEND_DIR="$PROJECT_ROOT/backendv2"
 FRONTEND_DIR="$PROJECT_ROOT/frontend"
 
 # Parse arguments
@@ -105,29 +105,28 @@ echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${BOLD}  Step 2: Docker Services (PostgreSQL + Redis)${NC}"
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-cd "$BACKEND_DIR"
+cd "$PROJECT_ROOT"
 
 # Check if Docker is running
 if ! docker info >/dev/null 2>&1; then
-    echo -e "${RED}❌ Docker is not running. Please start Docker Desktop.${NC}"
-    exit 1
-fi
+    echo -e "${YELLOW}⚠️  Docker is not running. Assuming services are local or already running.${NC}"
+else
+    # Stop containers if clean is requested
+    if [ "$CLEAN_DB" = true ]; then
+        echo -e "${YELLOW}🧹 Cleaning database...${NC}"
+        docker-compose down -v
+    fi
 
-# Stop containers if clean is requested
-if [ "$CLEAN_DB" = true ]; then
-    echo -e "${YELLOW}🧹 Cleaning database...${NC}"
-    docker-compose down -v
+    # Start Docker services
+    echo -e "${BLUE}🐳 Starting Docker services...${NC}"
+    docker-compose up -d
 fi
-
-# Start Docker services
-echo -e "${BLUE}🐳 Starting Docker services...${NC}"
-docker-compose up -d
 
 # Wait for PostgreSQL
-wait_for_service localhost $POSTGRES_PORT "PostgreSQL"
+# wait_for_service localhost $POSTGRES_PORT "PostgreSQL"
 
 # Wait for Redis
-wait_for_service localhost $REDIS_PORT "Redis"
+# wait_for_service localhost $REDIS_PORT "Redis"
 
 # Step 3: Run Database Migrations
 echo ""
@@ -156,7 +155,7 @@ if [ "$CREATE_USER" = true ] || [ "$CLEAN_DB" = true ]; then
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     
     echo -e "${BLUE}👤 Creating test user...${NC}"
-    PYTHONPATH=$(pwd) python3 scripts/create_test_user.py
+    PYTHONPATH=$(pwd) python3 scripts/create_test_users.py
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ Test user created${NC}"

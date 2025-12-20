@@ -14,6 +14,7 @@ Pattern: Three-Layer Architecture (Router layer)
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
+import base64
 
 from app.database import get_db
 from app.models.user import User
@@ -92,6 +93,8 @@ async def create_document(
             is_starred=document.is_starred,
             storage_mode=document.storage_mode.value,
             version=document.version,
+            yjs_version=document.yjs_version,
+            yjs_state_b64=base64.b64encode(document.yjs_state).decode('utf-8') if document.yjs_state else None,
             word_count=document.word_count,
             created_by_id=str(document.created_by_id),
             created_at=document.created_at,
@@ -108,6 +111,11 @@ async def create_document(
         elif "no access" in error_msg or "no permission" in error_msg:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(e)
+            )
+        elif "concurrency conflict" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
                 detail=str(e)
             )
         else:
@@ -166,6 +174,8 @@ async def get_document(
             is_starred=document.is_starred,
             storage_mode=document.storage_mode.value,
             version=document.version,
+            yjs_version=document.yjs_version,
+            yjs_state_b64=base64.b64encode(document.yjs_state).decode('utf-8') if document.yjs_state else None,
             word_count=document.word_count,
             created_by=DocumentCreator(
                 id=str(document.created_by.id),
@@ -181,6 +191,16 @@ async def get_document(
         if "not found" in error_msg:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e)
+            )
+        elif "concurrency conflict" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(e)
+            )
+        elif "invariant violation" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(e)
             )
         else:
@@ -260,6 +280,7 @@ async def list_documents(
                 is_starred=doc.is_starred,
                 storage_mode=doc.storage_mode.value,
                 version=doc.version,
+                yjs_version=doc.yjs_version,
                 word_count=doc.word_count,
                 created_at=doc.created_at,
                 updated_at=doc.updated_at
@@ -280,6 +301,16 @@ async def list_documents(
         if "not found" in error_msg:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e)
+            )
+        elif "concurrency conflict" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(e)
+            )
+        elif "invariant violation" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(e)
             )
         else:
@@ -336,6 +367,8 @@ async def update_document(
             is_starred=document.is_starred,
             storage_mode=document.storage_mode.value,
             version=document.version,
+            yjs_version=document.yjs_version,
+            yjs_state_b64=base64.b64encode(document.yjs_state).decode('utf-8') if document.yjs_state else None,
             word_count=document.word_count,
             created_by_id=str(document.created_by_id),
             created_at=document.created_at,
@@ -405,6 +438,16 @@ async def delete_document(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=str(e)
             )
+        elif "concurrency conflict" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(e)
+            )
+        elif "invariant violation" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
         else:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -459,6 +502,16 @@ async def star_document(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=str(e)
             )
+        elif "concurrency conflict" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(e)
+            )
+        elif "invariant violation" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
         else:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -509,8 +562,101 @@ async def unstar_document(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=str(e)
             )
+        elif "concurrency conflict" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(e)
+            )
+        elif "invariant violation" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
         else:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=str(e)
             )
+
+
+# =========================================
+# Snapshot Endpoints (for SnapshotManager)
+# =========================================
+
+@router.post(
+    "/{document_id}/snapshot",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Save document snapshot"
+)
+async def save_snapshot(
+    document_id: str,
+    snapshot_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Save document snapshot (from SnapshotManager)"""
+    service = DocumentService(db)
+    
+    try:
+        yjs_state_b64 = snapshot_data.get('yjs_state')
+        html_content = snapshot_data.get('html', '')
+        
+        if not yjs_state_b64:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="yjs_state is required"
+            )
+        
+        # Create DocumentUpdate model
+        update_data = DocumentUpdate(
+            content=html_content,
+            yjs_state_b64=yjs_state_b64,
+            expected_yjs_version=None  # Snapshot always accepted
+        )
+        
+        await service.update_document(
+            document_id=document_id,
+            document_data=update_data,
+            user_id=str(current_user.id)
+        )
+        
+        return None
+    
+    except ValueError as e:
+        error_msg = str(e).lower()
+        if "not found" in error_msg:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        else:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+
+@router.get(
+    "/{document_id}/snapshot",
+    summary="Fetch document snapshot"
+)
+async def fetch_snapshot(
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Fetch document snapshot (for restore)"""
+    service = DocumentService(db)
+    
+    try:
+        document = await service.get_document(document_id=document_id, user_id=str(current_user.id))
+        
+        if not document.yjs_state:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No snapshot found")
+        
+        return {
+            "yjs_state": base64.b64encode(document.yjs_state).decode('utf-8'),
+            "html": document.content or "",
+            "updated_at": document.updated_at.isoformat()
+        }
+    
+    except ValueError as e:
+        error_msg = str(e).lower()
+        if "not found" in error_msg:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        else:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))

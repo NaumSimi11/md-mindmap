@@ -14,6 +14,8 @@ export interface ApiError {
 export class ApiClient {
   private baseUrl: string;
   private token: string | null = null;
+  // Prevent concurrent refreshes; shared promise for ongoing refresh
+  private refreshPromise: Promise<any> | null = null;
 
   constructor() {
     this.baseUrl = API_CONFIG.baseUrl;
@@ -105,12 +107,6 @@ export class ApiClient {
 
       console.error('❌ Throwing API Error:', error);
 
-      // Handle unauthorized
-      if (response.status === 401) {
-        this.clearToken();
-        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
-      }
-
       throw error;
     }
 
@@ -126,10 +122,25 @@ export class ApiClient {
    * GET request
    */
   async get<T>(endpoint: string): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+    const url = `${this.baseUrl}${endpoint}`;
+    const response = await fetch(url, {
       method: 'GET',
       headers: this.getHeaders(),
     });
+
+    if (response.status === 401 && this.shouldAttemptRefresh(endpoint)) {
+      try {
+        await this.attemptRefreshOnce();
+        // Retry once
+        const retryResp = await fetch(url, { method: 'GET', headers: this.getHeaders() });
+        return this.handleResponse<T>(retryResp);
+      } catch (err) {
+        // Refresh failed — clear session and notify
+        this.clearToken();
+        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+        throw err;
+      }
+    }
 
     return this.handleResponse<T>(response);
   }
@@ -149,6 +160,22 @@ export class ApiClient {
       });
       
       console.log('✅ POST response received:', { status: response.status, statusText: response.statusText });
+      if (response.status === 401 && this.shouldAttemptRefresh(endpoint)) {
+        try {
+          await this.attemptRefreshOnce();
+          const retryResp = await fetch(url, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: data ? JSON.stringify(data) : undefined,
+          });
+          return this.handleResponse<T>(retryResp);
+        } catch (err) {
+          this.clearToken();
+          window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+          throw err;
+        }
+      }
+
       return this.handleResponse<T>(response);
     } catch (error) {
       console.error('❌ POST request failed (network error):', error);
@@ -160,11 +187,28 @@ export class ApiClient {
    * PUT request
    */
   async put<T>(endpoint: string, data: unknown): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+    const url = `${this.baseUrl}${endpoint}`;
+    const response = await fetch(url, {
       method: 'PUT',
       headers: this.getHeaders(),
       body: JSON.stringify(data),
     });
+
+    if (response.status === 401 && this.shouldAttemptRefresh(endpoint)) {
+      try {
+        await this.attemptRefreshOnce();
+        const retryResp = await fetch(url, {
+          method: 'PUT',
+          headers: this.getHeaders(),
+          body: JSON.stringify(data),
+        });
+        return this.handleResponse<T>(retryResp);
+      } catch (err) {
+        this.clearToken();
+        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+        throw err;
+      }
+    }
 
     return this.handleResponse<T>(response);
   }
@@ -173,11 +217,28 @@ export class ApiClient {
    * PATCH request
    */
   async patch<T>(endpoint: string, data: unknown): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+    const url = `${this.baseUrl}${endpoint}`;
+    const response = await fetch(url, {
       method: 'PATCH',
       headers: this.getHeaders(),
       body: JSON.stringify(data),
     });
+
+    if (response.status === 401 && this.shouldAttemptRefresh(endpoint)) {
+      try {
+        await this.attemptRefreshOnce();
+        const retryResp = await fetch(url, {
+          method: 'PATCH',
+          headers: this.getHeaders(),
+          body: JSON.stringify(data),
+        });
+        return this.handleResponse<T>(retryResp);
+      } catch (err) {
+        this.clearToken();
+        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+        throw err;
+      }
+    }
 
     return this.handleResponse<T>(response);
   }
@@ -186,10 +247,23 @@ export class ApiClient {
    * DELETE request
    */
   async delete<T>(endpoint: string): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+    const url = `${this.baseUrl}${endpoint}`;
+    const response = await fetch(url, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
+
+    if (response.status === 401 && this.shouldAttemptRefresh(endpoint)) {
+      try {
+        await this.attemptRefreshOnce();
+        const retryResp = await fetch(url, { method: 'DELETE', headers: this.getHeaders() });
+        return this.handleResponse<T>(retryResp);
+      } catch (err) {
+        this.clearToken();
+        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+        throw err;
+      }
+    }
 
     return this.handleResponse<T>(response);
   }
@@ -212,13 +286,62 @@ export class ApiClient {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
 
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+    const url = `${this.baseUrl}${endpoint}`;
+    const response = await fetch(url, {
       method: 'POST',
       headers,
       body: formData,
     });
 
+    if (response.status === 401 && this.shouldAttemptRefresh(endpoint)) {
+      try {
+        await this.attemptRefreshOnce();
+        const retryResp = await fetch(url, { method: 'POST', headers: this.getHeaders(), body: formData });
+        return this.handleResponse<T>(retryResp);
+      } catch (err) {
+        this.clearToken();
+        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+        throw err;
+      }
+    }
+
     return this.handleResponse<T>(response);
+  }
+
+  /**
+   * Determine whether we should attempt a refresh for this endpoint.
+   * Never attempt refresh for auth endpoints themselves.
+   */
+  private shouldAttemptRefresh(endpoint: string): boolean {
+    const skipPaths = [
+      API_ENDPOINTS.auth.refresh,
+      API_ENDPOINTS.auth.login,
+      API_ENDPOINTS.auth.signup,
+    ];
+    return !skipPaths.includes(endpoint);
+  }
+
+  /**
+   * Attempt to refresh tokens once. Uses a shared promise to prevent concurrent refreshes.
+   */
+  private async attemptRefreshOnce(): Promise<void> {
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    // Dynamic import to avoid circular dependency
+    const authModule = await import('./AuthService');
+    const authService = authModule.authService;
+
+    this.refreshPromise = (async () => {
+      try {
+        await authService.refreshToken();
+      } finally {
+        this.refreshPromise = null;
+      }
+    })();
+
+    return this.refreshPromise;
   }
 }
 

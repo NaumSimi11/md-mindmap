@@ -18,6 +18,8 @@ import { serializeYjsToHtml } from '@/services/snapshots/serializeYjs';
 import { extractUUID } from '@/utils/id-generator';
 import { htmlToMarkdown } from '@/utils/markdownConversion';
 import Dexie from 'dexie';
+import * as Y from 'yjs';
+import * as buffer from 'lib0/buffer';
 import type { DocumentMeta, Workspace, Folder } from '@/services/workspace/types';
 import type { SyncResult, SyncStatus } from '@/types/sync.types';
 
@@ -342,6 +344,20 @@ export class SelectiveSyncService {
   }
 
   /**
+   * Extract Yjs binary and encode to base64 (Side-effect free)
+   */
+  private extractYjsBinaryBase64(documentId: string): string | null {
+    try {
+      const binary = yjsDocumentManager.getYjsBinarySnapshot(documentId);
+      if (!binary) return null;
+      return buffer.toBase64(binary);
+    } catch (error) {
+      console.warn('⚠️ [Dual-Write] Failed to extract Yjs binary:', error);
+      return null;
+    }
+  }
+
+  /**
    * Push document to cloud
    * 
    * LOCAL-FIRST: Pushes local document to backend API.
@@ -352,7 +368,7 @@ export class SelectiveSyncService {
    * 2. Ensure folder exists if document is in folder (create if needed)
    * 3. Create/update document
    */
-  async pushDocument(documentId: string, liveContent?: string): Promise<SyncResult> {
+  async pushDocument(documentId: string, liveContent?: string, retryCount = 0): Promise<SyncResult> {
     try {
       if (!authService.isAuthenticated()) {
         return {
@@ -364,6 +380,9 @@ export class SelectiveSyncService {
       
       // 🔥 FIX A: Read content ONLY from Yjs (single source of truth)
       const contentToSave = this.serializeFromYjs(documentId);
+
+      // 🔥 PHASE 2: Dual-write Yjs binary
+      const yjsStateB64 = this.extractYjsBinaryBase64(documentId);
 
       // Get local metadata from guest service (title/workspace/folder), but do NOT use it for content
       let localDoc: DocumentMeta | undefined;
@@ -428,44 +447,71 @@ export class SelectiveSyncService {
       // Track response for sync state update
       let syncedDoc: any = null;
 
-      if (shouldPatch) {
-        // PATCH existing cloud document
-        const updatePayload: any = {
-          title: localDoc.title,
-          folder_id: localDoc.folderId || undefined,
-          is_starred: localDoc.starred,
-          tags: localDoc.tags,
-          content: contentToSave,
-        };
+      try {
+        if (shouldPatch) {
+          // PATCH existing cloud document
+          const updatePayload: any = {
+            title: localDoc.title,
+            folder_id: localDoc.folderId || undefined,
+            is_starred: localDoc.starred,
+            tags: localDoc.tags,
+            content: contentToSave,
+            yjs_state_b64: yjsStateB64,
+            expected_yjs_version: localDoc.yjsVersion,
+          };
 
-        console.log('☁️ [pushDocument] PATCH to cloud:', toCloudId(mappedCloudId));
-        syncedDoc = await apiDocument.updateDocument(toCloudId(mappedCloudId), updatePayload);
-      } else {
-        // POST create new cloud document
-        const createPayload: any = {
-          id: toCloudId(documentId),
-          workspace_id: cloudWorkspaceId,
-          title: localDoc.title,
-          content_type: localDoc.type === 'markdown' ? 'markdown' : 'markdown',
-          folder_id: cloudFolderId || null,
-          is_starred: localDoc.starred,
-          tags: localDoc.tags,
-          content: contentToSave,
-        };
+          console.log(`☁️ [pushDocument] PATCH to cloud: ${toCloudId(mappedCloudId)} (yjs_version: ${localDoc.yjsVersion || 0}, binary: ${yjsStateB64?.length || 0} chars)`);
+          syncedDoc = await apiDocument.updateDocument(toCloudId(mappedCloudId), updatePayload);
+        } else {
+          // POST create new cloud document
+          const createPayload: any = {
+            id: toCloudId(documentId),
+            workspace_id: cloudWorkspaceId,
+            title: localDoc.title,
+            content_type: 'markdown',
+            folder_id: cloudFolderId || null,
+            is_starred: localDoc.starred,
+            tags: localDoc.tags,
+            content: contentToSave,
+            yjs_state_b64: yjsStateB64,
+          };
 
-        console.log('☁️ [pushDocument] POST to cloud:', createPayload.title);
-        syncedDoc = await apiDocument.createDocument(createPayload);
-        const returnedLocalId = toLocalId(syncedDoc.id);
+          console.log('☁️ [pushDocument] POST to cloud:', createPayload.title, `(binary: ${yjsStateB64?.length || 0} chars)`);
+          syncedDoc = await apiDocument.createDocument(createPayload);
+          const returnedLocalId = toLocalId(syncedDoc.id);
 
-        // Store mapping after successful creation
-        await this.storeDocumentMapping(documentId, returnedLocalId);
-        
-        // Dispatch event if ID changed (for rare ID mismatch cases)
-        if (returnedLocalId !== documentId) {
-          window.dispatchEvent(new CustomEvent('document-synced', {
-            detail: { oldId: documentId, newId: returnedLocalId, doc: syncedDoc }
-          }));
+          // Store mapping after successful creation
+          await this.storeDocumentMapping(documentId, returnedLocalId);
+          
+          // Dispatch event if ID changed (for rare ID mismatch cases)
+          if (returnedLocalId !== documentId) {
+            window.dispatchEvent(new CustomEvent('document-synced', {
+              detail: { oldId: documentId, newId: returnedLocalId, doc: syncedDoc }
+            }));
+          }
         }
+      } catch (error: any) {
+        // 🔥 PHASE 3: 409 Conflict Handling (Optimistic Concurrency)
+        const isConflict = error.status === 409 || error.response?.status === 409 || 
+                          (error.message && error.message.includes('409'));
+        
+        if (isConflict && retryCount === 0) {
+          console.warn(`⚠️ [409 Conflict] Concurrency conflict for ${documentId}. Expected version ${localDoc.yjsVersion || 0} failed. Triggering pull-merge-retry...`);
+          
+          // 1. Pull the latest state from cloud
+          const pullResult = await this.pullDocument(documentId);
+          if (pullResult.success) {
+            console.log(`✅ [Conflict Resolve] Pull successful, retrying push for ${documentId}...`);
+            // 2. Retry the push once (Yjs merge happened inside pullDocument -> applyUpdate)
+            return this.pushDocument(documentId, liveContent, 1);
+          } else {
+            console.error(`❌ [Conflict Resolve] Pull failed for ${documentId}:`, pullResult.error);
+            return pullResult;
+          }
+        }
+        
+        // Re-throw if not a conflict or if already retried
+        throw error;
       }
 
       // ✅ FIX 2: Update sync state in local index (IndexedDB)
@@ -475,6 +521,7 @@ export class SelectiveSyncService {
           syncStatus: 'synced',
           cloudId: syncedDoc?.id, // Store backend document ID
           lastSyncedAt: syncedDoc?.updated_at || new Date().toISOString(),
+          yjsVersion: syncedDoc?.yjs_version, // Store canonical version
         });
 
         // Dispatch event to update WorkspaceContext state (UI only)
@@ -484,10 +531,12 @@ export class SelectiveSyncService {
             syncStatus: 'synced',
             cloudId: syncedDoc?.id,
             lastSyncedAt: syncedDoc?.updated_at || new Date().toISOString(),
+            yjsVersion: syncedDoc?.yjs_version,
+            yjsStateB64: syncedDoc?.yjs_state_b64,
           }
         }));
 
-        console.log('✅ [pushDocument] Sync state persisted to IndexedDB: local → synced');
+        console.log(`✅ [pushDocument] Sync state persisted to IndexedDB: local → synced (v${syncedDoc?.yjs_version || 0})`);
       } catch (updateError) {
         console.warn('⚠️ [pushDocument] Failed to update sync state:', updateError);
         // Non-fatal - document is still synced to cloud
@@ -540,6 +589,20 @@ export class SelectiveSyncService {
       console.log(`📥 [FIX 13] Fetching document from cloud: ${documentId} (sending ${toCloudId(documentId)})`);
       const cloudDoc = await apiDocument.getDocument(toCloudId(documentId));
 
+      // 🔥 PHASE 3: Apply Yjs binary state if available
+      if (cloudDoc.yjs_state_b64) {
+        try {
+          const binary = buffer.fromBase64(cloudDoc.yjs_state_b64);
+          const instance = yjsDocumentManager.getDocument(documentId, { enableWebSocket: false });
+          if (instance && instance.ydoc) {
+            console.log(`🔄 [Pull] Applying remote Yjs state to local doc ${documentId} (${binary.byteLength} bytes)`);
+            Y.applyUpdate(instance.ydoc, binary, 'remote-pull');
+          }
+        } catch (error) {
+          console.warn(`⚠️ [Pull] Failed to apply Yjs binary for ${documentId}:`, error);
+        }
+      }
+
       // Get local document from BackendWorkspaceService cache
       const allDocs = await backendWorkspaceService.getDocuments();
       const localDoc = allDocs.find(d => d.id === documentId);
@@ -570,12 +633,13 @@ export class SelectiveSyncService {
           tags: cloudDoc.tags || [],
         });
         
-        // Update sync status
-        await backendWorkspaceService.updateDocumentSyncStatus(
-          documentId,
-          'synced',
-          new Date().toISOString()
-        );
+        // Update sync status (including canonical Yjs version)
+        await guestWorkspaceService.updateDocument(documentId, {
+          syncStatus: 'synced',
+          cloudId: cloudDoc.id,
+          lastSyncedAt: cloudDoc.updated_at,
+          yjsVersion: cloudDoc.yjs_version,
+        });
       } else {
         // Create local document from cloud data
         await backendWorkspaceService.createDocument({
@@ -592,12 +656,13 @@ export class SelectiveSyncService {
           tags: cloudDoc.tags || [],
         });
         
-        // Update sync status
-        await backendWorkspaceService.updateDocumentSyncStatus(
-          documentId,
-          'synced',
-          new Date().toISOString()
-        );
+        // Update sync status (including canonical Yjs version)
+        await guestWorkspaceService.updateDocument(documentId, {
+          syncStatus: 'synced',
+          cloudId: cloudDoc.id,
+          lastSyncedAt: cloudDoc.updated_at,
+          yjsVersion: cloudDoc.yjs_version,
+        });
       }
 
       console.log('✅ Document pulled from cloud:', cloudDoc.title);

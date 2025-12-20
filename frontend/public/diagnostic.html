@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MDReader WebSocket Diagnostic</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #fff; }
+    .pass { color: #0f0; }
+    .fail { color: #f00; }
+    .test { margin: 10px 0; padding: 10px; background: #2d2d2d; border-radius: 5px; }
+  </style>
+</head>
+<body>
+  <h1>🔍 MDReader WebSocket Diagnostic</h1>
+  <div id="results"></div>
+  
+  <script>
+    const results = document.getElementById('results');
+    
+    function log(msg, pass = true) {
+      const div = document.createElement('div');
+      div.className = 'test ' + (pass ? 'pass' : 'fail');
+      div.textContent = (pass ? '✅' : '❌') + ' ' + msg;
+      results.appendChild(div);
+    }
+    
+    // Test 1: Check if authenticated
+    const authToken = localStorage.getItem('auth_token');
+    log(`Auth Token: ${authToken ? 'EXISTS' : 'MISSING'}`, !!authToken);
+    
+    // Test 2: Check sync mode
+    const syncMode = localStorage.getItem('mdreader:sync-mode') || 'online';
+    log(`Sync Mode: ${syncMode}`, syncMode === 'online');
+    
+    // Test 3: Check online status
+    log(`Navigator Online: ${navigator.onLine}`, navigator.onLine);
+    
+    // Test 4: Test WebSocket connection
+    log('Testing WebSocket connection to ws://localhost:1234...');
+    const docId = '09b2a568-cb95-4d58-a699-afea5a87ce60';
+    const ws = new WebSocket(`ws://localhost:1234/${docId}`);
+    
+    ws.onopen = () => {
+      log('WebSocket CONNECTED!', true);
+      ws.close();
+    };
+    
+    ws.onerror = (e) => {
+      log('WebSocket ERROR: ' + e, false);
+    };
+    
+    ws.onclose = (e) => {
+      log(`WebSocket CLOSED: code=${e.code}, reason=${e.reason}`, false);
+    };
+    
+    setTimeout(() => {
+      if (ws.readyState !== WebSocket.OPEN) {
+        log('WebSocket TIMEOUT - never connected', false);
+      }
+    }, 5000);
+  </script>
+</body>
+</html>
+
+

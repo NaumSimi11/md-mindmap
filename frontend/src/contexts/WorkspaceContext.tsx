@@ -10,6 +10,7 @@ import { syncManager } from '@/services/offline/SyncManager';
 import { authService } from '@/services/api';
 import { markdownToHtml } from '@/utils/markdownConversion';
 import * as Y from 'yjs';
+import * as buffer from 'lib0/buffer';
 
 // Type alias for consistency with existing code
 type Workspace = WorkspaceType;
@@ -34,6 +35,8 @@ interface Document {
     lastSyncedAt?: Date;
     cloudVersion?: number;
     localVersion?: number;
+    yjsVersion?: number;
+    yjsStateB64?: string;
   };
 }
 
@@ -57,6 +60,8 @@ function mapDocumentMetaToDocument(meta: DocumentMeta | any): Document {
       cloudId: meta.cloudId,
       lastSyncedAt: meta.lastSyncedAt ? new Date(meta.lastSyncedAt) : undefined,
       localVersion: meta.version,
+      yjsVersion: meta.yjsVersion,
+      yjsStateB64: meta.yjsStateB64,
     },
   };
 }
@@ -85,6 +90,13 @@ interface WorkspaceContextType {
   documents: Document[];
   isLoading: boolean;
   error: string | null;
+  // Reload prompt state when external file changes are detected
+  reloadPrompt: {
+    documentId: string;
+    filePath: string;
+    changeCount: number;
+    timestamp: number;
+  } | null;
   
   switchWorkspace: (workspace: Workspace) => Promise<void>;
   createWorkspace: (data: { name: string; description: string; icon: string }) => Promise<Workspace>;
@@ -108,6 +120,21 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [initCounter, setInitCounter] = useState(0); // Force re-init counter
+  const [reloadPrompt, setReloadPrompt] = useState<{
+    documentId: string;
+    filePath: string;
+    changeCount: number;
+    timestamp: number;
+  } | null>(null);
+  
+  // 🔥 BLOCKING ACTION 1: Guest document migration prompt
+  const [guestDocumentPrompt, setGuestDocumentPrompt] = useState<{
+    count: number;
+    workspaceId: string;
+  } | null>(null);
+  
+  // 🔥 BLOCKING ACTION 3: Guest mode explainer toast
+  const [showGuestExplainer, setShowGuestExplainer] = useState(false);
 
   // Initialize on auth
   // 🔥 FIX 11: Auth epoch gate to prevent triple-initialization
@@ -340,6 +367,21 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       });
       
       if (authCheck) {
+        // 🔥 BLOCKING ACTION 1: Check for guest documents before re-init
+        try {
+          const guestDocs = await guestWorkspaceService.getDocuments();
+          if (guestDocs.length > 0) {
+            const currentWs = await guestWorkspaceService.getCurrentWorkspace();
+            console.log(`📋 Found ${guestDocs.length} guest documents after login`);
+            setGuestDocumentPrompt({
+              count: guestDocs.length,
+              workspaceId: currentWs?.id || '',
+            });
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to check guest documents:', error);
+        }
+        
         // Force re-init by incrementing counter
         setInitCounter(prev => prev + 1);
         console.log('✅ Forcing workspace re-init after login');
@@ -377,14 +419,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         starred: doc.is_starred || false,
         tags: doc.tags || [],
         createdAt: new Date(doc.created_at),
-        updatedAt: new Date(doc.updated_at),
-        lastOpenedAt: doc.last_opened_at ? new Date(doc.last_opened_at) : undefined,
-        metadata: {},
-        sync: {
-          status: 'synced',
-          lastSyncedAt: new Date(),
-        }
-      };
+      updatedAt: new Date(doc.updated_at),
+      lastOpenedAt: doc.last_opened_at ? new Date(doc.last_opened_at) : undefined,
+      metadata: {},
+      sync: {
+        status: 'synced',
+        lastSyncedAt: new Date(),
+        yjsVersion: doc.yjs_version,
+        yjsStateB64: doc.yjs_state_b64,
+      }
+    };
       
       // Note: Backend service manages its own state via IndexedDB cache
       // No need to manually update internal state
@@ -404,9 +448,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     // ✅ FIX 2: Listen for sync status changes (after push to cloud)
     const handleSyncStatusChanged = (event: Event) => {
       const customEvent = event as CustomEvent;
-      const { documentId, syncStatus, cloudId, lastSyncedAt } = customEvent.detail;
+      const { documentId, syncStatus, cloudId, lastSyncedAt, yjsVersion, yjsStateB64 } = customEvent.detail;
       
-      console.log(`✅ [FIX 2] Document sync status changed: ${documentId} → ${syncStatus}`);
+      console.log(`✅ [FIX 2] Document sync status changed: ${documentId} → ${syncStatus} (v${yjsVersion || 0})`);
       
       // Update only the sync status of the existing document
       setDocuments(prev => prev.map(doc => {
@@ -417,6 +461,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
               status: syncStatus,
               cloudId,
               lastSyncedAt: lastSyncedAt ? new Date(lastSyncedAt) : new Date(),
+              yjsVersion,
+              yjsStateB64,
             }
           };
         }
@@ -443,6 +489,99 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('document-sync-status-changed', handleSyncStatusChanged);
       window.removeEventListener('offline-data-loaded', handleOfflineDataLoaded);
     };
+  }, []);
+
+  // 🔥 BLOCKING ACTION 3: Listen for first guest document creation
+  useEffect(() => {
+    const handleFirstGuestDoc = () => {
+      setShowGuestExplainer(true);
+      // Auto-hide after 8 seconds
+      setTimeout(() => setShowGuestExplainer(false), 8000);
+    };
+    
+    window.addEventListener('first-guest-document-created', handleFirstGuestDoc);
+    return () => window.removeEventListener('first-guest-document-created', handleFirstGuestDoc);
+  }, []);
+  
+  // Subscribe to external file change events (do not reload here - UI only)
+  useEffect(() => {
+    // Lazy import to avoid tauri runtime errors in web
+    let unsub: (() => void) | null = null;
+    (async () => {
+      try {
+        const { fileWatcherService } = await import('@/services/tauri/FileWatcherService');
+        unsub = fileWatcherService.onExternalFileChange((event) => {
+          // event: { documentId, filePath, count, lastModified }
+          setReloadPrompt(prev => {
+            if (prev && prev.documentId === event.documentId) {
+              return {
+                documentId: event.documentId,
+                filePath: event.filePath,
+                changeCount: prev.changeCount + event.count,
+                timestamp: Date.now(),
+              };
+            }
+            return {
+              documentId: event.documentId,
+              filePath: event.filePath,
+              changeCount: event.count,
+              timestamp: Date.now(),
+            };
+          });
+        });
+      } catch (err) {
+        // FileWatcherService might not exist on web; ignore
+        console.warn('⚠️ FileWatcherService not available:', err);
+      }
+    })();
+
+    return () => {
+      if (unsub) unsub();
+    };
+  }, []);
+  
+  /**
+   * Snapshot current Yjs state vector (minimal provenance) before reload.
+   * Stores snapshot in localStorage with metadata for debugging.
+   */
+  const snapshotBeforeReload = useCallback(async (documentId: string, opts: { reason: string; filePath: string; timestamp?: number }) => {
+    try {
+      const { yjsDocumentManager } = await import('@/services/yjs/YjsDocumentManager');
+      const info = yjsDocumentManager.getDocumentInfo(documentId);
+      const ts = opts.timestamp || Date.now();
+      if (!info) {
+        console.warn('⚠️ snapshotBeforeReload: no ydoc for', documentId);
+        // Still log provenance
+        const meta = { documentId, timestamp: ts, reason: opts.reason, filePath: opts.filePath, vector: null };
+        localStorage.setItem(`mdreader:snapshot:${documentId}:${ts}`, JSON.stringify(meta));
+        console.log('🔖 Snapshot recorded (no ydoc):', meta);
+        return;
+      }
+
+      // Encode state vector
+      const stateVector = Y.encodeStateVector(info.ydoc);
+      // Base64 encode for storage
+      const base64 = typeof window !== 'undefined' ? btoa(String.fromCharCode(...Array.from(stateVector))) : Buffer.from(stateVector).toString('base64');
+
+      const meta = {
+        documentId,
+        timestamp: ts,
+        reason: opts.reason,
+        filePath: opts.filePath,
+        vector: base64,
+      };
+
+      // Persist to localStorage for now
+      try {
+        localStorage.setItem(`mdreader:snapshot:${documentId}:${ts}`, JSON.stringify(meta));
+      } catch (e) {
+        console.warn('⚠️ snapshotBeforeReload: failed to persist snapshot to localStorage', e);
+      }
+
+      console.log('🔖 Snapshot recorded:', { documentId, timestamp: ts, reason: opts.reason, filePath: opts.filePath });
+    } catch (err) {
+      console.error('❌ snapshotBeforeReload failed:', err);
+    }
   }, []);
   
   // ✅ FIX 5: Dev-mode invariant check for document integrity
@@ -596,6 +735,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     // Regardless of auth status, documents are LOCAL until explicitly synced to cloud
     console.log('📝 LOCAL-FIRST: Creating document in local IndexedDB (MDReaderGuest)');
     
+    // 🔥 BLOCKING ACTION 3: Show guest mode explainer on first document creation
+    const authCheck = authService.isAuthenticated();
+    if (!authCheck) {
+      const existingDocs = await guestWorkspaceService.getDocuments();
+      if (existingDocs.length === 0) {
+        // First document creation in guest mode
+        console.log('💡 First guest document - showing explainer');
+        // Emit event that UI can listen to
+        window.dispatchEvent(new CustomEvent('first-guest-document-created', {
+          detail: { title }
+        }));
+      }
+    }
+    
       const guestDoc = await guestWorkspaceService.createDocument({
         workspaceId: currentWorkspace.id,
         title,
@@ -696,15 +849,21 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setDocuments(prev => prev.filter(d => d.id !== documentId));
   }, [isAuthenticated]);
 
-  // 🔥 STEP 4: ONE-TIME CONTENT HYDRATION INTO Yjs
-  // This function writes initial markdown content into a Yjs document EXACTLY ONCE
+  // 🔥 STAGE 1: SOFT FLIP - PREFER YJS BINARY FOR HYDRATION
+  // This function writes initial content into a Yjs document EXACTLY ONCE
   // ✅ Location: WorkspaceContext (data layer, not view layer)
+  // ✅ Priority: Yjs Binary > Markdown Cache
   // ✅ Gate: fragment.length === 0 (ONLY allowed check)
-  // ✅ Write: Directly to Yjs (NOT through TipTap)
-  const hydrateYjsDocument = async (documentId: string, markdown: string) => {
-    if (!markdown) return; // No content to hydrate
-    
-    // Get Yjs document from manager
+  // 
+  // 🛡️ CRITICAL INVARIANT (Yjs Rule):
+  //    Never apply snapshots while HocuspocusProvider is active
+  //    Snapshots are WRITE-ONLY during live collaboration
+  //    Snapshots can only be APPLIED when:
+  //    - Cold load (no provider attached)
+  //    - Offline mode (provider disconnected)
+  //    - Document closed (provider destroyed)
+  const hydrateYjsDocument = async (documentId: string, markdown: string, yjsStateB64?: string) => {
+    // 1. Get Yjs document from manager
     const { yjsDocumentManager } = await import('@/services/yjs/YjsDocumentManager');
     const instance = yjsDocumentManager.getDocument(documentId, {
       enableWebSocket: false,
@@ -713,37 +872,70 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     
     const { ydoc } = instance;
     
-    // 🔥 THE HYDRATION GATE (ONLY ALLOWED CHECK)
+    // 2. THE HYDRATION GATE (ONLY ALLOWED CHECK)
     const fragment = ydoc.getXmlFragment('content');
-    
-    if (fragment.length > 0) {
-      // ❌ DO NOTHING - content already exists
+    const isFragmentPopulated = fragment.length > 0;
+
+    // 🛡️ CRITICAL INVARIANT: Never apply snapshots while HocuspocusProvider is active
+    // Applying updates during live sync can corrupt the CRDT state
+    if (instance.websocketProvider) {
+      console.warn('⚠️ [INVARIANT] Skipping hydration - HocuspocusProvider is active:', documentId);
+      console.warn('   📖 Rule: Snapshots are WRITE-ONLY during live collaboration');
+      return;
+    }
+
+    if (process.env.NODE_ENV === 'development') {
+      if (yjsStateB64 && isFragmentPopulated) {
+        console.error('❌ [INVARIANT VIOLATION] Attempted to hydrate from binary on a non-empty Yjs doc!');
+      }
+    }
+
+    if (isFragmentPopulated) {
       console.log('ℹ️ [STEP 4] Yjs document already has content, skipping hydration:', documentId);
       return;
     }
+
+    // 3. APPLY YJS BINARY (AUTHORITATIVE)
+    if (yjsStateB64) {
+      console.log('🧬 [STEP 4] [STAGE 2 ENFORCEMENT] Hydrating from binary truth:', documentId, `(${yjsStateB64.length} chars b64)`);
+      try {
+        const binary = buffer.fromBase64(yjsStateB64);
+        Y.applyUpdate(ydoc, binary, 'initial-hydration');
+        console.log('✅ [STEP 4] Binary truth established. Markdown fallback will be ignored.');
+        return; // ✅ ENFORCED: Do not fall back to markdown if binary exists
+      } catch (error) {
+        console.warn('⚠️ [STEP 4] Binary hydration failed, falling back to legacy markdown:', error);
+        // Fall through to markdown only on error
+      }
+    }
     
-    // Empty fragment → proceed with one-time hydration
-    console.log('🧬 [STEP 4] Hydrating Yjs document from markdown:', documentId, `(${markdown.length} chars)`);
+    // 4. FALLBACK TO MARKDOWN
+    if (!markdown) return;
+    
+    if (process.env.NODE_ENV === 'development') {
+      if (yjsStateB64) {
+        console.error('❌ [INVARIANT VIOLATION] Markdown hydration attempted on Yjs-authoritative document (this should have been caught by the binary path return)');
+      }
+    }
+
+    console.log('🧬 [STEP 4] [LEGACY] Hydrating Yjs document from markdown fallback:', documentId);
     
     try {
       // Step 1: Convert Markdown → HTML
       const html = markdownToHtml(markdown);
       
       // Step 2: Store in temporary field for TipTap to pick up
-      // TipTap's Collaboration extension will sync this to the XmlFragment
       ydoc.transact(() => {
         const tempText = ydoc.getText('_init_markdown');
-        // Clear existing temp content (if any)
         if (tempText.length > 0) {
           tempText.delete(0, tempText.length);
         }
-        // Insert markdown
-        tempText.insert(0, html); // Store HTML (ready for TipTap)
+        tempText.insert(0, html);
       });
       
-      console.log('✅ [STEP 4] Hydrated Yjs document from initial content:', documentId);
+      console.log('✅ [STEP 4] Hydrated from markdown successfully');
     } catch (error) {
-      console.error('❌ [STEP 4] Hydration failed:', error);
+      console.error('❌ [STEP 4] Markdown hydration failed:', error);
     }
   };
 
@@ -761,16 +953,52 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const guestDoc = await guestWorkspaceService.getDocument(documentId);
       document = guestDoc ? mapDocumentMetaToDocument(guestDoc) : undefined;
     } else {
-      // 🔥 LOCAL-FIRST FIX: When authenticated, check BOTH services!
-      // Guest documents (created before login) are still in GuestWorkspaceService.
-      // Cloud documents are in BackendWorkspaceService.
-      // Check guest first (local-first), then backend (cloud).
+      // 🔥 CRITICAL FIX: When authenticated, check if guest doc has cloud mapping
+      // If guest doc was pushed to cloud, use the CLOUD version (enables WebSocket!)
       
       // First, try guest service (for documents created before login)
       const guestDoc = await guestWorkspaceService.getDocument(documentId);
       if (guestDoc) {
         console.log(`✅ [getDocument] Found in guest service: ${documentId}`);
-        document = mapDocumentMetaToDocument(guestDoc);
+        
+        // 🚀 NEW: Check if this guest doc has been pushed to cloud
+        if (guestDoc.cloudId && guestDoc.syncStatus === 'synced') {
+          console.log(`🔄 [getDocument] Guest doc has cloud mapping, loading cloud version: ${guestDoc.cloudId}`);
+          
+          // Signal that caller should redirect to cloud ID
+          // This will enable WebSocket and real-time collaboration!
+          const cloudDoc = await backendWorkspaceService.getDocument(guestDoc.cloudId);
+          if (cloudDoc) {
+            const mappedDoc = mapDocumentMetaToDocument(cloudDoc);
+            // Add a flag to indicate redirect is needed
+            (mappedDoc as any).__redirectToCloudId = guestDoc.cloudId;
+            document = mappedDoc;
+          } else {
+            // Cloud doc not found, use guest version as fallback
+            document = mapDocumentMetaToDocument(guestDoc);
+          }
+        } else {
+          // 🚀 CRITICAL FIX: Even if no cloudId mapping, check if cloud version exists
+          // This handles cases where doc was created via API but mapping wasn't stored
+          const possibleCloudId = documentId.startsWith('doc_') ? documentId.slice(4) : documentId;
+          const cloudDoc = await backendWorkspaceService.getDocument(possibleCloudId).catch(() => null);
+          
+          if (cloudDoc) {
+            console.log(`🔄 [getDocument] Found cloud version without mapping: ${possibleCloudId}`);
+            // Update guest doc with cloud mapping
+            await guestWorkspaceService.updateDocument(documentId, {
+              cloudId: possibleCloudId,
+              syncStatus: 'synced',
+            });
+            
+            const mappedDoc = mapDocumentMetaToDocument(cloudDoc);
+            (mappedDoc as any).__redirectToCloudId = possibleCloudId;
+            document = mappedDoc;
+          } else {
+            // No cloud mapping yet, use guest version
+            document = mapDocumentMetaToDocument(guestDoc);
+          }
+        }
       } else {
         // If not in guest service, try backend service (cloud documents)
         const doc = await backendWorkspaceService.getDocument(documentId);
@@ -793,9 +1021,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       }
     }
     
-    // 🔥 STEP 4: ONE-TIME CONTENT HYDRATION (if document has content)
-    if (document && document.content) {
-      await hydrateYjsDocument(documentId, document.content);
+    // 🔥 STEP 4: ONE-TIME CONTENT HYDRATION
+    if (document) {
+      await hydrateYjsDocument(documentId, document.content, document.sync.yjsStateB64);
     }
     
     return document;
@@ -903,47 +1131,97 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }, [currentWorkspace, isAuthenticated]);
 
-  const autoSaveDocument = useCallback((documentId: string, content: string) => {
+  // 🔥 BLOCKING ACTION 1: Handler to push all guest documents to cloud
+  const handlePushGuestDocuments = useCallback(async () => {
+    if (!guestDocumentPrompt) return;
+    
+    try {
+      console.log(`🚀 Pushing ${guestDocumentPrompt.count} guest documents to cloud...`);
+      const guestDocs = await guestWorkspaceService.getDocuments();
+      
+      // Import SelectiveSyncService dynamically to avoid circular deps
+      const { selectiveSyncService } = await import('@/services/sync/SelectiveSyncService');
+      
+      let successCount = 0;
+      let failCount = 0;
+      
+      for (const doc of guestDocs) {
+        try {
+          const result = await selectiveSyncService.pushDocument(doc.id);
+          if (result.success) {
+            successCount++;
+          } else {
+            failCount++;
+            console.warn(`⚠️ Failed to push ${doc.title}:`, result.error);
+          }
+        } catch (error) {
+          failCount++;
+          console.error(`❌ Error pushing ${doc.title}:`, error);
+        }
+      }
+      
+      console.log(`✅ Push complete: ${successCount} succeeded, ${failCount} failed`);
+      
+      // Close prompt
+      setGuestDocumentPrompt(null);
+      
+      // Refresh documents to show newly synced ones
+      await refreshDocuments();
+    } catch (error) {
+      console.error('❌ Failed to push guest documents:', error);
+    }
+  }, [guestDocumentPrompt, refreshDocuments]);
+
+  const autoSaveDocument = useCallback(async (documentId: string, content: string) => {
     console.log(`💾 autoSaveDocument called: ${documentId}, ${content.length} chars`);
     
+    // Get binary state for dual-write (local-first truth)
+    const { yjsDocumentManager } = await import('@/services/yjs/YjsDocumentManager');
+    const binary = yjsDocumentManager.getYjsBinarySnapshot(documentId);
+    const yjsStateB64 = binary ? buffer.toBase64(binary) : undefined;
+
     // Guest mode: Save content to IndexedDB
     if (!isAuthenticated) {
       guestWorkspaceService.updateDocument(documentId, { 
-        content
+        content,
+        yjsStateB64,
       });
       
       // 🔥 CRITICAL: Update local state so getDocument() returns fresh content
       setDocuments(prev => prev.map(doc => 
         doc.id === documentId 
-          ? { ...doc, content, updatedAt: new Date() }
+          ? { ...doc, content, updatedAt: new Date(), sync: { ...doc.sync, yjsStateB64 } }
           : doc
       ));
       
-      console.log(`✅ Saved to IndexedDB + updated state: ${content.length} chars`);
+      console.log(`✅ Saved to IndexedDB + updated state: ${content.length} chars (binary truth preserved)`);
       return;
     }
     
-    // Authenticated mode: Save to backend
-    backendWorkspaceService.getDocuments().then(docs => {
-      const docExists = docs.some(d => d.id === documentId);
-      if (docExists) {
-        backendWorkspaceService.updateDocument(documentId, { content }).then(() => {
-          // 🔥 CRITICAL: Update local state so getDocument() returns fresh content
-          setDocuments(prev => prev.map(doc => 
-            doc.id === documentId 
-              ? { ...doc, content, updatedAt: new Date() }
-              : doc
-          ));
-          console.log(`✅ Saved to backend + updated state: ${content.length} chars`);
-        }).catch(err => {
-          console.warn('⚠️ Failed to save document:', err);
+    // Authenticated mode: Save to backend CACHE (local-first)
+    // Note: This only updates the local IndexedDB cache, not the cloud API
+    const docs = await backendWorkspaceService.getDocuments();
+    const docExists = docs.some(d => d.id === documentId);
+    if (docExists) {
+      try {
+        await backendWorkspaceService.updateDocument(documentId, { 
+          content,
+          yjsStateB64,
         });
-      } else {
-        console.log('ℹ️ Document not in cache yet');
+        
+        // 🔥 CRITICAL: Update local state
+        setDocuments(prev => prev.map(doc => 
+          doc.id === documentId 
+            ? { ...doc, content, updatedAt: new Date(), sync: { ...doc.sync, yjsStateB64 } }
+            : doc
+        ));
+        console.log(`✅ Saved to backend cache + updated state: ${content.length} chars (binary truth preserved)`);
+      } catch (err) {
+        console.warn('⚠️ Failed to save document to cache:', err);
       }
-    }).catch(err => {
-      console.warn('⚠️ Failed to check document existence:', err);
-    });
+    } else {
+      console.log('ℹ️ Document not in cache yet');
+    }
   }, [isAuthenticated]);
 
   return (
@@ -961,8 +1239,76 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       getDocument,
       refreshDocuments,
       autoSaveDocument,
+      reloadPrompt,
     }}>
       {children}
+
+      {/* Reload confirmation modal — UI only, no reload logic here */}
+      {reloadPrompt && (
+        <React.Suspense fallback={null}>
+          {/* Lazy import modal to avoid bundling in non-UI contexts */}
+          <ReloadModalWrapper
+            reloadPrompt={reloadPrompt}
+            onClose={() => setReloadPrompt(null)}
+            snapshotBeforeReload={snapshotBeforeReload}
+          />
+        </React.Suspense>
+      )}
+      
+      {/* 🔥 BLOCKING ACTION 1: Guest document migration prompt */}
+      {guestDocumentPrompt && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+              📋 Local Documents Found
+            </h2>
+            <p className="text-gray-600 dark:text-gray-300 mb-6">
+              You have <strong>{guestDocumentPrompt.count} local document{guestDocumentPrompt.count !== 1 ? 's' : ''}</strong> created before logging in.
+              Would you like to push them to the cloud to sync across devices?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handlePushGuestDocuments}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium transition-colors"
+              >
+                ☁️ Push to Cloud
+              </button>
+              <button
+                onClick={() => setGuestDocumentPrompt(null)}
+                className="flex-1 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-md font-medium transition-colors"
+              >
+                Keep Local
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-4">
+              💡 Tip: Local documents will remain accessible but won't sync across devices.
+            </p>
+          </div>
+        </div>
+      )}
+      
+      {/* 🔥 BLOCKING ACTION 3: Guest mode explainer toast */}
+      {showGuestExplainer && (
+        <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-5">
+          <div className="bg-blue-600 text-white rounded-lg shadow-lg p-4 max-w-sm border-2 border-blue-400">
+            <div className="flex items-start gap-3">
+              <div className="text-2xl">💡</div>
+              <div>
+                <h3 className="font-semibold mb-1">Local-Only Mode</h3>
+                <p className="text-sm text-blue-100 mb-2">
+                  Your document is saved locally in your browser. It won't sync across devices until you login and push to cloud.
+                </p>
+                <button
+                  onClick={() => setShowGuestExplainer(false)}
+                  className="text-xs text-blue-200 hover:text-white underline"
+                >
+                  Got it!
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </WorkspaceContext.Provider>
   );
 }

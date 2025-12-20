@@ -33,8 +33,34 @@ const server = Server.configure({
   extensions: [
     createLoggerExtension(),
     createAuthExtension(),
-    createDatabaseExtension(),
+    // DatabaseExtension REMOVED - we use backend API + snapshot system for persistence
+    // Hocuspocus only handles real-time collaboration in-memory
   ],
+  
+  /**
+   * CRITICAL FIX: Extract document name from WebSocket URL
+   * 
+   * Hocuspocus by default gets the document name from the URL path,
+   * but it seems to be failing. This hook explicitly extracts it.
+   */
+  async onRequest(data) {
+    // Extract document name from request URL
+    const url = data.request?.url || '';
+    const pathMatch = url.match(/^\/([^?]+)/);
+    const documentName = pathMatch ? pathMatch[1] : '';
+    
+    console.log(`🔍 [ON_REQUEST] Incoming WebSocket connection:`);
+    console.log(`   URL: ${url}`);
+    console.log(`   Extracted documentName: "${documentName}"`);
+    
+    // Override the documentName in the data object
+    if (documentName && !data.documentName) {
+      data.documentName = documentName;
+      console.log(`   ✅ Set documentName to: "${documentName}"`);
+    }
+    
+    return data;
+  },
 
   /**
    * Global error handler
@@ -52,12 +78,15 @@ const server = Server.configure({
   /**
    * Connection handler
    */
-  async onConnect({ documentName, requestHeaders, connection, context }) {
+  async onConnect({ documentName, requestHeaders, connection, context, request }) {
     const user = context?.user?.name || 'Guest';
     console.log(`
 🔌 Connection established
 👤 User: ${user}
-📄 Document: ${documentName}
+📄 Document: "${documentName}"
+📄 Document length: ${documentName ? documentName.length : 0}
+📄 Document bytes: ${documentName ? Buffer.from(documentName).toString('hex') : 'none'}
+🌐 URL: ${request?.url || 'unknown'}
 🌐 IP: ${requestHeaders['x-forwarded-for'] || connection.readyState}
     `);
   },

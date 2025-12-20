@@ -13,13 +13,13 @@
 
 import * as Y from 'yjs';
 import { IndexeddbPersistence } from 'y-indexeddb';
-import { WebsocketProvider } from 'y-websocket';
+import { HocuspocusProvider } from '@hocuspocus/provider';
 import { SnapshotManager } from '@/services/snapshots/SnapshotManager';
 
 interface YjsDocumentInstance {
   ydoc: Y.Doc;
   indexeddbProvider: IndexeddbPersistence;
-  websocketProvider: WebsocketProvider | null;
+  websocketProvider: HocuspocusProvider | null;
   snapshotManager: SnapshotManager | null; // STEP 5: Cloud snapshots
   refCount: number; // Number of components using this document
   isInitialized: boolean;
@@ -51,6 +51,14 @@ class YjsDocumentManager {
   }
 
   /**
+   * Get document instance (read-only access for status checks)
+   * Used by useSyncStatus hook to read sync state
+   */
+  public getDocumentInstance(documentId: string): YjsDocumentInstance | null {
+    return this.documents.get(documentId) || null;
+  }
+
+  /**
    * Get or create a Yjs document instance
    * @param documentId - Unique document identifier
    * @param options - Configuration options
@@ -71,6 +79,57 @@ class YjsDocumentManager {
       instance.refCount++;
       instance.lastAccessed = Date.now();
       console.log(`♻️ Reusing existing Yjs document: ${documentId} (refCount: ${instance.refCount})`);
+      
+      // 🔥 UPGRADE FIX: If document exists but WebSocket is needed and missing, add it now!
+      if (enableWebSocket && isAuthenticated && !instance.websocketProvider) {
+        console.log(`🔄 [UPGRADE] Adding WebSocket to existing document: ${documentId}`);
+        
+        try {
+          const authToken = localStorage.getItem('auth_token');
+          
+          if (!authToken) {
+            console.warn(`⚠️ No auth token found for WebSocket upgrade`);
+          } else {
+            console.log(`🔥 [UPGRADE DEBUG] Creating Hocuspocus provider with:`, {
+              websocketUrl,
+              documentId,
+              documentIdType: typeof documentId,
+              documentIdLength: documentId ? documentId.length : 0,
+              documentIdValue: JSON.stringify(documentId),
+            });
+            
+            const websocketProvider = new HocuspocusProvider({
+              url: websocketUrl,
+              name: documentId,
+              document: instance.ydoc,
+              token: authToken || '',
+            });
+            
+            console.log(`🔥 [UPGRADE DEBUG] Hocuspocus provider created:`, {
+              url: websocketProvider.configuration.url,
+              name: websocketProvider.configuration.name,
+            });
+            
+            websocketProvider.on('status', (event: { status: string }) => {
+              console.log(`🌐 WebSocket status for ${documentId}:`, event.status);
+            });
+            
+            websocketProvider.on('sync', (isSynced: boolean) => {
+              console.log(`🔄 WebSocket sync for ${documentId}:`, isSynced);
+            });
+            
+            websocketProvider.on('connection-error', (error: any) => {
+              console.error(`❌ WebSocket connection error for ${documentId}:`, error);
+            });
+            
+            instance.websocketProvider = websocketProvider;
+            console.log(`✅ [UPGRADE] WebSocket added successfully for ${documentId} (with auth: true) - Room: ${(websocketProvider as any).roomname}`);
+          }
+        } catch (wsError) {
+          console.error(`❌ [UPGRADE] WebSocket creation failed for ${documentId}:`, wsError);
+        }
+      }
+      
       return instance;
     }
 
@@ -100,12 +159,42 @@ class YjsDocumentManager {
       });
 
       // 2. Setup WebSocket provider (ONLY if authenticated + enabled)
-      let websocketProvider: WebsocketProvider | null = null;
+      let websocketProvider: HocuspocusProvider | null = null;
       
       if (enableWebSocket && isAuthenticated) {
         try {
-          websocketProvider = new WebsocketProvider(websocketUrl, documentId, ydoc, {
-            connect: true,
+          // Get JWT token for authentication
+          const authToken = localStorage.getItem('auth_token');
+          
+          if (!authToken) {
+            console.warn(`⚠️ No auth token found, WebSocket will connect as guest`);
+          }
+          
+          console.log(`🌐 [WEBSOCKET DEBUG] Creating WebSocket provider with:`, {
+            websocketUrl,
+            documentId,
+            documentIdType: typeof documentId,
+            documentIdLength: documentId.length,
+            authToken: authToken ? `${authToken.substring(0, 20)}...` : 'none'
+          });
+          
+          console.log(`🔥 [DEBUG] RAW VALUES:`, {
+            'arg1 (serverUrl)': websocketUrl,
+            'arg2 (roomname)': documentId,
+            'arg3': 'ydoc',
+            'arg4': { connect: true, params: { token: authToken || '' } }
+          });
+          
+          websocketProvider = new HocuspocusProvider({
+            url: websocketUrl,
+            name: documentId,
+            document: ydoc,
+            token: authToken || '',
+          });
+          
+          console.log(`🔥 [DEBUG] Hocuspocus provider created:`, {
+            url: websocketProvider.configuration.url,
+            name: websocketProvider.configuration.name,
           });
           
           websocketProvider.on('status', (event: { status: string }) => {
@@ -116,7 +205,11 @@ class YjsDocumentManager {
             console.log(`🔄 WebSocket sync for ${documentId}:`, isSynced);
           });
           
-          console.log(`🌐 WebSocket enabled for ${documentId}`);
+          websocketProvider.on('connection-error', (error: any) => {
+            console.error(`❌ WebSocket connection error for ${documentId}:`, error);
+          });
+          
+          console.log(`🌐 WebSocket enabled for ${documentId} (with auth: ${!!authToken})`);
         } catch (wsError) {
           console.error(`❌ WebSocket creation failed for ${documentId}:`, wsError);
           // Continue without WebSocket - local-only mode
@@ -178,6 +271,21 @@ class YjsDocumentManager {
 
     // Don't destroy immediately - let cleanup timer handle it
     // This allows for quick re-access without re-initialization
+  }
+
+  /**
+   * Get a binary snapshot of the current Yjs document state
+   * @param documentId - Document to snapshot
+   * @returns Uint8Array binary update
+   */
+  public getYjsBinarySnapshot(documentId: string): Uint8Array | null {
+    const instance = this.documents.get(documentId);
+    if (!instance || !instance.ydoc) {
+      return null;
+    }
+
+    // 🔥 PURE: encodeStateAsUpdate is a read-only operation that captures the full state
+    return Y.encodeStateAsUpdate(instance.ydoc);
   }
 
   /**

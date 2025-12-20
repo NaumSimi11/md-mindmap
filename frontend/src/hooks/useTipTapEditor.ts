@@ -101,21 +101,39 @@ export const useTipTapEditor = ({
         
         console.log('🔧 [STEP 4] Loading hydrated content from Yjs:', htmlContent.length, 'chars');
         
-        // Load into editor (one-time only)
-        isProgrammaticUpdateRef.current = true;
-        editor.commands.setContent(htmlContent);
+        // 🔥 CRITICAL: Delay setContent until view is ready, as some extensions might need it
+        const checkView = setInterval(() => {
+            try {
+                if (editor.view && editor.view.dom) {
+                    clearInterval(checkView);
+                    
+                    isProgrammaticUpdateRef.current = true;
+                    editor.commands.setContent(htmlContent);
+                    
+                    // Clear the temp field (content now in XmlFragment via Collaboration extension)
+                    ydoc.transact(() => {
+                        tempText.delete(0, tempText.length);
+                    });
+                    
+                    requestAnimationFrame(() => {
+                        isProgrammaticUpdateRef.current = false;
+                    });
+                    
+                    console.log('✅ [STEP 4] Initial content loaded and temp field cleared');
+                    hasLoadedInitialRef.current = true;
+                }
+            } catch (e) {
+                // View not ready yet
+            }
+        }, 50);
+
+        // Safety cleanup for interval
+        const timeoutId = setTimeout(() => clearInterval(checkView), 10000);
         
-        // Clear the temp field (content now in XmlFragment via Collaboration extension)
-        ydoc.transact(() => {
-            tempText.delete(0, tempText.length);
-        });
-        
-        requestAnimationFrame(() => {
-            isProgrammaticUpdateRef.current = false;
-        });
-        
-        console.log('✅ [STEP 4] Initial content loaded and temp field cleared');
-        hasLoadedInitialRef.current = true;
+        return () => {
+            clearInterval(checkView);
+            clearTimeout(timeoutId);
+        };
     }, [ydoc, editor, isProgrammaticUpdateRef]);
 
     return {

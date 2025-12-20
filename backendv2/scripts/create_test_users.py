@@ -117,6 +117,48 @@ async def create_test_users():
                 session.add(workspace2)
                 print(f"   ✅ Created workspace: {workspace2.name}")
             
+            # Test User 3: Naum
+            print("\n🔹 Creating Test User 3: Naum")
+            
+            result = await session.execute(
+                select(User).where(User.email == "naum@example.com")
+            )
+            existing_user3 = result.scalar_one_or_none()
+            
+            if existing_user3:
+                print("   ⚠️  User already exists: naum@example.com")
+                user3 = existing_user3
+            else:
+                user3 = User(
+                    email="naum@example.com",
+                    username="naum",
+                    full_name="Naum",
+                    hashed_password=hash_password("Kozuvcanka#1")
+                )
+                session.add(user3)
+                await session.flush()
+                print(f"   ✅ Created user: {user3.email} (ID: {user3.id})")
+            
+            # Create default workspace for user3
+            result = await session.execute(
+                select(Workspace).where(
+                    Workspace.owner_id == user3.id,
+                    Workspace.slug == "naum-workspace"
+                )
+            )
+            existing_workspace3 = result.scalar_one_or_none()
+            
+            if existing_workspace3:
+                print("   ⚠️  Workspace already exists: Naum Workspace")
+            else:
+                workspace3 = Workspace(
+                    name="Naum Workspace",
+                    slug="naum-workspace",
+                    owner_id=user3.id
+                )
+                session.add(workspace3)
+                print(f"   ✅ Created workspace: {workspace3.name}")
+
             # Commit all changes
             await session.commit()
             
@@ -130,6 +172,9 @@ async def create_test_users():
                 print("\nUser 2:")
                 print("  Email: ljubo@example.com")
                 print("  Password: Ljubisha#1")
+                print("\nUser 3:")
+                print("  Email: naum@example.com")
+                print("  Password: Kozuvcanka#1")
                 print("─" * 50)
             
         except Exception as e:

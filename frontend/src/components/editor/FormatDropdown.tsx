@@ -83,6 +83,18 @@ export const FormatDropdown: React.FC<FormatDropdownProps> = ({
   const currentFontSize = editor.getAttributes('textStyle')?.fontSize || '';
   const { from, to } = editor.state.selection;
   const hasSelection = from !== to;
+  // Force re-render on selection/transaction updates to reflect editor.isActive(...) state
+  const [, forceUpdate] = React.useReducer((x) => x + 1, 0);
+  React.useEffect(() => {
+    if (!editor) return;
+    const handle = () => forceUpdate();
+    editor.on('transaction', handle);
+    editor.on('selectionUpdate', handle);
+    return () => {
+      editor.off('transaction', handle);
+      editor.off('selectionUpdate', handle);
+    };
+  }, [editor]);
 
   // Get current formatting status for display
   const getFormatLabel = () => {

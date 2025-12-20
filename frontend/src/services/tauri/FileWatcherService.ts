@@ -36,6 +36,10 @@ class FileWatcherService {
   private watchedPath: string | null = null;
   private openDocuments: Map<string, string> = new Map(); // documentId -> filePath
   private changeHandlers: Array<(event: FileChangeEvent) => void> = [];
+  // External change subscribers (typed)
+  private externalChangeHandlers: Array<(event: { documentId: string; filePath: string; count: number; lastModified: string; }) => void> = [];
+  // Pending coalesced external changes per documentId
+  private pendingExternalChanges: Map<string, { count: number; filePath: string; lastModified: string; timer: any }> = new Map();
   private notificationQueue: FileChangeEvent[] = [];
   private processingNotification = false;
 
@@ -133,6 +137,18 @@ class FileWatcherService {
   }
 
   /**
+   * Subscribe to external file change events (typed)
+   * Returns unsubscribe function
+   */
+  onExternalFileChange(handler: (event: { documentId: string; filePath: string; count: number; lastModified: string; }) => void): () => void {
+    this.externalChangeHandlers.push(handler);
+    return () => {
+      const idx = this.externalChangeHandlers.indexOf(handler);
+      if (idx > -1) this.externalChangeHandlers.splice(idx, 1);
+    };
+  }
+
+  /**
    * Handle file change event
    */
   private async handleFileChange(event: FileChangeEvent): Promise<void> {
@@ -144,16 +160,81 @@ class FileWatcherService {
     // Check if this file is currently open
     const documentId = this.getDocumentIdByPath(event.path);
 
+    // Configuration: auto-import (dangerous) must be opt-in
+    const autoImportEnabled = import.meta.env.VITE_TAURI_FS_AUTOIMPORT === 'true';
+
     if (documentId && event.event_type === 'modified') {
       // File is open and was modified externally
-      await this.handleExternalModification(documentId, event.path);
+      if (autoImportEnabled) {
+        // Legacy behavior: automatically reload into Yjs
+        await this.handleExternalModification(documentId, event.path);
+      } else {
+        // Notify UI only — do not mutate CRDT automatically
+        this.queueNotification({
+          ...event,
+          event_type: 'modified',
+        });
+        // Also emit change handlers with an explicit reason
+        this.changeHandlers.forEach(handler => handler({
+          ...event,
+          event_type: 'modified',
+        }));
+        console.log('ℹ️ Auto-import disabled: Not reloading modified file into Yjs automatically');
+
+        // Emit coalesced external-file-changed event to subscribers
+        this.queueExternalChange(documentId, event.path, event.timestamp);
+      }
     } else if (event.event_type === 'created') {
-      // New file created - could trigger workspace refresh
+      // New file created - notify only
       this.queueNotification(event);
     } else if (event.event_type === 'deleted') {
       // File deleted - show notification
       this.queueNotification(event);
     }
+  }
+
+  /**
+   * Queue/coalesce external change per documentId and emit after debounce window.
+   */
+  private queueExternalChange(documentId: string, filePath: string, lastModified: string) {
+    const existing = this.pendingExternalChanges.get(documentId);
+    if (existing) {
+      existing.count += 1;
+      existing.lastModified = lastModified;
+      existing.filePath = filePath;
+      // reset timer
+      clearTimeout(existing.timer);
+      existing.timer = setTimeout(() => this.flushExternalChange(documentId), 300);
+    } else {
+      const timer = setTimeout(() => this.flushExternalChange(documentId), 300);
+      this.pendingExternalChanges.set(documentId, { count: 1, filePath, lastModified, timer });
+    }
+  }
+
+  /**
+   * Flush coalesced external change and notify subscribers.
+   */
+  private flushExternalChange(documentId: string) {
+    const pending = this.pendingExternalChanges.get(documentId);
+    if (!pending) return;
+
+    const payload = {
+      documentId,
+      filePath: pending.filePath,
+      count: pending.count,
+      lastModified: pending.lastModified,
+    };
+
+    // Notify subscribers
+    this.externalChangeHandlers.forEach(h => {
+      try {
+        h(payload);
+      } catch (e) {
+        console.error('❌ External change handler threw:', e);
+      }
+    });
+
+    this.pendingExternalChanges.delete(documentId);
   }
 
   /**
@@ -209,6 +290,18 @@ class FileWatcherService {
         type: 'error',
       });
     }
+  }
+
+  /**
+   * Public API: Reload document from file system into Yjs.
+   * This must be called explicitly by UI action (user-approved).
+   */
+  async reloadDocumentFromFile(documentId: string): Promise<void> {
+    const filePath = this.getDocumentIdByPath(documentId);
+    if (!filePath) {
+      throw new Error('No file path registered for document: ' + documentId);
+    }
+    await this.handleExternalModification(documentId, filePath);
   }
 
   /**

@@ -79,6 +79,26 @@ export interface SyncMetadata {
   updated_at: string;
 }
 
+/**
+ * Failed Snapshot - Queue for retrying failed durability snapshots
+ * 
+ * CRITICAL INVARIANT:
+ * These snapshots are WRITE-ONLY (push to backend)
+ * They are NEVER applied/loaded during collaboration
+ * They represent failed backup attempts, not sync state
+ */
+export interface FailedSnapshot {
+  id: string;                     // UUID
+  documentId: string;             // Document ID (without doc_ prefix)
+  yjsState: string;               // base64-encoded Yjs binary
+  html: string | null;            // Optional HTML preview
+  updatedAt: number;              // Timestamp when snapshot was created
+  failedAt: number;               // Timestamp of first failure
+  retryCount: number;             // Number of retry attempts
+  lastError: string | null;       // Last error message
+  nextRetryAt: number;            // Timestamp for next retry (exponential backoff)
+}
+
 // ============================================================================
 // Dexie Database Class
 // ============================================================================
@@ -89,6 +109,7 @@ class OfflineDatabaseClass extends Dexie {
   workspaces!: Table<OfflineWorkspace, string>;
   pending_changes!: Table<PendingChange, string>;
   sync_metadata!: Table<SyncMetadata, string>;
+  failed_snapshots!: Table<FailedSnapshot, string>;
   
   constructor() {
     super('MDReaderOfflineDB');
@@ -102,6 +123,16 @@ class OfflineDatabaseClass extends Dexie {
       pending_changes: 'id, entityType, entityId, workspaceId, [workspaceId+priority+timestamp], timestamp, priority, [priority+timestamp]',
       syncMetadata: 'key'
     });
+    
+    // Version 4 - Add failed_snapshots table for durability retry queue
+    this.version(4).stores({
+      documents: 'id, workspaceId, folderId, [workspaceId+folderId], pendingChanges, lastSynced',
+      folders: 'id, workspaceId, parentId, pendingChanges',
+      workspaces: 'id, ownerId, isActive',
+      pending_changes: 'id, entityType, entityId, workspaceId, [workspaceId+priority+timestamp], timestamp, priority, [priority+timestamp]',
+      syncMetadata: 'key',
+      failed_snapshots: 'id, documentId, nextRetryAt, failedAt' // Index by nextRetryAt for efficient retry scheduling
+    });
   }
   
   /**
@@ -113,7 +144,8 @@ class OfflineDatabaseClass extends Dexie {
       this.folders.clear(),
       this.workspaces.clear(),
       this.pending_changes.clear(),
-      this.sync_metadata.clear()
+      this.sync_metadata.clear(),
+      this.failed_snapshots.clear()
     ]);
     console.log('🗑️ Offline database cleared');
   }

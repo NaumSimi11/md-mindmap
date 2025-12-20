@@ -40,15 +40,30 @@ const loadPrismLanguage = async (lang: string) => {
 export const useSyntaxHighlighting = (editor: Editor | null) => {
     // 🔥 Apply Prism syntax highlighting to code blocks
     useEffect(() => {
-        // Safety check: ensure editor and view are ready
-        if (!editor || !editor.view || !editor.view.dom) {
+        // Safety check: ensure editor is ready
+        if (!editor || editor.isDestroyed) {
+            return;
+        }
+
+        // 🔥 CRITICAL FIX: Safely check if view is available. 
+        // TipTap's editor.view getter throws if the view isn't mounted yet.
+        let editorElement: HTMLElement | null = null;
+        try {
+            if (editor.view && editor.view.dom) {
+                editorElement = editor.view.dom;
+            }
+        } catch (e) {
+            // View not ready yet, will be caught by the next doc update or re-render
+            return;
+        }
+
+        if (!editorElement) {
             return;
         }
 
         const highlightCodeBlocks = async () => {
             try {
-                const editorElement = editor.view.dom;
-                const codeBlocks = editorElement.querySelectorAll('pre code[class*="language-"]');
+                const codeBlocks = editorElement!.querySelectorAll('pre code[class*="language-"]');
 
                 for (const block of Array.from(codeBlocks)) {
                     // Extract language from class

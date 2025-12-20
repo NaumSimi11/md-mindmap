@@ -77,6 +77,8 @@ export interface Document {
   content: string;
   content_type: 'markdown' | 'text' | 'json';
   version: number;
+  yjs_version?: number;
+  yjs_state_b64?: string;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -88,11 +90,14 @@ export interface DocumentCreate {
   title: string;
   content: string;
   content_type?: 'markdown' | 'text' | 'json';
+  yjs_state_b64?: string;
 }
 
 export interface DocumentUpdate {
   title?: string;
   content?: string;
+  yjs_state_b64?: string;
+  expected_yjs_version?: number;
 }
 
 export interface DocumentVersion {

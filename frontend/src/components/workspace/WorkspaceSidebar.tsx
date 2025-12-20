@@ -960,9 +960,29 @@ function DocumentItem({
         {document.title}
       </span>
 
-      {/* Sync Status Icon */}
+      {/* 🔥 BLOCKING ACTION 2: Enhanced Sync Status Badge */}
       {document.sync && (
-        <SyncStatusIcon status={document.sync.status} size="sm" />
+        <>
+          {document.sync.status === 'local' && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700" title="Local only - not synced to cloud">
+              🔒 Local
+            </span>
+          )}
+          {document.sync.status === 'synced' && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700" title="Synced to cloud">
+              ☁️ Synced
+            </span>
+          )}
+          {document.sync.status === 'syncing' && (
+            <SyncStatusIcon status={document.sync.status} size="sm" />
+          )}
+          {document.sync.status === 'conflict' && (
+            <SyncStatusIcon status={document.sync.status} size="sm" />
+          )}
+          {document.sync.status === 'error' && (
+            <SyncStatusIcon status={document.sync.status} size="sm" />
+          )}
+        </>
       )}
 
       {/* 3-dot menu - ALWAYS VISIBLE */}

@@ -275,6 +275,8 @@ export class BackendWorkspaceService {
       updatedAt: apiDoc.updated_at,
       syncStatus: 'synced',
       lastSyncedAt: new Date().toISOString(),
+      yjsVersion: (apiDoc as any).yjs_version,
+      yjsStateB64: (apiDoc as any).yjs_state_b64,
       version: apiDoc.version || 1,
     };
   }

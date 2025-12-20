@@ -62,6 +62,8 @@ export interface DocumentMeta {
   syncStatus: 'local' | 'synced' | 'syncing' | 'conflict';
   cloudId?: string;        // Backend document ID (when synced)
   lastSyncedAt?: string;   // ISO 8601
+  yjsVersion?: number;     // Canonical Yjs version from cloud
+  yjsStateB64?: string;    // 🔥 Full Yjs binary truth (Base64)
   version: number;         // Optimistic locking
 }
 
@@ -143,5 +145,7 @@ export interface UpdateDocumentInput {
   syncStatus?: 'local' | 'synced' | 'syncing' | 'conflict';
   cloudId?: string;
   lastSyncedAt?: string;
+  yjsVersion?: number;
+  yjsStateB64?: string;
 }
 

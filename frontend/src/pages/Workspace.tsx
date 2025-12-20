@@ -168,6 +168,17 @@ export default function Workspace() {
       // 🔥 FIX: getDocument is now async - must await it
       backendGetDocument(documentId).then(doc => {
         if (doc) {
+          // 🚀 NEW: Check if this is a guest doc with cloud mapping
+          const redirectToCloudId = (doc as any).__redirectToCloudId;
+          if (redirectToCloudId && redirectToCloudId !== documentId) {
+            console.log(`🔄 [Workspace] Redirecting guest doc to cloud version: ${documentId} → ${redirectToCloudId}`);
+            // Redirect to cloud ID (this will enable WebSocket!)
+            const currentPath = location.pathname;
+            const newPath = currentPath.replace(documentId, redirectToCloudId);
+            navigate(newPath, { replace: true });
+            return; // Don't set currentDocument, let the redirect handle it
+          }
+          
           console.log('📄 [Workspace] Document found:', {
             id: doc.id,
             title: doc.title,
@@ -192,7 +203,7 @@ export default function Workspace() {
       setCurrentDocument(null);
       setLiveEditorContent(''); // Clear content when no document
     }
-  }, [documentId, navigate, backendGetDocument]);
+  }, [documentId, navigate, backendGetDocument, location.pathname]);
 
   // Handle Cmd+K for quick switcher
   useEffect(() => {
@@ -678,15 +689,25 @@ export default function Workspace() {
             onEditorReady={(editor) => {
               editorInstanceRef.current = editor;
               
-              // 🔥 STEP 1: Extract initial content for outline only (no live updates during typing)
-              if (!editor.isEmpty) {
-                const initialMarkdown = htmlToMarkdown('', editor);
-                setLiveEditorContent(initialMarkdown);
-                console.log(`📋 Initial content extracted for outline (${initialMarkdown.length} chars)`);
-              } else {
-                // Editor is empty - this is expected for new documents
-                console.log('ℹ️ Editor is empty (new document or no content yet)');
-              }
+              // 🔥 STEP 1: Extract initial content for outline only
+              // Delay this until the view is ready, as getJSON() requires the view
+              const checkView = setInterval(() => {
+                try {
+                  if (editor.view && editor.view.dom) {
+                    clearInterval(checkView);
+                    if (!editor.isEmpty) {
+                      const initialMarkdown = htmlToMarkdown('', editor);
+                      setLiveEditorContent(initialMarkdown);
+                      console.log(`📋 Initial content extracted for outline (${initialMarkdown.length} chars)`);
+                    }
+                  }
+                } catch (e) {
+                  // View not ready yet
+                }
+              }, 50);
+
+              // Safety cleanup
+              setTimeout(() => clearInterval(checkView), 5000);
             }}
             contextFolders={contextFolders}
           />
