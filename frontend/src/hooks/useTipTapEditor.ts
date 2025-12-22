@@ -33,6 +33,7 @@ export const useTipTapEditor = ({
     provider,
 }: UseTipTapEditorProps) => {
     const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
+    const editorRef = useRef<Editor | null>(null);
     const isProgrammaticUpdateRef = useRef(false);
     const aiHintsEnabledRef = useRef({ enabled: aiSuggestionsEnabled });
 
@@ -55,7 +56,7 @@ export const useTipTapEditor = ({
     // Get editor event handlers
     // ❌ STEP 1: Removed onContentChange (no longer needed)
     const editorProps = useEditorEvents({
-        editor: editorInstance,
+        editorRef,
         setShowTableMenu,
         setContextMenu,
         isProgrammaticUpdateRef,
@@ -69,6 +70,8 @@ export const useTipTapEditor = ({
         // ❌ NO content initialization (Yjs owns content)
         // ❌ NO onUpdate persistence (Yjs auto-persists)
         onCreate: ({ editor }) => {
+            // Keep latest editor instance in both state and ref
+            editorRef.current = editor;
             setEditorInstance(editor);
             onEditorReady?.(editor);
         },
@@ -101,39 +104,21 @@ export const useTipTapEditor = ({
         
         console.log('🔧 [STEP 4] Loading hydrated content from Yjs:', htmlContent.length, 'chars');
         
-        // 🔥 CRITICAL: Delay setContent until view is ready, as some extensions might need it
-        const checkView = setInterval(() => {
-            try {
-                if (editor.view && editor.view.dom) {
-                    clearInterval(checkView);
-                    
-                    isProgrammaticUpdateRef.current = true;
-                    editor.commands.setContent(htmlContent);
-                    
-                    // Clear the temp field (content now in XmlFragment via Collaboration extension)
-                    ydoc.transact(() => {
-                        tempText.delete(0, tempText.length);
-                    });
-                    
-                    requestAnimationFrame(() => {
-                        isProgrammaticUpdateRef.current = false;
-                    });
-                    
-                    console.log('✅ [STEP 4] Initial content loaded and temp field cleared');
-                    hasLoadedInitialRef.current = true;
-                }
-            } catch (e) {
-                // View not ready yet
-            }
-        }, 50);
-
-        // Safety cleanup for interval
-        const timeoutId = setTimeout(() => clearInterval(checkView), 10000);
+        // Load into editor (one-time only)
+        isProgrammaticUpdateRef.current = true;
+        editor.commands.setContent(htmlContent);
         
-        return () => {
-            clearInterval(checkView);
-            clearTimeout(timeoutId);
-        };
+        // Clear the temp field (content now in XmlFragment via Collaboration extension)
+        ydoc.transact(() => {
+            tempText.delete(0, tempText.length);
+        });
+        
+        requestAnimationFrame(() => {
+            isProgrammaticUpdateRef.current = false;
+        });
+        
+        console.log('✅ [STEP 4] Initial content loaded and temp field cleared');
+        hasLoadedInitialRef.current = true;
     }, [ydoc, editor, isProgrammaticUpdateRef]);
 
     return {

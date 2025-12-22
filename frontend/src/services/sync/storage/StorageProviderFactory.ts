@@ -41,7 +41,8 @@ export class StorageProviderFactory {
         // Attempt dynamic import to avoid bundling Tauri API in web builds
         try {
           console.warn('⚠️ WARNING: Tauri filesystem storage is EXPERIMENTAL and NOT CANONICAL by default');
-          const mod = await import('./TauriStorageProvider');
+          // Use absolute alias import so tests can mock reliably and bundlers resolve consistently.
+          const mod = await import('@/services/sync/storage/TauriStorageProvider');
           const TauriStorageProvider = mod.TauriStorageProvider;
           console.log(`🗄️  Creating TauriStorageProvider (platform: ${platform}) - Reason: explicit opt-in`);
           const provider = new TauriStorageProvider();

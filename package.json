@@ -1,10 +1,18 @@
 {
   "scripts": {
+    "build:mac": "npm run tauri:build:mac",
+    "build:win": "npm run tauri:build:win",
+    "tauri:dev": "npm -C frontend run tauri:dev",
+    "tauri:build": "npm -C frontend run tauri:build",
+    "tauri:build:mac": "node ./scripts/tauri-build.mjs mac",
+    "tauri:build:win": "node ./scripts/tauri-build.mjs win",
+    "tauri:build:both": "node ./scripts/tauri-build.mjs both",
     "test:unit": "npm -C frontend run test:once",
     "test:coverage": "npm -C frontend run test:coverage",
     "test:e2e": "npx playwright test --workers=1 --retries=0",
     "test:backend": "bash -lc \"cd backend && ./test_all.sh\"",
     "test:all": "node ./scripts/run-tests.mjs",
+    "docs:optionb:validate": "node ./scripts/validate-option-b-docs.mjs",
     "check:tauri-fs": "bash ./scripts/check_tauri_fs_usage.sh"
   },
   "devDependencies": {

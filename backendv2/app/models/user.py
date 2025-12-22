@@ -172,6 +172,14 @@ class User(Base):
         cascade="all, delete-orphan"
     )
     
+    # Workspace Permissions (Phase 4)
+    workspace_memberships = relationship(
+        "WorkspaceMember",
+        foreign_keys="WorkspaceMember.user_id",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+    
     # =========================================
     # Indexes (for query performance)
     # =========================================

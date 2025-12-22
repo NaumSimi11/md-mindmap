@@ -325,6 +325,10 @@ app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 from app.routers import workspaces
 app.include_router(workspaces.router)
 
+# Phase 4: Workspace Members (Workspace Permissions) ✅
+from app.routers import workspace_members
+app.include_router(workspace_members.router)
+
 # Phase 1: Documents ✅
 from app.routers import documents
 app.include_router(documents.router)
@@ -332,6 +336,22 @@ app.include_router(documents.router)
 # Phase 1: Folders ✅
 from app.routers import folders
 app.include_router(folders.router)
+
+# Phase 3: Permissions & Sharing ✅
+from app.routers import shares
+app.include_router(shares.router)
+
+# Phase 3: Share Links ✅
+from app.routers import share_links
+app.include_router(share_links.router)
+
+# Phase 3: Snapshots (Version History) ✅
+from app.routers import snapshots
+app.include_router(snapshots.router)
+
+# Phase 3: Audit Logs ✅
+from app.routers import audit
+app.include_router(audit.router)
 
 # TODO Phase 1: Collaboration
 # from app.routers import collaboration

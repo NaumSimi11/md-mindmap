@@ -33,6 +33,22 @@ class StorageMode(str, enum.Enum):
     CLOUD_ONLY = "CloudOnly"
 
 
+class DocumentAccessModel(str, enum.Enum):
+    """
+    Document permission inheritance model (Phase 4 - Workspace Permissions)
+    
+    Inherited (default): Workspace membership gives baseline role, doc_shares can upgrade
+    Restricted: Only explicit document_shares (+ creator), workspace membership ignored
+    
+    This enables:
+    - Team workspaces (inherited)
+    - Secret docs inside shared workspaces (restricted)
+    - HR/legal/exec docs (restricted)
+    """
+    INHERITED = "inherited"
+    RESTRICTED = "restricted"
+
+
 class Document(Base):
     """
     Document: Markdown/Rich text content
@@ -181,6 +197,17 @@ class Document(Base):
     )
     
     # =========================================
+    # Permission Inheritance (Phase 4 - Workspace Permissions)
+    # =========================================
+    access_model = Column(
+        SQLEnum(DocumentAccessModel, name='document_access_model', create_type=False),
+        default=DocumentAccessModel.INHERITED,
+        nullable=False,
+        index=True,
+        doc="Permission model: inherited (workspace cascade) | restricted (doc-only)"
+    )
+    
+    # =========================================
     # Versioning
     # =========================================
     version = Column(
@@ -255,8 +282,15 @@ class Document(Base):
     workspace = relationship("Workspace", back_populates="documents")
     folder = relationship("Folder", back_populates="documents")
     created_by = relationship("User", back_populates="documents")
-    # yjs_state = relationship("YjsState", back_populates="document", uselist=False)  # Phase 1
-    # versions = relationship("DocumentVersion", back_populates="document")  # Phase 1
+    
+    # Permissions & Sharing (Phase 3)
+    shares = relationship("DocumentShare", back_populates="document", cascade="all, delete-orphan")
+    invitations = relationship("Invitation", back_populates="document", cascade="all, delete-orphan")
+    share_links = relationship("ShareLink", back_populates="document", cascade="all, delete-orphan")
+    
+    # Version History (Phase 3)
+    snapshots = relationship("DocumentSnapshot", back_populates="document", cascade="all, delete-orphan")
+    audit_logs = relationship("AuditLog", back_populates="document", cascade="all, delete-orphan")
     
     # =========================================
     # Indexes

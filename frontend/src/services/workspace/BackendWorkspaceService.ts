@@ -265,7 +265,7 @@ export class BackendWorkspaceService {
     return {
       id: apiDoc.id,
       workspaceId: apiDoc.workspace_id,
-      folderId: apiDoc.folder_id || null,
+      folderId: (apiDoc as any).folder_id || null,
       title: apiDoc.title,
       type: apiDoc.content_type === 'markdown' ? 'markdown' : 'markdown', // Extend later
       content,  // 🔥 CRITICAL: Include content from backend
@@ -275,8 +275,6 @@ export class BackendWorkspaceService {
       updatedAt: apiDoc.updated_at,
       syncStatus: 'synced',
       lastSyncedAt: new Date().toISOString(),
-      yjsVersion: (apiDoc as any).yjs_version,
-      yjsStateB64: (apiDoc as any).yjs_state_b64,
       version: apiDoc.version || 1,
     };
   }
@@ -862,7 +860,7 @@ export class BackendWorkspaceService {
     };
 
     // Update cache immediately (local save is mandatory per local_first.md)
-    await cacheDb.documents.update(id, updated);
+    await cacheDb.documents.put(updated);
 
     console.log('✅ Document updated locally:', id, `(syncStatus: ${syncStatus})`);
     return updated;
@@ -873,7 +871,7 @@ export class BackendWorkspaceService {
    */
   async updateDocumentSyncStatus(
     id: string,
-    syncStatus: 'local' | 'synced' | 'syncing' | 'conflict',
+    syncStatus: 'local' | 'synced' | 'syncing' | 'conflict' | 'pending',
     lastSyncedAt?: string
   ): Promise<void> {
     const existing = await cacheDb.documents.get(id);

@@ -32,6 +32,16 @@ export class DocumentService {
   }
 
   /**
+   * List documents explicitly shared with the current user (doc-only access),
+   * and restricted documents where the user has an explicit doc share.
+   *
+   * CRITICAL: This is a VIEW (not a workspace container).
+   */
+  async listSharedWithMe(): Promise<Document[]> {
+    return apiClient.get<Document[]>(`/api/v1/documents/shared-with-me`);
+  }
+
+  /**
    * Create a new document
    */
   async createDocument(data: DocumentCreate & { id?: string; folder_id?: string; is_starred?: boolean; tags?: string[] }): Promise<Document> {

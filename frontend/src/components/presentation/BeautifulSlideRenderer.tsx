@@ -644,6 +644,10 @@ function BeautifulTitleLayout({
               const newTitle = e.currentTarget.textContent || '';
               setTitle(newTitle);
               handleTitleBlur();
+
+              // Reset inline edit styling
+              e.currentTarget.style.borderColor = 'transparent';
+              e.currentTarget.style.backgroundColor = 'transparent';
             }}
             className="slide-title"
             style={{
@@ -671,10 +675,6 @@ function BeautifulTitleLayout({
               e.currentTarget.style.borderColor = `${theme.colors.primary.main}60`;
               e.currentTarget.style.backgroundColor = `${theme.colors.primary.main}10`;
             }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = 'transparent';
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
           >
             {title || 'Slide Title'}
           </h1>
@@ -688,6 +688,10 @@ function BeautifulTitleLayout({
                 const newSubtitle = e.currentTarget.textContent || '';
                 setSubtitle(newSubtitle);
                 handleSubtitleBlur();
+
+                // Reset inline edit styling
+                e.currentTarget.style.borderColor = 'transparent';
+                e.currentTarget.style.backgroundColor = 'transparent';
               }}
               className="slide-subtitle"
               style={{
@@ -710,10 +714,6 @@ function BeautifulTitleLayout({
               onFocus={(e) => {
                 e.currentTarget.style.borderColor = `${theme.colors.text.secondary}60`;
                 e.currentTarget.style.backgroundColor = `${theme.colors.text.secondary}10`;
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = 'transparent';
-                e.currentTarget.style.backgroundColor = 'transparent';
               }}
             >
               {subtitle}

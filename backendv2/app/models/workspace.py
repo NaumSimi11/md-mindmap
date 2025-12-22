@@ -152,6 +152,13 @@ class Workspace(Base):
         cascade="all, delete-orphan"
     )
     
+    # Workspace Permissions (Phase 4)
+    members = relationship(
+        "WorkspaceMember",
+        back_populates="workspace",
+        cascade="all, delete-orphan"
+    )
+    
     # =========================================
     # Indexes
     # =========================================

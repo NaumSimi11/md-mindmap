@@ -15,7 +15,7 @@ import { EditorContent } from '@tiptap/react';
 // Hooks
 import { useTipTapEditor } from '@/hooks/useTipTapEditor';
 import { useYjsDocument } from '@/hooks/useYjsDocument'; // ✅ STEP 3: Yjs integration
-import { useSyncStatus } from '@/hooks/useSyncStatus'; // Task 2: Sync status tracking
+import { useSyncStatus } from '@/hooks/useSyncStatus'; // Durability / backup status
 import { useEditorMode } from './handlers/useEditorMode';
 import { useSyntaxHighlighting } from './handlers/useSyntaxHighlighting';
 import { htmlToMarkdown, markdownToHtml } from '@/utils/markdownConversion';
@@ -40,14 +40,14 @@ import { AIModalErrorBoundary } from '../modals/AIModalErrorBoundary';
 import { CommentSidebar } from '../comments/CommentSidebar';
 import { AddCommentButton } from '../comments/AddCommentButton';
 import { useCommentStore } from '@/stores/commentStore';
-import { SyncStatusBadge } from './SyncStatusBadge'; // Task 2: Sync status display
+import { SyncStatusBadge } from './SyncStatusBadge';
+import { ShareModal } from '../sharing/ShareModal';
+import { VersionHistoryPanel } from '../versioning/VersionHistoryPanel';
 
 // Utils & Services
 import { autoFormatText, generateAIFormatPrompt, needsFormatting } from '@/utils/autoFormat';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { useEditorUIStore } from '@/stores/editorUIStore';
 import { UnifiedAIModal } from '@/components/modals/UnifiedAIModal';
@@ -72,6 +72,8 @@ import {
   Share,
   Cloud,
   HardDrive,
+  Users,
+  Clock,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -150,19 +152,19 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
   // Local State
   const [aiSuggestionsEnabled, setAiSuggestionsEnabled] = useState(false);
   const [aiAutocompleteEnabled, setAiAutocompleteEnabled] = useState(true);
-  const [autoSaveToCloud, setAutoSaveToCloud] = useState(false); // Auto-save toggle (OFF by default)
   const { toast } = useToast();
+  
+  // Sharing & Version History State
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [userRole, setUserRole] = useState<'owner' | 'admin' | 'editor' | 'commenter' | 'viewer' | null>(null);
 
   // Auth & Workspace
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { refreshDocuments } = useWorkspace();
-
-  // Task 2: Sync status tracking
+  
+  // Durability / backup status (used for inline badge)
   const syncStatus = useSyncStatus(documentId);
-
-  // Auto-save to cloud debounce ref
-  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastSavedContentRef = useRef<string>('');
 
   // File open/insert helpers
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -291,6 +293,29 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [toggleEditorMode, setShowAIModal, setShowDiagramMenu, setShowMindmapChoiceModal]);
+
+  // Load user role for permissions
+  useEffect(() => {
+    if (isAuthenticated && documentId) {
+      import('@/services/api/sharesClient').then(({ SharesClient }) => {
+        SharesClient.listMembers(documentId)
+          .then((data) => {
+            const userId = user?.id;
+            if (!userId) return;
+
+            const currentUserMember = data.members.find((m) => m.principal_id === userId);
+            setUserRole(currentUserMember?.role || null);
+          })
+          .catch((err) => {
+            console.error('Failed to load user role:', err);
+            // Fail gracefully - hide share/history buttons
+            setUserRole(null);
+          });
+      });
+    } else {
+      setUserRole(null);
+    }
+  }, [isAuthenticated, documentId, user?.id]);
 
   // Flatten context folders for AI modal
   const flattenedContextFiles = useMemo(() => {
@@ -761,31 +786,47 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
             <Button size="sm" variant="ghost" onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()} title="Redo (Ctrl+Y)">
               <Redo className="h-4 w-4" />
             </Button> */}
+            
+            {/* Share & Version History Buttons */}
+            {isAuthenticated && documentId && userRole && (
+              <>
+                <Separator orientation="vertical" className="h-6 mx-1" />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowShareModal(true)}
+                  title="Share Document"
+                  className="gap-1"
+                >
+                  <Users className="h-4 w-4" />
+                  <span className="text-xs">Share</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowVersionHistory(true)}
+                  title="Version History"
+                  className="gap-1"
+                >
+                  <Clock className="h-4 w-4" />
+                  <span className="text-xs">History</span>
+                </Button>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-3">
-            {/* Task 2: Sync Status Badge */}
+            {/* Durability / backup status badge */}
             {isAuthenticated && documentId && (
               <SyncStatusBadge
                 lastSyncedAt={syncStatus.lastSyncedAt}
                 lastSyncSuccess={syncStatus.lastSyncSuccess}
+                isBackingUp={syncStatus.isBackingUp}
+                cloudEnabled={syncStatus.cloudEnabled}
                 pendingCount={syncStatus.pendingCount}
                 isOnline={syncStatus.isOnline}
               />
             )}
-            
-            {isAuthenticated && documentId && (
-              <div className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-accent transition-colors">
-                <Switch
-                  id="auto-save-cloud"
-                  checked={autoSaveToCloud}
-                  onCheckedChange={setAutoSaveToCloud}
-                  disabled={!isAuthenticated || !documentId}
-                />
-                <Label htmlFor="auto-save-cloud" className="text-xs cursor-pointer">
-                  Auto-save to Cloud
-                </Label>
-              </div>
-            )}
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" variant="ghost"><MoreVertical className="h-4 w-4" /></Button>
@@ -992,6 +1033,37 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
       
       {/* Collaboration UI - DISABLED (Yjs removed) */}
       {/* Sync Status Indicator - DISABLED (Yjs removed) */}
+      
+      {/* Share Modal */}
+      {showShareModal && userRole && documentId && (
+        <ShareModal
+          documentId={documentId}
+          userRole={userRole}
+          isAuthenticated={isAuthenticated}
+          isOpen={showShareModal}
+          onClose={() => setShowShareModal(false)}
+        />
+      )}
+      
+      {/* Version History Panel */}
+      {showVersionHistory && userRole && documentId && (
+        <VersionHistoryPanel
+          documentId={documentId}
+          userRole={userRole}
+          isAuthenticated={isAuthenticated}
+          isOpen={showVersionHistory}
+          onClose={() => setShowVersionHistory(false)}
+          onRestoreComplete={(newDocId) => {
+            if (newDocId) {
+              // Navigate to new document
+              window.location.href = `/workspace/doc/${newDocId}/edit`;
+            } else {
+              // Reload current document after overwrite
+              window.location.reload();
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

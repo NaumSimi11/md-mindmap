@@ -10,7 +10,8 @@
  */
 
 import { Server } from '@hocuspocus/server';
-import { createDatabaseExtension } from './extensions/DatabaseExtension.js';
+// DatabaseExtension REMOVED - we use backend API + snapshot system for persistence
+// import { createDatabaseExtension } from './extensions/DatabaseExtension.js';
 import { createAuthExtension } from './extensions/AuthExtension.js';
 import { createLoggerExtension } from './extensions/LoggerExtension.js';
 

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock providers to avoid real IndexedDB / WebSocket usage.
 const indexeddbCtor = vi.fn();
-const websocketCtor = vi.fn();
+const hocuspocusCtor = vi.fn();
 
 vi.mock('y-indexeddb', () => {
   return {
@@ -17,15 +17,15 @@ vi.mock('y-indexeddb', () => {
   };
 });
 
-vi.mock('y-websocket', () => {
+vi.mock('@hocuspocus/provider', () => {
   return {
-    WebsocketProvider: function WebsocketProvider(this: any, ...args: any[]) {
-      websocketCtor(...args);
+    HocuspocusProvider: function HocuspocusProvider(this: any, config: any) {
+      hocuspocusCtor(config);
       return {
+        configuration: config,
         on: vi.fn(),
         destroy: vi.fn(),
         awareness: { setLocalState: vi.fn(), getLocalState: vi.fn() },
-        wsconnected: true,
       };
     },
   };
@@ -36,7 +36,7 @@ import { yjsDocumentManager } from '@/services/yjs/YjsDocumentManager';
 describe('YjsDocumentManager WebSocket gating', () => {
   beforeEach(() => {
     indexeddbCtor.mockClear();
-    websocketCtor.mockClear();
+    hocuspocusCtor.mockClear();
 
     // Ensure clean singleton state
     yjsDocumentManager.destroyAll();
@@ -54,12 +54,12 @@ describe('YjsDocumentManager WebSocket gating', () => {
 
   it('should NOT create WebSocket provider when enableWebSocket=false', () => {
     yjsDocumentManager.getDocument('doc-1', { enableWebSocket: false, isAuthenticated: true });
-    expect(websocketCtor).not.toHaveBeenCalled();
+    expect(hocuspocusCtor).not.toHaveBeenCalled();
   });
 
   it('should NOT create WebSocket provider when not authenticated (even if enableWebSocket=true)', () => {
     yjsDocumentManager.getDocument('doc-1', { enableWebSocket: true, isAuthenticated: false });
-    expect(websocketCtor).not.toHaveBeenCalled();
+    expect(hocuspocusCtor).not.toHaveBeenCalled();
   });
 
   it('should create WebSocket provider when enableWebSocket=true and authenticated', () => {
@@ -69,9 +69,9 @@ describe('YjsDocumentManager WebSocket gating', () => {
       websocketUrl: 'ws://localhost:1234',
     });
 
-    expect(websocketCtor).toHaveBeenCalledTimes(1);
-    const [url, room] = websocketCtor.mock.calls[0];
-    expect(url).toBe('ws://localhost:1234');
-    expect(room).toBe('doc-1');
+    expect(hocuspocusCtor).toHaveBeenCalledTimes(1);
+    const [config] = hocuspocusCtor.mock.calls[0];
+    expect(config.url).toBe('ws://localhost:1234');
+    expect(config.name).toBe('doc-1');
   });
 });

@@ -31,6 +31,8 @@ import WorkspaceTest from "./pages/WorkspaceTest";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { WorkspaceProvider } from "./contexts/WorkspaceContext";
 import { SyncHealthPanel } from "./components/sync/SyncHealthPanel"; // Task 5: Sync diagnostics
+import { GuestAccessHandler } from "./components/guest/GuestAccessHandler";
+import { WorkspaceSettingsPage } from "./components/workspace/WorkspaceSettingsPage";
 
 const queryClient = new QueryClient();
 
@@ -59,8 +61,12 @@ const App = () => (
             {/* Backend Integration Test */}
             <Route path="/workspace-test" element={<ProtectedRoute><WorkspaceTest /></ProtectedRoute>} />
 
+            {/* Guest access via share link */}
+            <Route path="/share" element={<GuestAccessHandler />} />
+
             {/* NEW: Main Workspace (AI Office Suite) - Guest & Auth Support */}
             <Route path="/workspace" element={<Workspace />} />
+            <Route path="/workspace/:workspaceId/settings" element={<ProtectedRoute><WorkspaceSettingsPage /></ProtectedRoute>} />
             <Route path="/workspace/doc/:id/edit" element={<Workspace />} />
             <Route path="/workspace/doc/:id/mindmap" element={<Workspace />} />
             <Route path="/workspace/doc/:id/slides" element={<Workspace />} />

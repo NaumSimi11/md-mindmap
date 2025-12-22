@@ -40,6 +40,7 @@ export class SnapshotManager {
   // Task 1: Track sync status for UI
   private lastSyncedAt: Date | null = null;
   private lastSyncSuccess: boolean = true;
+  private isBackingUp: boolean = false;
   
   // Task 6: Adaptive debounce for performance
   private readonly MIN_DEBOUNCE_MS = 2000;  // 2 seconds
@@ -146,6 +147,9 @@ export class SnapshotManager {
     
     // Task 6: Use adaptive debounce based on edit frequency
     const adaptiveDelay = this.getAdaptiveDebounce();
+
+    // We have pending local changes that will be backed up after debounce.
+    this.isBackingUp = true;
     
     // Schedule new snapshot after adaptive debounce period
     this.debounceTimer = setTimeout(() => {
@@ -182,8 +186,10 @@ export class SnapshotManager {
       } else {
         console.warn(`⚠️ [Snapshot] Backup failed (queued for retry): ${this.documentId}`);
       }
+      this.isBackingUp = false;
     } catch (error) {
       this.lastSyncSuccess = false;
+      this.isBackingUp = false;
       console.error(`❌ [Snapshot] Error for ${this.documentId}:`, error);
     }
   }
@@ -243,10 +249,12 @@ export class SnapshotManager {
   public getSyncStatus(): {
     lastSyncedAt: Date | null;
     lastSyncSuccess: boolean;
+    isBackingUp: boolean;
   } {
     return {
       lastSyncedAt: this.lastSyncedAt,
       lastSyncSuccess: this.lastSyncSuccess,
+      isBackingUp: this.isBackingUp,
     };
   }
   

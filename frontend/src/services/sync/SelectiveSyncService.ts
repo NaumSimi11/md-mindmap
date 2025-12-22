@@ -71,8 +71,47 @@ class DocumentMappingDatabase extends Dexie {
   }
 }
 
-const mappingDb = new WorkspaceMappingDatabase();
-const documentMappingDb = new DocumentMappingDatabase();
+// In non-browser environments (tests / SSR), IndexedDB may not exist.
+// Dexie requires IndexedDB at module-init time, so we fall back to an in-memory mapping store.
+type WorkspaceMappingRow = { localId: string; cloudId: string; name: string; createdAt: string };
+type DocumentMappingRow = { localId: string; cloudId: string; createdAt: string };
+
+type WhereClause<T> = { equals: (value: any) => { first: () => Promise<T | undefined> } };
+type SimpleTable<T extends { localId: string }> = {
+  where: (field: keyof T) => WhereClause<T>;
+  put: (row: T) => Promise<void>;
+  get: (localId: string) => Promise<T | undefined>;
+};
+
+function createInMemoryTable<T extends { localId: string }>(): SimpleTable<T> {
+  const byLocal = new Map<string, T>();
+  return {
+    where: (field: keyof T) => ({
+      equals: (value: any) => ({
+        first: async () => {
+          for (const row of byLocal.values()) {
+            if ((row as any)[field] === value) return row;
+          }
+          return undefined;
+        },
+      }),
+    }),
+    put: async (row: T) => {
+      byLocal.set(row.localId, row);
+    },
+    get: async (localId: string) => byLocal.get(localId),
+  };
+}
+
+const canUseDexie = typeof (globalThis as any).indexedDB !== 'undefined';
+
+const mappingDb: { mappings: SimpleTable<WorkspaceMappingRow> } = canUseDexie
+  ? new WorkspaceMappingDatabase()
+  : { mappings: createInMemoryTable<WorkspaceMappingRow>() };
+
+const documentMappingDb: { mappings: SimpleTable<DocumentMappingRow> } = canUseDexie
+  ? new DocumentMappingDatabase()
+  : { mappings: createInMemoryTable<DocumentMappingRow>() };
 
 export class SelectiveSyncService {
   /**
@@ -80,6 +119,19 @@ export class SelectiveSyncService {
    */
   private async storeWorkspaceMapping(localId: string, cloudId: string, name: string): Promise<void> {
     try {
+      // Injectivity guard: avoid multiple locals mapping to the same cloudId
+      const existingForCloud = await mappingDb.mappings.where('cloudId').equals(cloudId).first();
+      if (existingForCloud && existingForCloud.localId !== localId) {
+        console.warn('⚠️ WorkspaceMapping conflict detected. Skipping new mapping.', {
+          requestedLocalId: localId,
+          existingLocalId: existingForCloud.localId,
+          cloudId,
+          name,
+        });
+        // Do not overwrite the existing mapping; reuse existing local elsewhere
+        return;
+      }
+
       await mappingDb.mappings.put({
         localId,
         cloudId,
@@ -112,6 +164,18 @@ export class SelectiveSyncService {
    */
   private async storeDocumentMapping(localId: string, cloudId: string): Promise<void> {
     try {
+      // Injectivity guard: avoid multiple locals mapping to the same cloudId
+      const existingForCloud = await documentMappingDb.mappings.where('cloudId').equals(cloudId).first();
+      if (existingForCloud && existingForCloud.localId !== localId) {
+        console.warn('⚠️ DocumentMapping conflict detected. Skipping new mapping.', {
+          requestedLocalId: localId,
+          existingLocalId: existingForCloud.localId,
+          cloudId,
+        });
+        // Do not overwrite existing mapping; higher-level logic should treat this as "same logical doc"
+        return;
+      }
+
       await documentMappingDb.mappings.put({
         localId,
         cloudId,
@@ -813,7 +877,8 @@ export class SelectiveSyncService {
    */
   getSyncStatus(documentId: string): SyncStatus {
     const doc = guestWorkspaceService.getDocument(documentId);
-    return doc?.sync.status || 'local';
+    // Prefer canonical metadata field `syncStatus` (newer), fall back to legacy nested `sync.status`.
+    return (doc as any)?.syncStatus || (doc as any)?.sync?.status || 'local';
   }
 }
 

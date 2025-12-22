@@ -12,7 +12,8 @@ Import Order Matters:
 from app.models.user import User
 from app.models.workspace import Workspace
 from app.models.folder import Folder
-from app.models.document import Document, StorageMode
+from app.models.document import Document, StorageMode, DocumentAccessModel
+from app.models.workspace_member import WorkspaceMember, WorkspaceRole
 
 __all__ = [
     "User",
@@ -20,5 +21,8 @@ __all__ = [
     "Folder",
     "Document",
     "StorageMode",
+    "DocumentAccessModel",
+    "WorkspaceMember",
+    "WorkspaceRole",
 ]
 

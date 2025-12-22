@@ -15,6 +15,9 @@ import { DocumentOutline } from '../editor/DocumentOutline';
 import { ContextDocuments } from './ContextDocuments';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher';
+import type { Workspace } from '@/services/workspace-legacy/BackendWorkspaceService';
+import { useUserWorkspaces } from '@/hooks/useWorkspaceMembers';
 
 interface AdaptiveSidebarProps {
   // Document editing
@@ -28,6 +31,14 @@ interface AdaptiveSidebarProps {
   onDocumentSelect: (documentId: string) => void;
   onNewDocument?: () => void;
   currentDocumentId?: string;
+  // Workspace management (single source of truth)
+  workspaces?: Workspace[];
+  currentWorkspace?: Workspace | null;
+  onSwitchWorkspace?: (workspace: Workspace) => void;
+  onCreateWorkspace?: () => void;
+  onRenameWorkspace?: () => void;
+  onOpenWorkspaceMembers?: () => void;
+  onOpenWorkspaceSettings?: () => void;
 
   // Context folders
   contextFolders?: Array<{
@@ -79,6 +90,13 @@ export function AdaptiveSidebar({
   onDocumentSelect,
   onNewDocument,
   currentDocumentId,
+  workspaces,
+  currentWorkspace,
+  onSwitchWorkspace,
+  onCreateWorkspace,
+  onRenameWorkspace,
+  onOpenWorkspaceMembers,
+  onOpenWorkspaceSettings,
   contextFolders = [],
   onContextFoldersChange,
   collapsed = false,
@@ -87,6 +105,11 @@ export function AdaptiveSidebar({
   onLoadDemo,
 }: AdaptiveSidebarProps) {
   const [activeTab, setActiveTab] = useState<'documents' | 'outline' | 'context'>('outline');
+  const { data: userWorkspaces } = useUserWorkspaces();
+  const rolesByWorkspaceId = userWorkspaces?.data?.reduce((acc: any, ws: any) => {
+    acc[ws.id] = ws.role;
+    return acc;
+  }, {} as Record<string, any>);
 
   // When editing, default to outline; when browsing, show documents
   const defaultTab = isEditingDocument ? 'outline' : 'documents';
@@ -109,11 +132,32 @@ export function AdaptiveSidebar({
 
   return (
     <div className="w-72 bg-card/40 backdrop-blur-sm mr-2 flex flex-col h-full">
+      {/* Workspace chip (switch/create/rename) */}
+      {workspaces && currentWorkspace && onSwitchWorkspace && onCreateWorkspace && (
+        <div className="px-2 pt-3">
+          <WorkspaceSwitcher
+            workspaces={workspaces}
+            currentWorkspace={currentWorkspace}
+            onSwitch={onSwitchWorkspace}
+            onCreate={onCreateWorkspace}
+            onRename={onRenameWorkspace}
+            onMembers={onOpenWorkspaceMembers}
+            onSettings={onOpenWorkspaceSettings}
+            rolesByWorkspaceId={rolesByWorkspaceId}
+          />
+        </div>
+      )}
+
       {/* Show tabs only when editing a document */}
       {isEditingDocument ? (
         <Tabs value={currentTab} onValueChange={(v) => setActiveTab(v as any)} className="flex flex-col h-full">
           {/* Main Tab Switcher at Top */}
           <div className="px-2 py-2 mb-2">
+            <div className="px-2 pt-1 pb-2">
+              <div className="text-xs font-semibold tracking-wide text-muted-foreground">
+                Collaboration
+              </div>
+            </div>
             <div className="flex items-center gap-1">
               <Button
                 variant={currentTab === 'documents' ? 'secondary' : 'ghost'}

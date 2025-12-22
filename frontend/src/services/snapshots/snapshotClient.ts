@@ -14,6 +14,7 @@
 import type { SnapshotPayload } from './serializeYjs';
 import { API_CONFIG } from '@/config/api.config';
 import { FailedSnapshotStore } from './FailedSnapshotStore';
+import { authService } from '@/services/api/AuthService';
 
 /**
  * Send snapshot to backend
@@ -32,6 +33,13 @@ import { FailedSnapshotStore } from './FailedSnapshotStore';
  */
 export async function pushSnapshot(payload: SnapshotPayload): Promise<boolean> {
   try {
+    // 🚫 Guest / logged-out mode: never talk to snapshot backend
+    if (!authService.isAuthenticated()) {
+      console.log('📴 [Snapshot] Skipping push - user not authenticated (guest/offline mode)');
+      // Do NOT queue in FailedSnapshotStore in guest mode; cloud backup is disabled
+      return false;
+    }
+    
     // Convert guest IDs to cloud IDs before pushing
     let cloudId = payload.documentId;
     if (cloudId.startsWith('doc_')) {
@@ -55,6 +63,16 @@ export async function pushSnapshot(payload: SnapshotPayload): Promise<boolean> {
     });
     
     if (!response.ok) {
+      // 404 means the document doesn't exist on backend yet (e.g., local-only doc)
+      // Treat this as non-retryable: log and drop, do NOT queue for retry.
+      if (response.status === 404) {
+        console.warn('ℹ️ [Snapshot] Backend returned 404 (document not found). Dropping snapshot without retry.', {
+          documentId: payload.documentId,
+          cloudId,
+        });
+        return false;
+      }
+      
       const errorMsg = `HTTP ${response.status}: ${response.statusText}`;
       throw new Error(errorMsg);
     }
@@ -65,13 +83,17 @@ export async function pushSnapshot(payload: SnapshotPayload): Promise<boolean> {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
     console.error('❌ [Snapshot] Push failed:', errorMsg);
     
-    // Queue for retry (with durability guarantee)
-    try {
-      await FailedSnapshotStore.add(payload, errorMsg);
-      console.log(`📥 [Snapshot] Queued for retry: ${payload.documentId}`);
-    } catch (queueError) {
-      console.error('💥 [Snapshot] CRITICAL: Failed to queue snapshot for retry:', queueError);
-      // This is a critical failure - snapshot is lost unless Yjs state is still in IndexedDB
+    // Queue for retry (with durability guarantee), but ONLY for non-404 failures.
+    if (!errorMsg.startsWith('HTTP 404')) {
+      try {
+        await FailedSnapshotStore.add(payload, errorMsg);
+        console.log(`📥 [Snapshot] Queued for retry: ${payload.documentId}`);
+      } catch (queueError) {
+        console.error('💥 [Snapshot] CRITICAL: Failed to queue snapshot for retry:', queueError);
+        // This is a critical failure - snapshot is lost unless Yjs state is still in IndexedDB
+      }
+    } else {
+      console.log('ℹ️ [Snapshot] Not queueing 404 failure for retry (document missing).');
     }
     
     return false;
@@ -135,6 +157,12 @@ export async function retryFailedSnapshots(): Promise<{
   succeeded: number;
   failed: number;
 }> {
+  // 🚫 Guest / logged-out mode: don't hammer backend with old failed snapshots
+  if (!authService.isAuthenticated()) {
+    console.log('📴 [Snapshot] Skipping retry - user not authenticated (guest/offline mode)');
+    return { attempted: 0, succeeded: 0, failed: 0 };
+  }
+  
   const dueSnapshots = await FailedSnapshotStore.getDueForRetry();
   
   if (dueSnapshots.length === 0) {
@@ -197,6 +225,12 @@ export async function retryFailedSnapshots(): Promise<{
  */
 async function pushSnapshotDirect(payload: SnapshotPayload): Promise<boolean> {
   try {
+    // Same guard as pushSnapshot: never call backend when logged out
+    if (!authService.isAuthenticated()) {
+      console.log('📴 [Snapshot] Skipping direct push - user not authenticated (guest/offline mode)');
+      return false;
+    }
+    
     let cloudId = payload.documentId;
     if (cloudId.startsWith('doc_')) {
       cloudId = cloudId.slice(4);
@@ -215,7 +249,20 @@ async function pushSnapshotDirect(payload: SnapshotPayload): Promise<boolean> {
       }),
     });
     
-    return response.ok;
+    if (!response.ok) {
+      // 404 is non-retryable for old snapshots: document never existed or was deleted.
+      // Treat as "handled" so FailedSnapshotStore will drop this entry.
+      if (response.status === 404) {
+        console.warn('ℹ️ [Snapshot] Direct push returned 404 (document not found). Dropping from retry queue.', {
+          documentId: payload.documentId,
+          cloudId,
+        });
+        return true;
+      }
+      return false;
+    }
+    
+    return true;
   } catch (error) {
     return false;
   }

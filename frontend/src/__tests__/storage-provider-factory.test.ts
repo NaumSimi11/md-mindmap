@@ -2,6 +2,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { StorageProviderFactory } from '@/services/sync/storage/StorageProviderFactory';
 import { Platform } from '@/services/sync/types';
 
+const fakeTauri = vi.hoisted(() => ({
+  TauriStorageProvider: class {
+    async init() {}
+    async getInfo() {
+      return { provider: 'Tauri FS', used: 0, available: 0, total: 0 };
+    }
+  }
+}));
+
+vi.mock('@/services/sync/storage/TauriStorageProvider', () => fakeTauri);
+
 describe('StorageProviderFactory', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -25,18 +36,6 @@ describe('StorageProviderFactory', () => {
   it('uses TauriStorageProvider when opt-in and platform is DESKTOP', async () => {
     // Stub env flag
     vi.stubEnv('VITE_ENABLE_TAURI_FS_CANONICAL', 'true');
-
-    // Mock the dynamic import of TauriStorageProvider
-    const fakeTauri = {
-      TauriStorageProvider: class {
-        async init() {}
-        async getInfo() { return { provider: 'Tauri FS', used: 0, available: 0, total: 0 }; }
-      }
-    };
-
-    vi.stubGlobal('window', Object.assign({}, (globalThis as any).window));
-    // Mock dynamic import by mocking module resolver
-    vi.mock('@/services/sync/storage/TauriStorageProvider', () => fakeTauri, { virtual: true });
 
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});

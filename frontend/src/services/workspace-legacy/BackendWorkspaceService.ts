@@ -134,6 +134,7 @@ export class BackendWorkspaceService {
       metadata: {
         version: apiDoc.version,
         createdBy: apiDoc.created_by,
+        accessModel: (apiDoc as any).access_model || 'inherited',
       },
       sync: {
         status: 'synced', // Coming from backend = synced

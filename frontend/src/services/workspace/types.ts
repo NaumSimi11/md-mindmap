@@ -59,7 +59,7 @@ export interface DocumentMeta {
   lastOpenedAt?: string;   // ISO 8601
   
   // Sync metadata
-  syncStatus: 'local' | 'synced' | 'syncing' | 'conflict';
+  syncStatus: 'local' | 'synced' | 'syncing' | 'conflict' | 'pending';
   cloudId?: string;        // Backend document ID (when synced)
   lastSyncedAt?: string;   // ISO 8601
   yjsVersion?: number;     // Canonical Yjs version from cloud
@@ -101,6 +101,8 @@ export interface CreateFolderInput {
  * Create Document Input
  */
 export interface CreateDocumentInput {
+  // Optional explicit ID for local-first flows (e.g. when caller pre-generates an ID)
+  id?: string;
   workspaceId: string;
   folderId?: string | null;
   title: string;
@@ -142,7 +144,7 @@ export interface UpdateDocumentInput {
   starred?: boolean;
   tags?: string[];
   // Sync metadata (for push-to-cloud updates)
-  syncStatus?: 'local' | 'synced' | 'syncing' | 'conflict';
+  syncStatus?: 'local' | 'synced' | 'syncing' | 'conflict' | 'pending';
   cloudId?: string;
   lastSyncedAt?: string;
   yjsVersion?: number;

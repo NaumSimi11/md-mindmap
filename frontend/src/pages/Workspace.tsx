@@ -2,14 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useAuth } from '@/hooks/useAuth';
-import type { Document } from '@/services/workspace-legacy/BackendWorkspaceService';
+import type { DocumentMeta as Document } from '@/services/workspace/types';
 import type { WebsocketProvider } from 'y-websocket';
 import { AdaptiveSidebar } from '@/components/workspace/AdaptiveSidebar';
 import { QuickSwitcher } from '@/components/workspace/QuickSwitcher';
 import { PresenceList } from '@/components/collaboration/PresenceList';
 import { NewDocumentModal } from '@/components/workspace/NewDocumentModal';
-import { WorkspaceSwitcher } from '@/components/workspace/WorkspaceSwitcher';
-import { SyncModeToggle } from '@/components/workspace/SyncModeToggle';
+// import { SyncModeToggle } from '@/components/workspace/SyncModeToggle';
 import { CreateWorkspaceModal } from '@/components/workspace/CreateWorkspaceModal';
 import { RenameWorkspaceDialog } from '@/components/workspace/RenameWorkspaceDialog';
 import { DragDropZone } from '@/components/workspace/DragDropZone';
@@ -19,6 +18,7 @@ import { WorkspaceHome } from '@/components/workspace/WorkspaceHome';
 import { FileWatcherIndicator } from '@/components/workspace/FileWatcherIndicator';
 import { CollaborationSidebar } from '@/components/workspace/CollaborationSidebar';
 import { QuickSwitcherModal } from '@/components/workspace/QuickSwitcherModal';
+import { WorkspaceMembersModal } from '@/components/workspace/WorkspaceMembersModal';
 import { useQuickSwitcher } from '@/hooks/useQuickSwitcher';
 import { Button } from '@/components/ui/button';
 import {
@@ -39,7 +39,6 @@ import { sessionService } from '@/services/EditorStudioSession';
 import { useScrollSpy } from '@/hooks/useScrollSpy';
 import { PresentationWizardModal, type GenerationSettings } from '@/components/presentation/PresentationWizardModal';
 import { PresentationLoadingScreen } from '@/components/presentation/PresentationLoadingScreen';
-import { htmlToMarkdown } from '@/utils/markdownConversion'; // 🔥 ADD: For outline generation
 import { safePresentationService, type ProgressUpdate } from '@/services/presentation/SafePresentationService';
 import { DEMO_PRESENTATION } from '@/data/demoPresentation';
 import { VersionHistory } from '@/components/editor/VersionHistory';
@@ -93,7 +92,9 @@ export default function Workspace() {
   const viewMode: ViewMode = pathParts[3] as ViewMode || 'home';
   const documentId = pathParts[2] || null;
 
-  const [currentDocument, setCurrentDocument] = useState<Document | null>(null);
+  // NOTE: This page still straddles legacy + new workspace types. Until the migration is complete,
+  // keep the runtime shape flexible here to avoid type-level churn blocking UX fixes.
+  const [currentDocument, setCurrentDocument] = useState<any>(null);
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   
   // Conflict management (TODO: Enable after offline service is wired)
@@ -101,6 +102,7 @@ export default function Workspace() {
   const [showNewDocModal, setShowNewDocModal] = useState(false);
   const [showCreateWorkspaceModal, setShowCreateWorkspaceModal] = useState(false);
   const [showRenameWorkspaceDialog, setShowRenameWorkspaceDialog] = useState(false);
+  const [showWorkspaceMembers, setShowWorkspaceMembers] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
@@ -110,6 +112,11 @@ export default function Workspace() {
 
   // 🔥 CHANGED: Use STATE instead of REF so sidebar re-renders when content changes!
   const [liveEditorContent, setLiveEditorContent] = React.useState<string>('');
+  // Outline content should be derived from the *live editor doc structure*, not from cached markdown.
+  // We keep it lightweight: only headings (as markdown `#` lines) so the Outline is always in sync.
+  const [liveOutlineContent, setLiveOutlineContent] = React.useState<string>('');
+  const outlineCleanupRef = React.useRef<null | (() => void)>(null);
+  const outlineRafRef = React.useRef<number | null>(null);
 
   // Editor instance ref for direct content insertion
   const editorInstanceRef = React.useRef<any>(null);
@@ -234,13 +241,13 @@ export default function Workspace() {
       const type = searchParams.get('type') as 'mindmap' | 'flowchart' | 'orgchart';
 
       // Use LIVE content if available (most recent), otherwise use stored content
-      const contentToUse = liveEditorContentRef.current || currentDocument.content;
+      const contentToUse = liveEditorContent || currentDocument.content;
 
       console.log('🧠 Mindmap mode detected:', {
         mode,
         type,
         contentLength: contentToUse.length,
-        hasLiveContent: !!liveEditorContentRef.current,
+        hasLiveContent: !!liveEditorContent,
         preview: contentToUse.substring(0, 200)
       });
 
@@ -422,7 +429,7 @@ export default function Workspace() {
     setPresentationError(null);
 
     try {
-      const editorContent = liveEditorContentRef.current || currentDocument.content;
+      const editorContent = liveEditorContent || currentDocument.content;
       console.log('📝 Editor content length:', editorContent.length);
 
       console.log('🤖 Calling safe presentation service...');
@@ -508,6 +515,59 @@ export default function Workspace() {
       autoSaveDocument(currentDocument.id, content);
     }
   }, [currentDocument, autoSaveDocument]);
+
+  // Derive outline from TipTap document structure (heading nodes), matching `scrollToHeading()` indexing.
+  const computeOutlineMarkdownFromEditor = React.useCallback((editor: any): string => {
+    try {
+      const { doc } = editor.state;
+      const lines: string[] = [];
+      doc.descendants((node: any) => {
+        if (node.type?.name === 'heading') {
+          const level = Math.min(6, Math.max(1, Number(node.attrs?.level || 1)));
+          const text = String(node.textContent || '').trim();
+          if (text) lines.push(`${'#'.repeat(level)} ${text}`);
+        }
+      });
+      return lines.join('\n');
+    } catch {
+      return '';
+    }
+  }, []);
+
+  // Attach/detach outline sync listeners cleanly across doc switches.
+  const handleEditorReady = React.useCallback((editor: any) => {
+    editorInstanceRef.current = editor;
+
+    // Cleanup any prior listeners
+    outlineCleanupRef.current?.();
+    outlineCleanupRef.current = null;
+
+    const updateOutline = () => {
+      if (outlineRafRef.current) cancelAnimationFrame(outlineRafRef.current);
+      outlineRafRef.current = requestAnimationFrame(() => {
+        setLiveOutlineContent(computeOutlineMarkdownFromEditor(editor));
+      });
+    };
+
+    // Initial populate + live updates
+    updateOutline();
+    editor.on?.('update', updateOutline);
+
+    outlineCleanupRef.current = () => {
+      try {
+        editor.off?.('update', updateOutline);
+      } catch {
+        // no-op
+      }
+      if (outlineRafRef.current) cancelAnimationFrame(outlineRafRef.current);
+      outlineRafRef.current = null;
+    };
+  }, [computeOutlineMarkdownFromEditor]);
+
+  // Ensure listeners are cleaned up if Workspace unmounts.
+  React.useEffect(() => {
+    return () => outlineCleanupRef.current?.();
+  }, []);
 
   // Callback to handle title changes (memoized to prevent infinite loops)
   const handleTitleChange = React.useCallback((newTitle: string) => {
@@ -670,7 +730,8 @@ export default function Workspace() {
           onDocumentSelect={handleDocumentSelect}
           onNewDocument={handleNewDocument}
           onLoadDemo={handleLoadDemoPresentation}
-          documents={backendDocuments}
+          documents={backendDocuments as any}
+          createDocument={backendCreateDocument}
         />
       );
     }
@@ -686,29 +747,7 @@ export default function Workspace() {
             // ❌ STEP 4: Removed initialContent (hydration in WorkspaceContext)
             // ❌ STEP 1: Removed onContentChange (no auto-save)
             onTitleChange={handleTitleChange}
-            onEditorReady={(editor) => {
-              editorInstanceRef.current = editor;
-              
-              // 🔥 STEP 1: Extract initial content for outline only
-              // Delay this until the view is ready, as getJSON() requires the view
-              const checkView = setInterval(() => {
-                try {
-                  if (editor.view && editor.view.dom) {
-                    clearInterval(checkView);
-                    if (!editor.isEmpty) {
-                      const initialMarkdown = htmlToMarkdown('', editor);
-                      setLiveEditorContent(initialMarkdown);
-                      console.log(`📋 Initial content extracted for outline (${initialMarkdown.length} chars)`);
-                    }
-                  }
-                } catch (e) {
-                  // View not ready yet
-                }
-              }, 50);
-
-              // Safety cleanup
-              setTimeout(() => clearInterval(checkView), 5000);
-            }}
+            onEditorReady={handleEditorReady}
             contextFolders={contextFolders}
           />
         </EditorErrorBoundary>
@@ -746,7 +785,8 @@ export default function Workspace() {
         <SidebarErrorBoundary>
           <AdaptiveSidebar
             isEditingDocument={viewMode === 'edit' || viewMode === 'mindmap' || viewMode === 'slides'}
-            documentContent={liveEditorContent || currentDocument?.content || ''}
+            // Outline reads only heading structure; keep it synced to the live editor doc.
+            documentContent={liveOutlineContent || currentDocument?.content || ''}
             onHeadingClick={(text, line, headingIndex) => {
               console.log('📍 Outline clicked - Scroll to heading index:', headingIndex, 'Text:', text);
               // Trigger scroll in editor by index (more reliable)
@@ -764,6 +804,15 @@ export default function Workspace() {
             onDocumentSelect={handleDocumentSelect}
             onNewDocument={handleNewDocument}
             currentDocumentId={documentId}
+            workspaces={workspaces as any}
+            currentWorkspace={currentWorkspace as any}
+            onSwitchWorkspace={handleSwitchWorkspace}
+            onCreateWorkspace={() => setShowCreateWorkspaceModal(true)}
+            onRenameWorkspace={() => setShowRenameWorkspaceDialog(true)}
+            onOpenWorkspaceMembers={() => setShowWorkspaceMembers(true)}
+            onOpenWorkspaceSettings={() => {
+              if (currentWorkspace) navigate(`/workspace/${currentWorkspace.id}/settings`);
+            }}
             contextFolders={contextFolders}
             onLoadDemo={handleLoadDemoPresentation}
             onContextFoldersChange={setContextFolders}
@@ -772,6 +821,15 @@ export default function Workspace() {
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           />
         </SidebarErrorBoundary>
+      )}
+
+      {/* Workspace Members Modal (quick access) */}
+      {currentWorkspace && (
+        <WorkspaceMembersModal
+          workspaceId={currentWorkspace.id}
+          open={showWorkspaceMembers}
+          onOpenChange={setShowWorkspaceMembers}
+        />
       )}
 
       {/* Focus Mode Exit Button */}
@@ -796,27 +854,6 @@ export default function Workspace() {
         {!focusMode && (
           <header className="flex items-center justify-between px-6 py-4 bg-card/30 backdrop-blur-sm mb-2">
             <div className="flex items-center gap-3">
-              <h1 
-                className="text-xl font-bold text-glow cursor-pointer hover:opacity-80 transition-opacity" 
-                onClick={() => navigate('/')}
-                title="Go to Landing Page"
-              >
-                MD Creator
-              </h1>
-              
-              {/* Workspace Switcher */}
-              {currentWorkspace && workspaces.length > 0 && (
-                <>
-                  <span className="text-muted-foreground">/</span>
-                  <WorkspaceSwitcher
-                    workspaces={workspaces}
-                    currentWorkspace={currentWorkspace}
-                    onSwitch={handleSwitchWorkspace}
-                    onCreate={() => setShowCreateWorkspaceModal(true)}
-                  />
-                </>
-              )}
-              
               {currentDocument && (
                 <>
                   <span className="text-muted-foreground">/</span>
@@ -849,26 +886,12 @@ export default function Workspace() {
             </div>
 
             <div className="flex items-center gap-3">
-              {/* Sync Mode Toggle */}
-              <SyncModeToggle />
-              
               {/* Presence List - Show who's online */}
-              <PresenceList websocketProvider={websocketProvider} />
+              <PresenceList provider={websocketProvider} />
               
               {/* Sync Status Indicator - Now in WYSIWYGEditor */}
               
-              {/* Version History Button - Only show when editing */}
-              {currentDocument && viewMode === 'edit' && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowVersionHistory(!showVersionHistory)}
-                  className="gap-2"
-                >
-                  <Clock className="h-4 w-4" />
-                  <span className="hidden md:inline">History</span>
-                </Button>
-              )}
+              {/* Version history moved into the editor header (single source of truth) */}
 
               {/* Guest Credits */}
               <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border border-border/40 text-xs text-muted-foreground">
@@ -1019,24 +1042,7 @@ export default function Workspace() {
       {/* Drag-and-Drop Zone */}
       <DragDropZone />
 
-      {/* Version History Panel */}
-      {showVersionHistory && currentDocument && (
-        <div className="fixed right-0 top-0 h-full z-40">
-          <VersionHistory
-            documentId={currentDocument.id}
-            currentVersion={currentDocument.metadata?.version || 1}
-            onRestore={async (versionNumber) => {
-              // Refresh document after restore
-              await refreshDocuments();
-              const restored = backendGetDocument(currentDocument.id);
-              if (restored) {
-                setCurrentDocument(restored);
-              }
-            }}
-            onClose={() => setShowVersionHistory(false)}
-          />
-        </div>
-      )}
+      {/* Version history moved into the editor header (single source of truth) */}
 
       {/* Collaboration Sidebar */}
       <CollaborationSidebar

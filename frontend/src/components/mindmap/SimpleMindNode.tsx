@@ -290,10 +290,10 @@ function SimpleMindNode({ data, id, selected }: NodeProps<SimpleNodeData>) {
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
+              ...(isDiamond ? { transform: 'rotate(-45deg)' } : {}),
             }}
             title={data.label}
             onDoubleClick={handleLabelDoubleClick}
-            style={isDiamond ? { transform: 'rotate(-45deg)' } : {}}
           >
             {data.label}
           </div>

@@ -280,10 +280,10 @@ function BorderOnlyMindNode({ data, id, selected }: NodeProps<BorderOnlyNodeData
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               color: '#1f2937',
+              ...(isDiamond ? { transform: 'rotate(-45deg)' } : {}),
             }}
             title={data.label}
             onDoubleClick={handleLabelDoubleClick}
-            style={isDiamond ? { transform: 'rotate(-45deg)' } : {}}
           >
             {data.label}
           </div>

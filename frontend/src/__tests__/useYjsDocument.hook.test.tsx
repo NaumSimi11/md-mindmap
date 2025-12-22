@@ -84,7 +84,8 @@ describe('useYjsDocument (hook contract)', () => {
       isAuthenticated: true,
     });
 
-    expect(screen.getByTestId('status').textContent).toBe('connecting');
+    // If the manager returns an already-initialized instance, the hook reports `synced` immediately.
+    expect(screen.getByTestId('status').textContent).toBe('synced');
     expect(screen.getByTestId('ws').textContent).toBe('yes');
   });
 

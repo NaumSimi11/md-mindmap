@@ -3,7 +3,8 @@ import { useMemo } from 'react';
 import { markdownToHtml, htmlToMarkdown } from '../../../utils/markdownConversion';
 
 interface UseEditorEventsProps {
-    editor: Editor | null;
+    // Use a ref so handlers always see the latest editor instance
+    editorRef: React.MutableRefObject<Editor | null>;
     setShowTableMenu: (show: boolean, position?: { x: number; y: number }) => void;
     setContextMenu: (menu: { visible: boolean; x: number; y: number; selectedText: string }) => void;
     // ❌ STEP 1: Removed onContentChange (Yjs will handle persistence)
@@ -11,7 +12,7 @@ interface UseEditorEventsProps {
 }
 
 export const useEditorEvents = ({
-    editor,
+    editorRef,
     setShowTableMenu,
     setContextMenu,
     // ❌ STEP 1: Removed onContentChange
@@ -64,6 +65,7 @@ export const useEditorEvents = ({
                 // Check if right-clicking on a table cell
                 if (target.tagName === 'TD' || target.tagName === 'TH' || target.closest('td, th')) {
                     const cell = (target.tagName === 'TD' || target.tagName === 'TH' ? target : target.closest('td, th')) as HTMLElement;
+                    const editor = editorRef.current;
                     if (cell && editor) {
                         // Check if we can perform table operations (confirm we're in a table)
                         if (editor.can().addRowBefore() || editor.can().addColumnBefore()) {
@@ -92,6 +94,7 @@ export const useEditorEvents = ({
         },
         handlePaste: (view: any, event: any) => {
             try {
+                const editor = editorRef.current;
                 const text = event.clipboardData?.getData('text/plain') || '';
                 if (!text) return false;
                 
@@ -125,5 +128,5 @@ export const useEditorEvents = ({
                 return false;
             }
         }
-    }), [editor, setShowTableMenu, setContextMenu, isProgrammaticUpdateRef]); // ❌ STEP 1: Removed onContentChange from deps
+    }), [setShowTableMenu, setContextMenu, isProgrammaticUpdateRef]); // ❌ STEP 1: Removed onContentChange from deps
 };

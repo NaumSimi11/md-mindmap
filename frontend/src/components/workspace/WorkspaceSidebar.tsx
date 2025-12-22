@@ -26,17 +26,18 @@ import {
   Folder,
   Star,
   Clock,
+  Users,
   ChevronRight,
   ChevronDown,
   MoreVertical,
   Edit,
-  Edit2,
   Trash2,
   FolderPlus,
   Cloud,
   CloudOff,
   Download,
   Upload,
+  Lock,
 } from 'lucide-react';
 import { workspaceService, type Document, type Folder as WorkspaceFolder } from '@/services/workspace-legacy/WorkspaceService';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -56,8 +57,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { NewDocumentModal } from './NewDocumentModal';
-import { RenameWorkspaceDialog } from './RenameWorkspaceDialog';
 import { guestWorkspaceService } from '@/services/workspace/GuestWorkspaceService';
+import { useSharedWithMeDocuments } from '@/hooks/useSharedWithMeDocuments';
+import { Badge } from '@/components/ui/badge';
 
 interface WorkspaceSidebarProps {
   onDocumentSelect: (documentId: string) => void;
@@ -116,12 +118,12 @@ export function WorkspaceSidebar({
     console.warn('⚠️ Orphan documents (folder_id points to non-existent folder):', orphanDocs.map(d => ({title: d.title, folderId: d.folderId})));
   }
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
-  const [activeSection, setActiveSection] = useState<'all' | 'recent' | 'starred'>('all');
+  const [activeSection, setActiveSection] = useState<'all' | 'recent' | 'starred' | 'shared'>('all');
   const [showNewDocModal, setShowNewDocModal] = useState(false);
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<{ id: string; name: string } | null>(null);
-  const [showRenameWorkspace, setShowRenameWorkspace] = useState(false);
+  // Workspace rename UI moved to the sidebar WorkspaceSwitcher (single source of truth)
   const [workspaceKey, setWorkspaceKey] = useState(0);
   
   // Auto-expand all folders when they load
@@ -341,30 +343,7 @@ export function WorkspaceSidebar({
     }
   };
 
-  const handleRenameWorkspace = async (newName: string) => {
-    console.log('🔄 Renaming workspace to:', newName);
-    
-    if (!currentWorkspace) {
-      console.error('❌ No current workspace to rename');
-      return;
-    }
-    
-    try {
-      // Update workspace in IndexedDB
-      await guestWorkspaceService.updateWorkspace(currentWorkspace.id, { name: newName });
-      console.log('✅ Workspace renamed successfully');
-      
-      // Close the dialog
-      setShowRenameWorkspace(false);
-      
-      // Force a page reload to refresh the context
-      setTimeout(() => {
-        window.location.reload();
-      }, 100);
-    } catch (error) {
-      console.error('❌ Failed to rename workspace:', error);
-    }
-  };
+  // Workspace rename is handled by Workspace.tsx (via AdaptiveSidebar WorkspaceSwitcher)
 
   const getDocumentIcon = (type: Document['type']) => {
     switch (type) {
@@ -393,62 +372,62 @@ export function WorkspaceSidebar({
         ? backendDocuments.filter(doc => doc.starred)
         : backendDocuments;
 
+  const { data: sharedWithMeDocs = [], isLoading: sharedLoading } = useSharedWithMeDocuments(isAuthenticated);
+
   return (
     <div key={`workspace-${workspaceKey}`} className="w-72 border-r border-border bg-card flex flex-col h-full" data-testid="workspace-sidebar">
       {/* Header */}
       <div className="p-4 border-b border-border">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold text-lg flex items-center gap-2">
-            <span>{currentWorkspace?.icon || '🚀'}</span>
-            <span>{currentWorkspace?.name || 'Workspace'}</span>
-          </h2>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setShowRenameWorkspace(true)}
-            className="h-7 w-7 p-0"
-            title="Rename workspace"
-          >
-            <Edit2 className="h-4 w-4" />
-          </Button>
-        </div>
+        {/* Workspace identity + management is handled by AdaptiveSidebar's WorkspaceSwitcher */}
 
         {/* Search */}
-        <div className="relative mb-3">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search documents..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
+        <div className="mb-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11px] font-medium text-muted-foreground">
+              Documents
+            </span>
+            <span className="text-[11px] text-muted-foreground">
+              ⌘K quick search
+            </span>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Filter documents…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
         </div>
 
-        {/* New Buttons */}
-        <div className="flex flex-col gap-2">
-          <div className="flex gap-2">
-            <Button
-              data-testid="new-document"
-              size="sm"
-              className="flex-1"
-              onClick={() => setShowNewDocModal(true)}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              New Doc
-            </Button>
-            <Button
-              data-testid="new-folder"
-              size="sm"
-              variant="outline"
-              onClick={handleCreateFolder}
-            >
-              <FolderPlus className="h-4 w-4" />
-            </Button>
+        {/* New Buttons (disabled in Shared-with-me view) */}
+        {activeSection !== 'shared' && (
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <Button
+                data-testid="new-document"
+                size="sm"
+                className="flex-1"
+                onClick={() => setShowNewDocModal(true)}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                New Doc
+              </Button>
+              <Button
+                data-testid="new-folder"
+                size="sm"
+                variant="outline"
+                onClick={handleCreateFolder}
+              >
+                <FolderPlus className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            {/* Import Button */}
+            <ImportDocumentButton variant="outline" size="sm" className="w-full" data-testid="import-document-button" />
           </div>
-          
-          {/* Import Button */}
-          <ImportDocumentButton variant="outline" size="sm" className="w-full" data-testid="import-document-button" />
-        </div>
+        )}
       </div>
 
       {/* New Document Modal */}
@@ -472,13 +451,7 @@ export function WorkspaceSidebar({
         }}
       />
 
-      {/* Rename Workspace Dialog */}
-      <RenameWorkspaceDialog
-        open={showRenameWorkspace}
-        onClose={() => setShowRenameWorkspace(false)}
-        onRename={handleRenameWorkspace}
-        currentName={currentWorkspace?.name || 'My Local Workspace'}
-      />
+      {/* Rename Workspace Dialog removed (handled by Workspace.tsx via AdaptiveSidebar WorkspaceSwitcher) */}
 
       {/* Confirm Delete Dialog */}
       <ConfirmDeleteDialog
@@ -525,12 +498,56 @@ export function WorkspaceSidebar({
           <Star className="h-3 w-3 inline mr-1" />
           Starred
         </button>
+        <button
+          className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${activeSection === 'shared'
+              ? 'text-primary border-b-2 border-primary'
+              : 'text-muted-foreground hover:text-foreground'
+            }`}
+          onClick={() => setActiveSection('shared')}
+        >
+          <Users className="h-3 w-3 inline mr-1" />
+          Shared
+        </button>
       </div>
 
       {/* Document List */}
       <ScrollArea className="flex-1">
         <div className="p-2">
-          {searchQuery ? (
+          {activeSection === 'shared' ? (
+            <div className="space-y-1">
+              {sharedLoading ? (
+                <div className="text-center text-sm text-muted-foreground py-8">Loading…</div>
+              ) : sharedWithMeDocs.length === 0 ? (
+                <div className="text-center text-sm text-muted-foreground py-8">
+                  No documents shared with you
+                </div>
+              ) : (
+                sharedWithMeDocs.map((doc: any) => (
+                  <div
+                    key={doc.id}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-accent cursor-pointer"
+                    title={doc.title}
+                    onClick={() => onDocumentSelect(doc.id)}
+                  >
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm truncate flex-1" style={{ maxWidth: '150px' }}>
+                      {doc.title}
+                    </span>
+                    {doc.access_model === 'restricted' ? (
+                      <Badge variant="secondary" className="text-[10px] gap-1">
+                        <Lock className="h-3 w-3" />
+                        Restricted
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px]">
+                        Team
+                      </Badge>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          ) : searchQuery ? (
             // Search Results
             <div className="space-y-1">
               {filteredDocuments.length === 0 ? (
@@ -959,6 +976,17 @@ function DocumentItem({
       >
         {document.title}
       </span>
+
+      {/* Access Model Badge (restricted only) */}
+      {(document as any)?.metadata?.accessModel === 'restricted' && (
+        <span
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700"
+          title="Restricted: workspace access does not apply"
+        >
+          <Lock className="h-3 w-3" />
+          Restricted
+        </span>
+      )}
 
       {/* 🔥 BLOCKING ACTION 2: Enhanced Sync Status Badge */}
       {document.sync && (

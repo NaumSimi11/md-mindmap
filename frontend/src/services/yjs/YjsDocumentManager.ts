@@ -98,11 +98,16 @@ class YjsDocumentManager {
               documentIdValue: JSON.stringify(documentId),
             });
             
+            // Check for share token (guest access)
+            const shareToken = sessionStorage.getItem('share_token');
+            
             const websocketProvider = new HocuspocusProvider({
               url: websocketUrl,
               name: documentId,
               document: instance.ydoc,
               token: authToken || '',
+              // Pass share token via requestHeaders (NOT token parameter)
+              requestHeaders: shareToken ? { 'x-share-token': shareToken } : undefined,
             });
             
             console.log(`🔥 [UPGRADE DEBUG] Hocuspocus provider created:`, {
@@ -185,11 +190,16 @@ class YjsDocumentManager {
             'arg4': { connect: true, params: { token: authToken || '' } }
           });
           
+          // Check for share token (guest access)
+          const shareToken = sessionStorage.getItem('share_token');
+          
           websocketProvider = new HocuspocusProvider({
             url: websocketUrl,
             name: documentId,
             document: ydoc,
             token: authToken || '',
+            // Pass share token via requestHeaders (NOT token parameter)
+            requestHeaders: shareToken ? { 'x-share-token': shareToken } : undefined,
           });
           
           console.log(`🔥 [DEBUG] Hocuspocus provider created:`, {

@@ -17,6 +17,8 @@ import { FailedSnapshotStore } from '@/services/snapshots/FailedSnapshotStore';
 export interface SyncStatusData {
   lastSyncedAt: Date | null;
   lastSyncSuccess: boolean;
+  isBackingUp: boolean;
+  cloudEnabled: boolean;
   pendingCount: number;
   isOnline: boolean;
 }
@@ -27,6 +29,8 @@ export interface SyncStatusData {
 export function useSyncStatus(documentId: string): SyncStatusData {
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [lastSyncSuccess, setLastSyncSuccess] = useState<boolean>(true);
+  const [isBackingUp, setIsBackingUp] = useState<boolean>(false);
+  const [cloudEnabled, setCloudEnabled] = useState<boolean>(false);
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   
@@ -38,6 +42,11 @@ export function useSyncStatus(documentId: string): SyncStatusData {
         const status = instance.snapshotManager.getSyncStatus();
         setLastSyncedAt(status.lastSyncedAt);
         setLastSyncSuccess(status.lastSyncSuccess);
+        setIsBackingUp(status.isBackingUp);
+        setCloudEnabled(true);
+      } else {
+        setCloudEnabled(false);
+        setIsBackingUp(false);
       }
     }, 2000);
     
@@ -75,6 +84,8 @@ export function useSyncStatus(documentId: string): SyncStatusData {
   return {
     lastSyncedAt,
     lastSyncSuccess,
+    isBackingUp,
+    cloudEnabled,
     pendingCount,
     isOnline,
   };

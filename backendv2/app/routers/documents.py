@@ -126,6 +126,71 @@ async def create_document(
 
 
 @router.get(
+    "/shared-with-me",
+    response_model=DocumentListResponse,
+    summary="List documents shared with me",
+    description="List documents explicitly shared with the current user (doc-only access or restricted docs)."
+)
+async def get_shared_with_me_documents(
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(50, ge=1, le=100, description="Items per page"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    List documents shared with me
+    
+    Returns documents where:
+    - User has explicit document_shares but is NOT a workspace member, OR
+    - Document has access_model='restricted' and user has explicit doc_share
+    
+    Returns:
+    - 200: Documents list
+    """
+    from app.services.share_service import ShareService
+    
+    try:
+        documents = await ShareService.list_shared_with_me_documents(db, current_user.id)
+        
+        # Convert to response format
+        items = []
+        for doc in documents:
+            items.append(DocumentListItem(
+                id=str(doc.id),
+                title=doc.title,
+                slug=doc.slug,
+                content_type=doc.content_type,
+                workspace_id=str(doc.workspace_id),
+                folder_id=str(doc.folder_id) if doc.folder_id else None,
+                tags=doc.tags,
+                is_public=doc.is_public,
+                is_template=doc.is_template,
+                is_starred=doc.is_starred,
+                storage_mode=doc.storage_mode.value,
+                access_model=doc.access_model.value,
+                version=doc.version,
+                word_count=doc.word_count,
+                created_by_id=str(doc.created_by_id),
+                created_at=doc.created_at,
+                updated_at=doc.updated_at
+            ))
+        
+        return DocumentListResponse(
+            items=items,
+            total=len(items),
+            page=page,
+            page_size=page_size,
+            has_more=False
+        )
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch shared documents: {str(e)}"
+        )
+
+
+@router.get(
     "/{document_id}",
     response_model=DocumentDetail,
     summary="Get document",

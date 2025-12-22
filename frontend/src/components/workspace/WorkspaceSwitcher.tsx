@@ -2,7 +2,7 @@
  * WorkspaceSwitcher - Dropdown to switch between workspaces
  */
 
-import { Check, ChevronDown, Plus, Settings, Edit } from 'lucide-react';
+import { Check, ChevronDown, Plus, Settings, Edit, Users } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +13,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import type { Workspace } from '@/services/workspace-legacy/BackendWorkspaceService';
+import type { WorkspaceRole } from '@/services/api/workspaceMembersClient';
+import { getRoleInfo } from '@/hooks/useWorkspacePermissions';
 
 interface WorkspaceSwitcherProps {
   workspaces: Workspace[];
@@ -21,6 +23,8 @@ interface WorkspaceSwitcherProps {
   onCreate: () => void;
   onRename?: () => void;
   onSettings?: () => void;
+  onMembers?: () => void;
+  rolesByWorkspaceId?: Record<string, WorkspaceRole>;
 }
 
 export function WorkspaceSwitcher({
@@ -30,6 +34,8 @@ export function WorkspaceSwitcher({
   onCreate,
   onRename,
   onSettings,
+  onMembers,
+  rolesByWorkspaceId,
 }: WorkspaceSwitcherProps) {
   return (
     <DropdownMenu>
@@ -48,7 +54,7 @@ export function WorkspaceSwitcher({
 
       <DropdownMenuContent align="start" className="w-[280px]">
         <DropdownMenuLabel className="text-xs text-muted-foreground uppercase tracking-wider">
-          Workspaces
+          My Workspaces
         </DropdownMenuLabel>
 
         {/* Workspace List */}
@@ -71,6 +77,11 @@ export function WorkspaceSwitcher({
                 </div>
               )}
             </div>
+            {rolesByWorkspaceId?.[workspace.id] && (
+              <span className="text-[10px] text-muted-foreground px-2 py-0.5 rounded-full bg-muted">
+                {getRoleInfo(rolesByWorkspaceId[workspace.id]).label}
+              </span>
+            )}
             {workspace.id === currentWorkspace.id && (
               <Check className="h-4 w-4 text-primary" />
             )}
@@ -80,6 +91,13 @@ export function WorkspaceSwitcher({
         <DropdownMenuSeparator />
 
         {/* Actions */}
+        {onMembers && (
+          <DropdownMenuItem onClick={onMembers} className="cursor-pointer">
+            <Users className="h-4 w-4 mr-2" />
+            Members
+          </DropdownMenuItem>
+        )}
+
         {onRename && (
           <DropdownMenuItem onClick={onRename} className="cursor-pointer">
             <Edit className="h-4 w-4 mr-2" />

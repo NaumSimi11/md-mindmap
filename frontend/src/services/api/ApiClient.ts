@@ -123,6 +123,19 @@ export class ApiClient {
    */
   async get<T>(endpoint: string): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
+
+    if (process.env.NODE_ENV === 'development' && !this.token) {
+      // Dev-only: warn if we're calling obviously-authenticated endpoints without a token
+      if (endpoint.startsWith('/api/v1/workspaces') ||
+          endpoint.startsWith('/api/v1/documents') ||
+          endpoint.startsWith('/api/v1/users/me') ||
+          endpoint.includes('/snapshot') ||
+          endpoint.startsWith('/api/v1/shares')) {
+        // eslint-disable-next-line no-console
+        console.warn('[ApiClient] GET without auth token for endpoint that usually requires auth:', { endpoint });
+      }
+    }
+
     const response = await fetch(url, {
       method: 'GET',
       headers: this.getHeaders(),

@@ -34,10 +34,8 @@ export function AppHeader() {
           </div>
         </button>
 
-        {/* Logo */}
-        <div className="text-2xl font-bold text-glow">
-          MD Creator
-        </div>
+        {/* Brand (removed per UX cleanup) */}
+        <div className="flex-1" />
 
         {/* Right side status */}
         <div className="flex items-center gap-3">

@@ -71,11 +71,11 @@ export function MindmapLoadingScreen({ type, progress = 0 }: MindmapLoadingScree
           </div>
         </div>
 
-        {/* MD Reader Text Logo */}
+        {/* App Text Logo */}
         <div className="text-center">
           <h1 className="text-3xl font-bold text-glow mb-2 flex items-center gap-2">
             <Sparkles className="w-6 h-6 text-primary animate-pulse" />
-            MD Creator
+            Collaboration
             <Sparkles className="w-6 h-6 text-primary animate-pulse" />
           </h1>
           <p className="text-sm text-muted-foreground">Powered by AI</p>

@@ -11,6 +11,7 @@ import { authService } from '@/services/api';
 import { markdownToHtml } from '@/utils/markdownConversion';
 import * as Y from 'yjs';
 import * as buffer from 'lib0/buffer';
+import { getCanonicalDocKey, getCanonicalWorkspaceKey } from '@/utils/identity';
 
 // Type alias for consistency with existing code
 type Workspace = WorkspaceType;
@@ -247,7 +248,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         const backendWorkspaces = await backendWorkspaceService.getAllWorkspaces();
         console.log(`☁️ Loaded ${backendWorkspaces.length} backend workspace(s) from cloud/cache`);
         
-        // 3. Merge workspaces (guest + backend)
+        // 3. Merge workspaces (guest + backend) using canonical workspace key
         // Guest workspaces are marked as 'local' (not synced)
         // Backend workspaces are marked as 'synced' (from cloud)
         const guestMapped = guestWorkspaces.map(ws => ({
@@ -262,20 +263,47 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         
         const backendMapped = backendWorkspaces.map(mapWorkspaceType);
         
-        // Combine and deduplicate (if same ID exists in both, prefer backend version)
+        // Combine and deduplicate by canonical workspace key
         const workspaceMap = new Map<string, any>();
         
         // Add guest workspaces first (local)
         guestMapped.forEach(ws => {
-          workspaceMap.set(ws.id, ws);
+          const key = getCanonicalWorkspaceKey({ id: ws.id });
+          const existing = workspaceMap.get(key);
+          workspaceMap.set(key, existing ?? ws);
         });
         
-        // Add backend workspaces (cloud) - will overwrite if same ID
+        // Add backend workspaces (cloud) - override guest metadata when same canonical key
         backendMapped.forEach(ws => {
-          workspaceMap.set(ws.id, ws);
+          const key = getCanonicalWorkspaceKey({ id: ws.id });
+          const existing = workspaceMap.get(key);
+          workspaceMap.set(key, {
+            ...existing,
+            ...ws,
+          });
         });
         
         const allWorkspaces = Array.from(workspaceMap.values());
+
+        if (process.env.NODE_ENV === 'development') {
+          // Dev-only invariant: no duplicate canonical workspace keys
+          const seen = new Set<string>();
+          for (const ws of allWorkspaces) {
+            const key = getCanonicalWorkspaceKey({ id: ws.id });
+            if (seen.has(key)) {
+              // eslint-disable-next-line no-console
+              console.error('[WorkspaceContext] Duplicate canonical workspace key after merge', {
+                key,
+                workspaces: allWorkspaces
+                  .filter(w => getCanonicalWorkspaceKey({ id: w.id }) === key)
+                  .map(w => ({ id: w.id, name: w.name, syncStatus: w.syncStatus })),
+              });
+              break;
+            }
+            seen.add(key);
+          }
+        }
+
         setWorkspaces(allWorkspaces);
         
         console.log(`✅ Merged workspaces: ${guestMapped.length} local + ${backendMapped.length} cloud = ${allWorkspaces.length} total`);
@@ -303,15 +331,66 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             setDocuments(mappedDocs);
             console.log(`✅ Loaded ${mappedDocs.length} local document(s) from guest service`);
           } else {
-            // Load from backend service (cloud/cache)
+            // Load from backend service (cloud/cache) AND merge with any local-only docs for this workspace
             console.log('☁️ Loading cloud workspace:', workspace.name);
             const workspaceType = backendWorkspaces.find(w => w.id === workspace.id);
             if (workspaceType) {
               await backendWorkspaceService.switchWorkspace(workspaceType.id);
-              const docs = await backendWorkspaceService.getDocuments(workspaceType.id);
-              const mappedDocs = docs.map(mapDocumentMetaToDocument);
-              setDocuments(mappedDocs);
-              console.log(`✅ Loaded ${mappedDocs.length} cloud document(s) from backend service`);
+              const backendDocs = await backendWorkspaceService.getDocuments(workspaceType.id);
+              const backendMapped = backendDocs.map(mapDocumentMetaToDocument);
+
+              // Also load any guest docs that belong to this workspace id (local-first)
+              let guestMappedForWorkspace: Document[] = [];
+              try {
+                const guestDocsForWorkspace = await guestWorkspaceService.getDocuments(workspace.id);
+                guestMappedForWorkspace = guestDocsForWorkspace.map(mapDocumentMetaToDocument);
+                console.log(`📥 Loaded ${guestMappedForWorkspace.length} local document(s) for cloud workspace from guest service`);
+              } catch (guestErr) {
+                console.warn('⚠️ Failed to load guest documents for cloud workspace:', guestErr);
+              }
+
+              // Merge guest + backend docs by canonical doc key
+              const docMap = new Map<string, Document>();
+
+              // Seed with guest docs (local-only truth)
+              guestMappedForWorkspace.forEach(d => {
+                const key = getCanonicalDocKey({ id: d.id, sync: d.sync });
+                const existing = docMap.get(key);
+                docMap.set(key, existing ?? d);
+              });
+
+              // Overlay backend docs (cloud truth where available)
+              backendMapped.forEach(d => {
+                const key = getCanonicalDocKey({ id: d.id, sync: d.sync });
+                const existing = docMap.get(key);
+                docMap.set(key, {
+                  ...existing,
+                  ...d,
+                });
+              });
+
+              const mergedDocs = Array.from(docMap.values());
+
+              if (process.env.NODE_ENV === 'development') {
+                const seen = new Set<string>();
+                for (const doc of mergedDocs) {
+                  const key = getCanonicalDocKey({ id: doc.id, sync: doc.sync });
+                  if (seen.has(key)) {
+                    // eslint-disable-next-line no-console
+                    console.error('[WorkspaceContext] Duplicate canonical document key after cloud init merge', {
+                      key,
+                      docs: mergedDocs
+                        .filter(d => getCanonicalDocKey({ id: d.id, sync: d.sync }) === key)
+                        .map(d => ({ id: d.id, title: d.title, sync: d.sync })),
+                    });
+                    break;
+                  }
+                  seen.add(key);
+                }
+              }
+
+              setDocuments(mergedDocs);
+              console.log(`✅ Loaded ${mergedDocs.length} document(s) for cloud workspace (guest+backend merged)`);
             }
           }
           
@@ -1077,20 +1156,62 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           const mappedDocs = backendDocs.map(mapDocumentMetaToDocument);
           console.log(`📥 [refreshDocuments] Backend: After mapping, first doc content length: ${mappedDocs[0]?.content?.length || 0}`);
           
-          // 🔥 FIX 1: Merge-by-id instead of replace (preserves local-only docs)
+          // 🔥 FIX 1: Merge-by-canonical-key instead of raw id (preserves local-only docs)
           setDocuments(prev => {
             const map = new Map<string, Document>();
-            // Add existing docs
-            prev.forEach(d => map.set(d.id, d));
+
+            // Seed map with existing docs keyed by canonical doc key
+            prev.forEach(d => {
+              const key = getCanonicalDocKey({
+                id: d.id,
+                sync: d.sync,
+              });
+              const existing = map.get(key);
+              map.set(key, existing ?? d);
+            });
+
             // Merge incoming docs (override metadata but preserve local fields)
             mappedDocs.forEach(d => {
-              const existing = map.get(d.id);
-              map.set(d.id, {
-                ...existing, // Preserve local-only fields
-                ...d,        // Override with fresh metadata
+              const key = getCanonicalDocKey({
+                id: d.id,
+                sync: d.sync,
+              });
+              const existing = map.get(key);
+              map.set(key, {
+                ...existing,
+                ...d,
               });
             });
-            return Array.from(map.values());
+
+            const merged = Array.from(map.values());
+
+            // Dev-only invariant: no two docs share the same canonical key
+            if (process.env.NODE_ENV === 'development') {
+              const seen = new Set<string>();
+              for (const doc of merged) {
+                const key = getCanonicalDocKey({
+                  id: doc.id,
+                  sync: doc.sync,
+                });
+                if (seen.has(key)) {
+                  // eslint-disable-next-line no-console
+                  console.error('[WorkspaceContext] Duplicate canonical document key after backend merge', {
+                    key,
+                    docs: merged
+                      .filter(d => getCanonicalDocKey({ id: d.id, sync: d.sync }) === key)
+                      .map(d => ({
+                        id: d.id,
+                        title: d.title,
+                        sync: d.sync,
+                      })),
+                  });
+                  break;
+                }
+                seen.add(key);
+              }
+            }
+
+            return merged;
           });
           return;
         }
@@ -1111,20 +1232,59 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       }));
       console.log(`📥 [refreshDocuments] Guest: After mapping, first doc content length: ${mappedDocs[0]?.content?.length || 0}`);
       
-      // 🔥 FIX 1: Merge-by-id instead of replace (preserves local-only docs)
+      // 🔥 FIX 1: Merge-by-canonical-key instead of raw id (preserves local-only docs)
       setDocuments(prev => {
         const map = new Map<string, Document>();
-        // Add existing docs
-        prev.forEach(d => map.set(d.id, d));
-        // Merge incoming docs (override metadata but preserve local fields)
+
+        prev.forEach(d => {
+          const key = getCanonicalDocKey({
+            id: d.id,
+            sync: d.sync,
+          });
+          const existing = map.get(key);
+          map.set(key, existing ?? d);
+        });
+
         mappedDocs.forEach(d => {
-          const existing = map.get(d.id);
-          map.set(d.id, {
-            ...existing, // Preserve local-only fields
-            ...d,        // Override with fresh metadata
+          const key = getCanonicalDocKey({
+            id: d.id,
+            sync: d.sync,
+          });
+          const existing = map.get(key);
+          map.set(key, {
+            ...existing,
+            ...d,
           });
         });
-        return Array.from(map.values());
+
+        const merged = Array.from(map.values());
+
+        if (process.env.NODE_ENV === 'development') {
+          const seen = new Set<string>();
+          for (const doc of merged) {
+            const key = getCanonicalDocKey({
+              id: doc.id,
+              sync: doc.sync,
+            });
+            if (seen.has(key)) {
+              // eslint-disable-next-line no-console
+              console.error('[WorkspaceContext] Duplicate canonical document key after guest merge', {
+                key,
+                docs: merged
+                  .filter(d => getCanonicalDocKey({ id: d.id, sync: d.sync }) === key)
+                  .map(d => ({
+                    id: d.id,
+                    title: d.title,
+                    sync: d.sync,
+                  })),
+              });
+              break;
+            }
+            seen.add(key);
+          }
+        }
+
+        return merged;
       });
     } catch (err) {
       console.error('Failed to refresh documents:', err);

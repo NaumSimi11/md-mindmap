@@ -1,16 +1,52 @@
-import { expect, afterEach } from 'vitest';
+import { expect, afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
-// Minimal IndexedDB stubs for happy-dom tests.
-// Some app modules reference indexedDB; happy-dom throws MissingAPIError unless we stub.
-if (!(globalThis as any).indexedDB) {
-  (globalThis as any).indexedDB = {
-    open: () => ({}),
-    deleteDatabase: () => ({}),
-    databases: async () => [],
+// ---------------------------------------------------------------------------
+// Test environment storage mocks
+// ---------------------------------------------------------------------------
+// Our app uses `idb` (openDB) for the canonical IndexedDB storage provider.
+// happy-dom does not implement IndexedDB. Instead of a broken stub, we mock `idb`
+// with an in-memory implementation that supports the subset of methods we use.
+const __idbStores = new Map<string, Map<string, any>>();
+
+vi.mock('idb', () => {
+  return {
+    openDB: async (dbName: string, _version: number, opts?: any) => {
+      // Ensure store exists
+      if (!__idbStores.has(dbName)) __idbStores.set(dbName, new Map());
+
+      // Simulate upgrade callback
+      if (opts?.upgrade) {
+        const fakeDb = {
+          objectStoreNames: { contains: () => true },
+          createObjectStore: () => undefined,
+        };
+        opts.upgrade(fakeDb);
+      }
+
+      const store = __idbStores.get(dbName)!;
+
+      return {
+        async get(_storeName: string, key: string) {
+          return store.get(key);
+        },
+        async put(_storeName: string, value: any) {
+          store.set(value.key, value);
+        },
+        async delete(_storeName: string, key: string) {
+          store.delete(key);
+        },
+        async getAllKeys(_storeName: string) {
+          return Array.from(store.keys());
+        },
+        async clear(_storeName: string) {
+          store.clear();
+        },
+      };
+    },
   };
-}
+});
 
 // Cleanup after each test
 afterEach(() => {

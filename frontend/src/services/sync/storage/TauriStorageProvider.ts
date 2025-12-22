@@ -5,9 +5,8 @@
  */
 
 import { IStorageProvider, StorageInfo, SyncError, SyncErrorCode } from '../types';
-import { invoke } from '@tauri-apps/api/tauri';
 import { appDataDir, join } from '@tauri-apps/api/path';
-import { readBinaryFile, writeBinaryFile, removeFile, readDir, createDir, exists } from '@tauri-apps/api/fs';
+import { readFile, writeFile, remove, readDir, mkdir, exists } from '@tauri-apps/plugin-fs';
 
 export class TauriStorageProvider implements IStorageProvider {
   private storageDir: string | null = null;
@@ -25,7 +24,7 @@ export class TauriStorageProvider implements IStorageProvider {
       // Create storage directory if it doesn't exist
       const dirExists = await exists(this.storageDir);
       if (!dirExists) {
-        await createDir(this.storageDir, { recursive: true });
+        await mkdir(this.storageDir, { recursive: true });
       }
 
       this.initialized = true;
@@ -53,8 +52,7 @@ export class TauriStorageProvider implements IStorageProvider {
         return null;
       }
 
-      const data = await readBinaryFile(filePath);
-      return data;
+      return await readFile(filePath);
     } catch (error) {
       throw new SyncError(
         SyncErrorCode.STORAGE_ERROR,
@@ -73,7 +71,7 @@ export class TauriStorageProvider implements IStorageProvider {
 
     try {
       const filePath = await this.getFilePath(key);
-      await writeBinaryFile(filePath, data);
+      await writeFile(filePath, data);
     } catch (error) {
       throw new SyncError(
         SyncErrorCode.STORAGE_ERROR,
@@ -95,7 +93,7 @@ export class TauriStorageProvider implements IStorageProvider {
       const fileExists = await exists(filePath);
 
       if (fileExists) {
-        await removeFile(filePath);
+        await remove(filePath);
       }
     } catch (error) {
       throw new SyncError(

@@ -8,6 +8,9 @@ export { authService, AuthService } from './AuthService';
 export { workspaceService, WorkspaceService } from './WorkspaceService';
 export { documentService, DocumentService } from './DocumentService';
 export { folderService, FolderService } from './FolderService';
+export { SharesClient } from './sharesClient';
+export { SnapshotsClient } from './snapshotsClient';
+export { WorkspaceMembersClient } from './workspaceMembersClient';
 
 // Export types
 export type * from '@/types/api.types';

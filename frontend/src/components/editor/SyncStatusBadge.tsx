@@ -29,6 +29,8 @@ import {
 interface SyncStatusBadgeProps {
   lastSyncedAt: Date | null;
   lastSyncSuccess: boolean;
+  isBackingUp?: boolean;
+  cloudEnabled?: boolean;
   pendingCount: number;
   isOnline: boolean;
   className?: string;
@@ -62,12 +64,16 @@ function formatRelativeTime(date: Date | null): string {
 function getSyncState(
   lastSyncedAt: Date | null,
   lastSyncSuccess: boolean,
+  isBackingUp: boolean,
+  cloudEnabled: boolean,
   pendingCount: number,
   isOnline: boolean
-): 'backing-up' | 'backed-up' | 'failed' | 'offline' {
+): 'disabled' | 'not-backed-up' | 'backing-up' | 'backed-up' | 'failed' | 'offline' {
   if (!isOnline) return 'offline';
+  if (!cloudEnabled) return 'disabled';
   if (pendingCount > 0) return 'failed';
-  if (!lastSyncedAt) return 'backing-up';
+  if (isBackingUp) return 'backing-up';
+  if (!lastSyncedAt) return 'not-backed-up';
   
   // Check if last sync was recent (<10s) - considered "backing up"
   const timeSinceSync = Date.now() - lastSyncedAt.getTime();
@@ -82,6 +88,22 @@ function getSyncState(
  * State configuration
  */
 const stateConfig = {
+  disabled: {
+    icon: CloudOff,
+    label: 'Cloud backup off',
+    color: 'text-gray-500 dark:text-gray-400',
+    bgColor: 'bg-gray-50 dark:bg-gray-900/20',
+    borderColor: 'border-gray-200 dark:border-gray-800',
+    animate: false,
+  },
+  'not-backed-up': {
+    icon: Cloud,
+    label: 'Not backed up yet',
+    color: 'text-gray-600 dark:text-gray-300',
+    bgColor: 'bg-gray-50 dark:bg-gray-900/20',
+    borderColor: 'border-gray-200 dark:border-gray-800',
+    animate: false,
+  },
   'backing-up': {
     icon: Loader2,
     label: 'Backing up...',
@@ -119,12 +141,14 @@ const stateConfig = {
 export const SyncStatusBadge: React.FC<SyncStatusBadgeProps> = ({
   lastSyncedAt,
   lastSyncSuccess,
+  isBackingUp = false,
+  cloudEnabled = true,
   pendingCount,
   isOnline,
   className,
 }) => {
   const [relativeTime, setRelativeTime] = useState(() => formatRelativeTime(lastSyncedAt));
-  const state = getSyncState(lastSyncedAt, lastSyncSuccess, pendingCount, isOnline);
+  const state = getSyncState(lastSyncedAt, lastSyncSuccess, isBackingUp, cloudEnabled, pendingCount, isOnline);
   const config = stateConfig[state];
   const Icon = config.icon;
   

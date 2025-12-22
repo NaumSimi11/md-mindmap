@@ -54,7 +54,7 @@ export function HamburgerMenu({ isOpen, onClose }: HamburgerMenuProps) {
         {/* Menu Header */}
         <div className="bg-gradient-to-r from-primary to-primary/90 p-6 border-b border-border">
           <div className="flex items-center justify-between">
-            <h3 className="text-xl font-semibold text-primary-foreground tracking-tight">MD Creator</h3>
+            <h3 className="text-xl font-semibold text-primary-foreground tracking-tight">Collaboration</h3>
             <button
               onClick={onClose}
               className="w-8 h-8 rounded-lg bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground flex items-center justify-center transition-colors"
