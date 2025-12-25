@@ -18,13 +18,21 @@ BOLD='\033[1m'
 BACKEND_PORT=7001
 FRONTEND_PORT=5173
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKEND_DIR="$PROJECT_ROOT/backend"
+BACKEND_DIR="$PROJECT_ROOT/backendv2"
 
 echo -e "${CYAN}${BOLD}"
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║          MDReader - Stopping All Services                    ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
+
+# Stop Hocuspocus
+echo -e "${YELLOW}🛑 Stopping Hocuspocus...${NC}"
+if [ -f /tmp/mdreader-hocuspocus.pid ]; then
+    kill $(cat /tmp/mdreader-hocuspocus.pid) 2>/dev/null || true
+    rm /tmp/mdreader-hocuspocus.pid
+fi
+lsof -ti:1234 | xargs kill -9 2>/dev/null || true
 
 # Stop Backend
 echo -e "${YELLOW}🛑 Stopping Backend...${NC}"

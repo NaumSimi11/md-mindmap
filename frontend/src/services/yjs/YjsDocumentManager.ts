@@ -334,6 +334,38 @@ class YjsDocumentManager {
   }
 
   /**
+   * Clear document storage (destroy instance + delete IndexedDB)
+   * 
+   * Use this after pushing a document to cloud to force re-hydration
+   * from the cloud yjs_state_b64 on next document open.
+   * 
+   * This fixes the content loss bug where local Yjs state is stale
+   * after pushing to cloud.
+   * 
+   * @param documentId - Document ID to clear
+   */
+  public async clearDocumentStorage(documentId: string): Promise<void> {
+    console.log(`🧹 [YjsDocumentManager] Clearing storage for: ${documentId}`);
+    
+    try {
+      // 1. Destroy in-memory instance if it exists
+      if (this.documents.has(documentId)) {
+        this.destroyDocument(documentId);
+      }
+      
+      // 2. Delete IndexedDB database for this document
+      const dbName = `mdreader-${documentId}`;
+      await indexedDB.deleteDatabase(dbName);
+      
+      console.log(`✅ [YjsDocumentManager] Storage cleared: ${documentId}`);
+      console.log(`   Next open will hydrate from cloud yjs_state_b64`);
+    } catch (error) {
+      console.error(`❌ [YjsDocumentManager] Failed to clear storage for ${documentId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Get all active document IDs
    */
   public getActiveDocuments(): string[] {

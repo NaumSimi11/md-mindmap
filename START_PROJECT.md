@@ -5,286 +5,77 @@
 ---
 
 ## 📋 **QUICK START (Recommended)**
+ Stop everything
+./stop-services.sh
 
-### **Option 1: One Command (Automated)**
-```bash
-cd /Users/naum/Desktop/mdreader/mdreader-main
-./start-production.sh
-```
+# Start again (keep data)
+./start-services.sh
 
-This will start ALL services automatically:
-- ✅ PostgreSQL (Docker)
-- ✅ Backend (FastAPI)
-- ✅ Hocuspocus (WebSocket)
-- ✅ Frontend (Vite)
+# Fresh start (wipe DB + seed users)
+./start-services.sh --clean --with-user
 
----
+# Check status
+./check-services.sh
 
-## 🔧 **MANUAL START (Step by Step)**
+# View logs
+tail -f /tmp/mdreader-backend.log
+tail -f /tmp/mdreader-frontend.log
 
-If you prefer to start services individually:
 
-### **Step 1: Start PostgreSQL**
-```bash
-cd /Users/naum/Desktop/mdreader/mdreader-main
-docker-compose up -d postgres
-```
+clear storage and indexeddb :
 
-**Verify**: 
-```bash
-docker ps | grep postgres
-# Should show container running on port 5432
-```
+run in dev tools consoel 
 
----
+// Clear IndexedDB
+indexedDB.databases().then(dbs => {
+  dbs.forEach(db => {
+    indexedDB.deleteDatabase(db.name);
+    console.log(`🗑️ Deleted IndexedDB: ${db.name}`);
+  });
+});
 
-### **Step 2: Start Backend (FastAPI)**
-```bash
-cd /Users/naum/Desktop/mdreader/mdreader-main/backendv2
-source venv/bin/activate  # Activate virtual environment
-uvicorn app.main:app --reload --port 8000 > ../logs/backend.log 2>&1 &
-```
+// Clear localStorage
+localStorage.clear();
+console.log('🗑️ Cleared localStorage');
 
-**Verify**: 
-```bash
-curl http://localhost:8000/health
-# Should return: {"status":"ok"}
-```
+// Clear sessionStorage
+sessionStorage.clear();
+console.log('🗑️ Cleared sessionStorage');
 
----
+// Clear all cookies
+document.cookie.split(";").forEach(c => {
+  document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+});
+console.log('🗑️ Cleared cookies');
 
-### **Step 3: Start Hocuspocus Server (WebSocket)**
-```bash
-cd /Users/naum/Desktop/mdreader/mdreader-main/hocuspocus-server
-npm start > ../logs/hocuspocus.log 2>&1 &
-```
-
-**Verify**: 
-```bash
-curl -I http://localhost:1234
-# Should return HTTP headers (WebSocket server ready)
-```
+console.log('✅ All browser storage cleared! Reload the page.');
 
 ---
 
-### **Step 4: Start Frontend (Vite)**
-```bash
-cd /Users/naum/Desktop/mdreader/mdreader-main/frontend
-npm run dev > ../logs/frontend.log 2>&1 &
-```
+## 🎉 **NEW FEATURE: BATCH DOCUMENT SYNC**
 
-**Verify**: 
-```bash
-curl http://localhost:5173
-# Should return HTML
-```
+**What is it?**
+- Sync multiple documents in **1 API call** instead of N calls
+- Automatically triggered on login
+- **6-13x faster** than individual sync
 
----
+**How to test:**
+1. **Logout** (go offline)
+2. **Create 5-10 documents** with content
+3. **Login** (go online)
+4. **Check console** for batch sync logs:
+   ```
+   🔄 [SyncContext] Starting batch sync after login...
+   📦 [BatchSync] Collected 5 pending operations
+   ☁️ [BatchSync] Pushing 5 operations to cloud...
+   ✅ [BatchSync] Batch completed: 5/5 successful
+   ```
+5. **Verify** all documents show "synced" icon
 
-## 🌐 **ACCESS POINTS**
-
-Once everything is running:
-
-| Service | URL | Status |
-|---------|-----|--------|
-| **Frontend** | http://localhost:5173 or 5174 | Main App |
-| **Backend API** | http://localhost:8000 | REST API |
-| **API Docs** | http://localhost:8000/docs | Swagger UI |
-| **Hocuspocus** | ws://localhost:1234 | WebSocket |
-| **PostgreSQL** | localhost:5432 | Database |
-
----
-
-## ✅ **VERIFY ALL SERVICES**
-
-Run this to check everything is working:
-
-```bash
-cd /Users/naum/Desktop/mdreader/mdreader-main
-
-echo "🔍 Checking services..."
-echo ""
-
-# Check PostgreSQL
-if docker ps | grep -q postgres; then
-    echo "✅ PostgreSQL: RUNNING"
-else
-    echo "❌ PostgreSQL: NOT RUNNING"
-fi
-
-# Check Backend
-if curl -s http://localhost:8000/health > /dev/null 2>&1; then
-    echo "✅ Backend: RUNNING (port 8000)"
-else
-    echo "❌ Backend: NOT RUNNING"
-fi
-
-# Check Hocuspocus
-if lsof -i :1234 > /dev/null 2>&1; then
-    echo "✅ Hocuspocus: RUNNING (port 1234)"
-else
-    echo "❌ Hocuspocus: NOT RUNNING"
-fi
-
-# Check Frontend
-if curl -s http://localhost:5173 > /dev/null 2>&1; then
-    echo "✅ Frontend: RUNNING (port 5173)"
-elif curl -s http://localhost:5174 > /dev/null 2>&1; then
-    echo "✅ Frontend: RUNNING (port 5174)"
-else
-    echo "❌ Frontend: NOT RUNNING"
-fi
-
-echo ""
-echo "🎯 All checks complete!"
-```
+**Documentation:**
+- 📖 Full docs: `BATCH_SYNC_DOCUMENTATION.md`
+- 📊 Visual guide: `BATCH_SYNC_VISUAL.md`
+- 📝 Summary: `BATCH_SYNC_SUMMARY.md`
 
 ---
 
-## 🛑 **STOP ALL SERVICES**
-
-### **Option 1: One Command**
-```bash
-cd /Users/naum/Desktop/mdreader/mdreader-main
-./stop-production.sh
-```
-
-### **Option 2: Manual Stop**
-```bash
-# Stop Frontend
-pkill -f "vite.*517"
-
-# Stop Hocuspocus
-pkill -f "node.*hocuspocus"
-
-# Stop Backend
-pkill -f "uvicorn"
-
-# Stop PostgreSQL
-docker-compose down postgres
-```
-
----
-
-## 📊 **LOGS**
-
-View logs for each service:
-
-```bash
-# Frontend logs
-tail -f logs/frontend.log
-
-# Backend logs
-tail -f logs/backend.log
-
-# Hocuspocus logs
-tail -f logs/hocuspocus.log
-
-# All logs at once
-tail -f logs/*.log
-```
-
----
-
-## 🔥 **COMMON ISSUES**
-
-### **Issue 1: Port Already in Use**
-```bash
-# Kill process on port 5173 (Frontend)
-lsof -ti:5173 | xargs kill -9
-
-# Kill process on port 8000 (Backend)
-lsof -ti:8000 | xargs kill -9
-
-# Kill process on port 1234 (Hocuspocus)
-lsof -ti:1234 | xargs kill -9
-```
-
-### **Issue 2: PostgreSQL Not Starting**
-```bash
-# Remove old containers
-docker-compose down
-docker-compose up -d postgres
-```
-
-### **Issue 3: Frontend Not Loading**
-```bash
-# Clear cache and restart
-cd frontend
-rm -rf node_modules/.vite
-npm run dev
-```
-
----
-
-## 🎯 **RECOMMENDED WORKFLOW**
-
-### **Development Mode**
-```bash
-# Terminal 1: Backend
-cd backendv2 && source venv/bin/activate && uvicorn app.main:app --reload
-
-# Terminal 2: Hocuspocus
-cd hocuspocus-server && npm start
-
-# Terminal 3: Frontend
-cd frontend && npm run dev
-
-# Terminal 4: PostgreSQL (already running)
-docker-compose up postgres
-```
-
-### **Production Mode**
-```bash
-# Single command
-./start-production.sh
-
-# Open browser
-open http://localhost:5173
-```
-
----
-
-## 📝 **FIRST TIME SETUP**
-
-If this is your first time running the project:
-
-```bash
-# 1. Install Frontend dependencies
-cd frontend
-npm install
-
-# 2. Install Hocuspocus dependencies
-cd ../hocuspocus-server
-npm install
-
-# 3. Setup Backend virtual environment
-cd ../backendv2
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-# 4. Run database migrations
-alembic upgrade head
-
-# 5. Start PostgreSQL
-cd ..
-docker-compose up -d postgres
-
-# 6. Now you can start all services
-./start-production.sh
-```
-
----
-
-## ✅ **READY TO GO!**
-
-After starting everything, open:
-**http://localhost:5173** (or 5174)
-
-You should see:
-- ✅ Managers initialized
-- ✅ Workspace loaded
-- ✅ Ready to create documents
-
-**Enjoy! 🎉**

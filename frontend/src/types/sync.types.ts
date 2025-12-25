@@ -12,6 +12,7 @@ export type SyncStatus =
   | 'local'      // Only exists locally (not pushed to cloud)
   | 'synced'     // Synced with cloud (local matches cloud)
   | 'syncing'    // Currently syncing to/from cloud
+  | 'pending'    // Pending sync (created offline, waiting to be pushed)
   | 'modified'   // Local changes not yet synced
   | 'conflict'   // Conflict between local and cloud versions
   | 'error';     // Sync error occurred

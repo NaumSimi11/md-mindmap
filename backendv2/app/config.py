@@ -150,6 +150,25 @@ class Settings(BaseSettings):
     # =========================================
     LOG_LEVEL: str = Field(default="INFO")
     LOG_FORMAT: str = Field(default="json")
+
+    # =========================================
+    # Email / SMTP
+    # =========================================
+    EMAIL_BACKEND: str = Field(
+        default="console",
+        description="Email backend: console | smtp"
+    )
+    SMTP_HOST: str = Field(default="localhost")
+    SMTP_PORT: int = Field(default=1025)  # MailHog / dev smtp default
+    SMTP_USERNAME: str = Field(default="")
+    SMTP_PASSWORD: str = Field(default="")
+    SMTP_USE_TLS: bool = Field(default=False)
+    SMTP_FROM_EMAIL: str = Field(default="no-reply@mdreader.local")
+    SMTP_FROM_NAME: str = Field(default="MDReader")
+    APP_PUBLIC_URL: str = Field(
+        default="http://localhost:5173",
+        description="Public URL of the frontend (for building links in emails)"
+    )
     
     # =========================================
     # Pydantic v2 Configuration

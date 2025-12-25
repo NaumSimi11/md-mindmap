@@ -353,6 +353,10 @@ app.include_router(snapshots.router)
 from app.routers import audit
 app.include_router(audit.router)
 
+# Phase 5: Batch Operations ✅
+from app.routers import batch
+app.include_router(batch.router)
+
 # TODO Phase 1: Collaboration
 # from app.routers import collaboration
 # app.include_router(collaboration.router, prefix=settings.API_V1_PREFIX, tags=["Collaboration"])

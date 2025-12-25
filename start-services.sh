@@ -122,11 +122,27 @@ else
     docker-compose up -d
 fi
 
-# Wait for PostgreSQL
-# wait_for_service localhost $POSTGRES_PORT "PostgreSQL"
+# Wait for PostgreSQL to be ready
+echo -e "${BLUE}⏳ Waiting for PostgreSQL...${NC}"
+sleep 5
+for i in {1..30}; do
+    if docker exec mdreader-v2-postgres pg_isready -U mdreader >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ PostgreSQL is ready!${NC}"
+        sleep 2  # Extra wait for it to fully accept connections
+        break
+    fi
+    sleep 1
+done
 
 # Wait for Redis
-# wait_for_service localhost $REDIS_PORT "Redis"
+echo -e "${BLUE}⏳ Waiting for Redis...${NC}"
+for i in {1..10}; do
+    if docker exec mdreader-v2-redis redis-cli ping >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ Redis is ready!${NC}"
+        break
+    fi
+    sleep 1
+done
 
 # Step 3: Run Database Migrations
 echo ""
@@ -164,10 +180,34 @@ if [ "$CREATE_USER" = true ] || [ "$CLEAN_DB" = true ]; then
     fi
 fi
 
-# Step 5: Start Backend
+# Step 5: Start Hocuspocus (WebSocket Collaboration Server)
 echo ""
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}  Step 5: Starting Backend${NC}"
+echo -e "${BOLD}  Step 5: Starting Hocuspocus Server${NC}"
+echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+
+cd "$PROJECT_ROOT/hocuspocus-server"
+echo -e "${BLUE}🔌 Starting Hocuspocus WebSocket server on port 1234...${NC}"
+
+# Check if node_modules exists
+if [ ! -d "node_modules" ]; then
+    echo -e "${YELLOW}📦 Installing Hocuspocus dependencies...${NC}"
+    npm install
+fi
+
+# Start Hocuspocus in background
+npm run dev > /tmp/mdreader-hocuspocus.log 2>&1 &
+HOCUSPOCUS_PID=$!
+echo $HOCUSPOCUS_PID > /tmp/mdreader-hocuspocus.pid
+
+# Wait for Hocuspocus
+sleep 2
+wait_for_service localhost 1234 "Hocuspocus WebSocket"
+
+# Step 6: Start Backend
+echo ""
+echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}  Step 6: Starting Backend${NC}"
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 cd "$BACKEND_DIR"
@@ -182,10 +222,10 @@ echo $BACKEND_PID > /tmp/mdreader-backend.pid
 sleep 3
 wait_for_service localhost $BACKEND_PORT "Backend API"
 
-# Step 6: Start Frontend
+# Step 7: Start Frontend
 echo ""
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}  Step 6: Starting Frontend${NC}"
+echo -e "${BOLD}  Step 7: Starting Frontend${NC}"
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 cd "$FRONTEND_DIR"
@@ -212,6 +252,7 @@ echo -e "${BOLD}📊 SERVICE STATUS:${NC}"
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "  ${GREEN}✅${NC} PostgreSQL:  ${CYAN}localhost:$POSTGRES_PORT${NC}"
 echo -e "  ${GREEN}✅${NC} Redis:       ${CYAN}localhost:$REDIS_PORT${NC}"
+echo -e "  ${GREEN}✅${NC} Hocuspocus:  ${CYAN}ws://localhost:1234${NC}  (PID: $HOCUSPOCUS_PID)"
 echo -e "  ${GREEN}✅${NC} Backend:     ${CYAN}http://localhost:$BACKEND_PORT${NC}  (PID: $BACKEND_PID)"
 echo -e "  ${GREEN}✅${NC} Frontend:    ${CYAN}http://localhost:$FRONTEND_PORT${NC}  (PID: $FRONTEND_PID)"
 echo ""

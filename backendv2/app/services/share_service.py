@@ -17,6 +17,7 @@ Permission Resolution (Phase 4 - Workspace Permissions):
 from typing import Optional, List, Tuple
 from uuid import UUID
 import secrets
+import asyncio
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_
@@ -267,6 +268,18 @@ class ShareService:
         if not role_ge(actor_role, role):
             raise ValueError(f"Cannot invite to role '{role}' (higher than your role '{actor_role}')")
         
+        # Fetch actor (inviter) info for email
+        actor_query = select(User).where(User.id == actor_id)
+        actor_result = await db.execute(actor_query)
+        actor = actor_result.scalar_one_or_none()
+        inviter_name = actor.full_name or actor.email.split("@")[0] if actor else "Someone"
+        
+        # Fetch document info for email
+        doc_query = select(Document).where(Document.id == document_id)
+        doc_result = await db.execute(doc_query)
+        doc = doc_result.scalar_one_or_none()
+        document_title = doc.title if doc else "Untitled Document"
+        
         # Default expiration: 30 days
         if not expires_at:
             expires_at = datetime.utcnow() + timedelta(days=30)
@@ -297,10 +310,29 @@ class ShareService:
         
         await db.flush()
         
-        # TODO: Queue email sending (not implemented in this phase)
-        # if send_email:
-        #     for invitation in invitations:
-        #         await email_service.send_invitation_email(invitation)
+        # Optionally send email notifications
+        if send_email:
+            # Local import to avoid circular dependency at import time
+            from app.services.email_service import email_service
+
+            for invitation in invitations:
+                # Fire-and-forget to avoid blocking the main request too much.
+                # Errors are logged server-side by the email backend.
+                try:
+                    asyncio.create_task(
+                        email_service.send_invitation_email(
+                            invitation,
+                            inviter_name=inviter_name,
+                            document_title=document_title,
+                        )
+                    )
+                except RuntimeError:
+                    # No running loop (e.g. script usage) – degrade gracefully.
+                    await email_service.send_invitation_email(
+                        invitation,
+                        inviter_name=inviter_name,
+                        document_title=document_title,
+                    )
         
         return invitations
     

@@ -161,6 +161,19 @@ class WorkspaceService:
         await self.db.commit()
         await self.db.refresh(workspace)
         
+        # 🔥 BUG FIX #12: Automatically add owner as workspace member
+        # This ensures the owner has immediate access to their own workspace
+        from app.models.workspace_member import WorkspaceMember, WorkspaceRole
+        owner_member = WorkspaceMember(
+            workspace_id=workspace.id,
+            user_id=owner_id,
+            role=WorkspaceRole.OWNER,
+            status="active"
+        )
+        self.db.add(owner_member)
+        await self.db.commit()
+        await self.db.refresh(owner_member)
+        
         return workspace
     
     # =========================================

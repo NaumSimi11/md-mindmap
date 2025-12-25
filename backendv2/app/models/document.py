@@ -16,6 +16,8 @@ from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.orm import relationship
 import uuid
 import enum
+import base64
+from typing import Optional
 
 from app.database import Base
 
@@ -300,6 +302,20 @@ class Document(Base):
         Index('ix_documents_workspace_starred', 'workspace_id', 'is_starred'),
         Index('ix_documents_created_by', 'created_by_id'),
     )
+    
+    # =========================================
+    # Computed Properties
+    # =========================================
+    @property
+    def yjs_state_b64(self) -> Optional[str]:
+        """
+        Convert binary Yjs state to base64 string for API responses.
+        
+        This allows the frontend to receive the Yjs CRDT state for local-first sync.
+        """
+        if self.yjs_state:
+            return base64.b64encode(self.yjs_state).decode('utf-8')
+        return None
     
     def __repr__(self) -> str:
         return f"<Document(id={self.id}, title={self.title}, workspace_id={self.workspace_id})>"

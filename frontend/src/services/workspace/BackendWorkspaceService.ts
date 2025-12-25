@@ -254,12 +254,19 @@ export class BackendWorkspaceService {
    */
   private mapApiDocument(apiDoc: ApiDocument): DocumentMeta {
     const content = (apiDoc as any).content || '';
+    const yjsStateB64 = (apiDoc as any).yjs_state_b64 || undefined;
+    const yjsVersion = (apiDoc as any).yjs_version || 0;
     
     // 🔥 DEBUG: Log content mapping
     if (!content && apiDoc.id) {
       console.warn(`⚠️ [mapApiDocument] Document ${apiDoc.id} (${apiDoc.title}) has NO content from API`);
     } else {
       console.log(`✅ [mapApiDocument] Document ${apiDoc.id} (${apiDoc.title}) has content: ${content.substring(0, 50)}...`);
+    }
+    
+    // 🔥 BUG FIX #4: Map yjs_state_b64 from API to enable binary hydration
+    if (yjsStateB64) {
+      console.log(`🧬 [mapApiDocument] Document ${apiDoc.id} has Yjs binary (${yjsStateB64.length} chars b64, v${yjsVersion})`);
     }
     
     return {
@@ -276,6 +283,8 @@ export class BackendWorkspaceService {
       syncStatus: 'synced',
       lastSyncedAt: new Date().toISOString(),
       version: apiDoc.version || 1,
+      yjsVersion,         // 🔥 BUG FIX #4: Map Yjs version
+      yjsStateB64,        // 🔥 BUG FIX #4: Map Yjs binary state
     };
   }
 

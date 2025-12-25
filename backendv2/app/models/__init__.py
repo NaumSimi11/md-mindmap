@@ -14,6 +14,11 @@ from app.models.workspace import Workspace
 from app.models.folder import Folder
 from app.models.document import Document, StorageMode, DocumentAccessModel
 from app.models.workspace_member import WorkspaceMember, WorkspaceRole
+from app.models.document_share import DocumentShare
+from app.models.share_link import ShareLink
+from app.models.invitation import Invitation
+from app.models.document_snapshot import DocumentSnapshot
+from app.models.audit_log import AuditLog
 
 __all__ = [
     "User",
@@ -24,5 +29,10 @@ __all__ = [
     "DocumentAccessModel",
     "WorkspaceMember",
     "WorkspaceRole",
+    "DocumentShare",
+    "ShareLink",
+    "Invitation",
+    "DocumentSnapshot",
+    "AuditLog",
 ]
 

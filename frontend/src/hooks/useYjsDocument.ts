@@ -133,13 +133,22 @@ export function useYjsDocument(documentId: string): UseYjsDocumentReturn {
 
     mountedRef.current = true;
     
+    // 🔥 BUG FIX #7: Normalize document ID for Yjs (always use cloud ID without doc_ prefix)
+    // This ensures the SAME Yjs instance is used whether logged in or logged out
+    const normalizedDocId = documentId.startsWith('doc_') 
+      ? documentId.slice(4)  // Remove doc_ prefix
+      : documentId;
+    
     console.log(`🚀 Requesting Yjs document from manager: ${documentId}`);
+    if (normalizedDocId !== documentId) {
+      console.log(`   🔄 Normalized: ${documentId} → ${normalizedDocId}`);
+    }
     console.log(`   Mode: ${isAuthenticated ? 'Authenticated' : 'Guest'}`);
     console.log(`   Online: ${online}`);
     
     try {
-      // Get document instance from global manager
-      const instance = yjsDocumentManager.getDocument(documentId, {
+      // Get document instance from global manager (using normalized ID)
+      const instance = yjsDocumentManager.getDocument(normalizedDocId, {
         enableWebSocket: isAuthenticated && online && isOnlineMode,
         websocketUrl: 'ws://localhost:1234',
         isAuthenticated,
@@ -147,7 +156,7 @@ export function useYjsDocument(documentId: string): UseYjsDocumentReturn {
 
       if (!mountedRef.current) {
         // Component unmounted before we got the instance
-        yjsDocumentManager.releaseDocument(documentId);
+        yjsDocumentManager.releaseDocument(normalizedDocId);
         return;
       }
 
@@ -211,7 +220,10 @@ export function useYjsDocument(documentId: string): UseYjsDocumentReturn {
 
     // Cleanup function (runs on unmount or when dependencies change)
     return () => {
-      console.log(`🧹 Releasing Yjs document: ${documentId}`);
+      const normalizedDocId = documentId.startsWith('doc_') 
+        ? documentId.slice(4) 
+        : documentId;
+      console.log(`🧹 Releasing Yjs document: ${normalizedDocId}`);
       mountedRef.current = false;
       
       // Clear retry timeout
@@ -220,8 +232,8 @@ export function useYjsDocument(documentId: string): UseYjsDocumentReturn {
         retryTimeoutRef.current = null;
       }
       
-      // Release document from manager
-      yjsDocumentManager.releaseDocument(documentId);
+      // Release document from manager (using normalized ID)
+      yjsDocumentManager.releaseDocument(normalizedDocId);
       
       // Reset state
       setYdoc(null);

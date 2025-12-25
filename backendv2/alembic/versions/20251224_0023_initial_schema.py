@@ -1,8 +1,8 @@
 """initial_schema
 
-Revision ID: 8ace9f92e93b
+Revision ID: fb37b486aee0
 Revises: 
-Create Date: 2025-12-10 19:58:12.989260
+Create Date: 2025-12-24 00:23:57.909086
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '8ace9f92e93b'
+revision: str = 'fb37b486aee0'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -34,7 +34,7 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_users_created_at'), 'users', ['created_at'], unique=False)
+    op.create_index('ix_users_created_at', 'users', ['created_at'], unique=False)
     op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
     op.create_index('ix_users_email_active', 'users', ['email', 'is_active'], unique=False)
     op.create_index(op.f('ix_users_id'), 'users', ['id'], unique=False)
@@ -57,7 +57,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['owner_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_workspaces_created_at'), 'workspaces', ['created_at'], unique=False)
     op.create_index(op.f('ix_workspaces_id'), 'workspaces', ['id'], unique=False)
     op.create_index(op.f('ix_workspaces_is_deleted'), 'workspaces', ['is_deleted'], unique=False)
     op.create_index(op.f('ix_workspaces_is_public'), 'workspaces', ['is_public'], unique=False)
@@ -91,6 +90,29 @@ def upgrade() -> None:
     op.create_index('ix_folders_parent_position', 'folders', ['parent_id', 'position'], unique=False)
     op.create_index(op.f('ix_folders_workspace_id'), 'folders', ['workspace_id'], unique=False)
     op.create_index('ix_folders_workspace_parent', 'folders', ['workspace_id', 'parent_id'], unique=False)
+    op.create_table('workspace_members',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('workspace_id', sa.UUID(), nullable=False),
+    sa.Column('user_id', sa.UUID(), nullable=False),
+    sa.Column('role', sa.Enum('OWNER', 'ADMIN', 'EDITOR', 'VIEWER', name='workspace_role'), nullable=False),
+    sa.Column('granted_by', sa.UUID(), nullable=True),
+    sa.Column('granted_at', sa.DateTime(), nullable=False),
+    sa.Column('expires_at', sa.DateTime(), nullable=True),
+    sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['granted_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['workspace_id'], ['workspaces.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('ix_workspace_members_active', 'workspace_members', ['status'], unique=False, postgresql_where=sa.text("status = 'active'"))
+    op.create_index(op.f('ix_workspace_members_id'), 'workspace_members', ['id'], unique=False)
+    op.create_index(op.f('ix_workspace_members_role'), 'workspace_members', ['role'], unique=False)
+    op.create_index(op.f('ix_workspace_members_status'), 'workspace_members', ['status'], unique=False)
+    op.create_index(op.f('ix_workspace_members_user_id'), 'workspace_members', ['user_id'], unique=False)
+    op.create_index(op.f('ix_workspace_members_workspace_id'), 'workspace_members', ['workspace_id'], unique=False)
+    op.create_index('ix_workspace_members_workspace_user', 'workspace_members', ['workspace_id', 'user_id'], unique=True)
     op.create_table('documents',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('title', sa.String(length=200), nullable=False),
@@ -105,8 +127,11 @@ def upgrade() -> None:
     sa.Column('is_template', sa.Boolean(), nullable=False),
     sa.Column('is_starred', sa.Boolean(), nullable=False),
     sa.Column('storage_mode', sa.Enum('LOCAL_ONLY', 'HYBRID_SYNC', 'CLOUD_ONLY', name='storagemode'), nullable=False),
+    sa.Column('access_model', sa.Enum('INHERITED', 'RESTRICTED', name='document_access_model'), nullable=False),
     sa.Column('version', sa.Integer(), nullable=False),
     sa.Column('yjs_version', sa.Integer(), nullable=False),
+    sa.Column('yjs_state', sa.LargeBinary(), nullable=True),
+    sa.Column('size', sa.Integer(), nullable=False),
     sa.Column('word_count', sa.Integer(), nullable=False),
     sa.Column('is_deleted', sa.Boolean(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
@@ -116,6 +141,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['workspace_id'], ['workspaces.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_documents_access_model'), 'documents', ['access_model'], unique=False)
     op.create_index(op.f('ix_documents_created_at'), 'documents', ['created_at'], unique=False)
     op.create_index('ix_documents_created_by', 'documents', ['created_by_id'], unique=False)
     op.create_index(op.f('ix_documents_created_by_id'), 'documents', ['created_by_id'], unique=False)
@@ -127,7 +153,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_documents_is_template'), 'documents', ['is_template'], unique=False)
     op.create_index(op.f('ix_documents_slug'), 'documents', ['slug'], unique=False)
     op.create_index(op.f('ix_documents_storage_mode'), 'documents', ['storage_mode'], unique=False)
-    op.create_index('ix_documents_updated_at', 'documents', ['updated_at'], unique=False)
+    op.create_index(op.f('ix_documents_updated_at'), 'documents', ['updated_at'], unique=False)
     op.create_index('ix_documents_workspace_folder', 'documents', ['workspace_id', 'folder_id'], unique=False)
     op.create_index(op.f('ix_documents_workspace_id'), 'documents', ['workspace_id'], unique=False)
     op.create_index('ix_documents_workspace_starred', 'documents', ['workspace_id', 'is_starred'], unique=False)
@@ -139,7 +165,7 @@ def downgrade() -> None:
     op.drop_index('ix_documents_workspace_starred', table_name='documents')
     op.drop_index(op.f('ix_documents_workspace_id'), table_name='documents')
     op.drop_index('ix_documents_workspace_folder', table_name='documents')
-    op.drop_index('ix_documents_updated_at', table_name='documents')
+    op.drop_index(op.f('ix_documents_updated_at'), table_name='documents')
     op.drop_index(op.f('ix_documents_storage_mode'), table_name='documents')
     op.drop_index(op.f('ix_documents_slug'), table_name='documents')
     op.drop_index(op.f('ix_documents_is_template'), table_name='documents')
@@ -151,7 +177,16 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_documents_created_by_id'), table_name='documents')
     op.drop_index('ix_documents_created_by', table_name='documents')
     op.drop_index(op.f('ix_documents_created_at'), table_name='documents')
+    op.drop_index(op.f('ix_documents_access_model'), table_name='documents')
     op.drop_table('documents')
+    op.drop_index('ix_workspace_members_workspace_user', table_name='workspace_members')
+    op.drop_index(op.f('ix_workspace_members_workspace_id'), table_name='workspace_members')
+    op.drop_index(op.f('ix_workspace_members_user_id'), table_name='workspace_members')
+    op.drop_index(op.f('ix_workspace_members_status'), table_name='workspace_members')
+    op.drop_index(op.f('ix_workspace_members_role'), table_name='workspace_members')
+    op.drop_index(op.f('ix_workspace_members_id'), table_name='workspace_members')
+    op.drop_index('ix_workspace_members_active', table_name='workspace_members', postgresql_where=sa.text("status = 'active'"))
+    op.drop_table('workspace_members')
     op.drop_index('ix_folders_workspace_parent', table_name='folders')
     op.drop_index(op.f('ix_folders_workspace_id'), table_name='folders')
     op.drop_index('ix_folders_parent_position', table_name='folders')
@@ -168,7 +203,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_workspaces_is_public'), table_name='workspaces')
     op.drop_index(op.f('ix_workspaces_is_deleted'), table_name='workspaces')
     op.drop_index(op.f('ix_workspaces_id'), table_name='workspaces')
-    op.drop_index(op.f('ix_workspaces_created_at'), table_name='workspaces')
     op.drop_table('workspaces')
     op.drop_index('ix_users_username_active', table_name='users')
     op.drop_index(op.f('ix_users_username'), table_name='users')
@@ -177,7 +211,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_users_id'), table_name='users')
     op.drop_index('ix_users_email_active', table_name='users')
     op.drop_index(op.f('ix_users_email'), table_name='users')
-    op.drop_index(op.f('ix_users_created_at'), table_name='users')
+    op.drop_index('ix_users_created_at', table_name='users')
     op.drop_table('users')
     # ### end Alembic commands ###
 

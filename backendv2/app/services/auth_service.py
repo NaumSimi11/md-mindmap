@@ -15,6 +15,7 @@ from typing import Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import timedelta
+import asyncio
 
 from app.models.user import User
 from app.schemas.auth import UserRegister, UserLogin
@@ -119,6 +120,17 @@ class AuthService:
         # 5. Generate tokens
         access_token = create_access_token({"sub": str(new_user.id)})
         refresh_token = create_refresh_token(str(new_user.id))
+        
+        # 6. Send welcome email (fire-and-forget)
+        try:
+            from app.services.email_service import email_service
+            asyncio.create_task(email_service.send_welcome_email(new_user))
+        except RuntimeError:
+            # No running event loop – skip welcome email
+            pass
+        except Exception:
+            # Don't fail registration if email fails
+            pass
         
         return {
             "user": new_user.to_dict(),

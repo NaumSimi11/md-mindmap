@@ -70,12 +70,42 @@ export interface TransferOwnershipRequest {
 
 export const WorkspaceMembersClient = {
   /**
+   * Resolve workspace ID (local → cloud UUID mapping)
+   * 
+   * Local workspace IDs are like "ws_<timestamp>_<random>" (not UUIDs!)
+   * Cloud workspace IDs are UUIDs.
+   * 
+   * This method:
+   * 1. If ID is already a UUID → return as-is
+   * 2. If ID starts with "ws_" → look up cloud ID from mapping
+   * 3. If no mapping found → throw error (workspace not synced)
+   */
+  async resolveWorkspaceId(workspaceId: string): Promise<string> {
+    // Check if already a UUID (no ws_ prefix)
+    if (!workspaceId.startsWith('ws_')) {
+      return workspaceId;
+    }
+
+    // Local workspace ID → need to resolve to cloud ID
+    const { selectiveSyncService } = await import('@/services/sync/SelectiveSyncService');
+    const cloudId = await selectiveSyncService.getCloudWorkspaceId(workspaceId);
+    
+    if (!cloudId) {
+      throw new Error(`Workspace ${workspaceId} is not synced to cloud. Please push workspace first.`);
+    }
+    
+    return cloudId;
+  },
+
+  /**
    * Add a member to a workspace
    * 
    * Permission: Admin or Owner
    */
   async addMember(workspaceId: string, request: AddMemberRequest): Promise<WorkspaceMember> {
-    return apiClient.post(`/api/v1/workspaces/${workspaceId}/members`, request);
+    // 🔥 BUG FIX #11: Resolve workspace ID
+    const resolvedId = await this.resolveWorkspaceId(workspaceId);
+    return apiClient.post(`/api/v1/workspaces/${resolvedId}/members`, request);
   },
 
   /**
@@ -88,7 +118,11 @@ export const WorkspaceMembersClient = {
     total: number;
     workspace_id: string;
   }> {
-    return apiClient.get(`/api/v1/workspaces/${workspaceId}/members`);
+    // 🔥 BUG FIX #11: Resolve local workspace ID to cloud ID
+    // Local workspace IDs are like "ws_1766647644416_mb1c9uyp9" (not UUIDs!)
+    // We need to look up the cloud UUID from the mapping
+    const resolvedId = await this.resolveWorkspaceId(workspaceId);
+    return apiClient.get(`/api/v1/workspaces/${resolvedId}/members`);
   },
 
   /**
@@ -98,7 +132,9 @@ export const WorkspaceMembersClient = {
    * Note: Cannot remove owner
    */
   async removeMember(workspaceId: string, userId: string): Promise<void> {
-    await apiClient.delete(`/api/v1/workspaces/${workspaceId}/members/${userId}`);
+    // 🔥 BUG FIX #11: Resolve workspace ID
+    const resolvedId = await this.resolveWorkspaceId(workspaceId);
+    await apiClient.delete(`/api/v1/workspaces/${resolvedId}/members/${userId}`);
   },
 
   /**
@@ -112,8 +148,10 @@ export const WorkspaceMembersClient = {
     userId: string,
     request: ChangeMemberRoleRequest
   ): Promise<WorkspaceMember> {
+    // 🔥 BUG FIX #11: Resolve workspace ID
+    const resolvedId = await this.resolveWorkspaceId(workspaceId);
     return apiClient.patch(
-      `/api/v1/workspaces/${workspaceId}/members/${userId}/role`,
+      `/api/v1/workspaces/${resolvedId}/members/${userId}/role`,
       request
     );
   },
@@ -133,7 +171,9 @@ export const WorkspaceMembersClient = {
     workspaceId: string,
     request: TransferOwnershipRequest
   ): Promise<WorkspaceMember> {
-    return apiClient.post(`/api/v1/workspaces/${workspaceId}/transfer-ownership`, request);
+    // 🔥 BUG FIX #11: Resolve workspace ID
+    const resolvedId = await this.resolveWorkspaceId(workspaceId);
+    return apiClient.post(`/api/v1/workspaces/${resolvedId}/transfer-ownership`, request);
   },
 
   /**

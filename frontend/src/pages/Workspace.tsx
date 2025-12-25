@@ -20,6 +20,7 @@ import { CollaborationSidebar } from '@/components/workspace/CollaborationSideba
 import { QuickSwitcherModal } from '@/components/workspace/QuickSwitcherModal';
 import { WorkspaceMembersModal } from '@/components/workspace/WorkspaceMembersModal';
 import { useQuickSwitcher } from '@/hooks/useQuickSwitcher';
+import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -65,6 +66,7 @@ export default function Workspace() {
   
   // Auth state
   const { user, logout } = useAuth();
+  const { toast } = useToast();
   
   // 🔥 Backend integration - Multi-Workspace Support
   const { 
@@ -232,6 +234,41 @@ export default function Workspace() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [focusMode]);
+
+  // 🔥 BUG FIX #3: Listen for document-pushed-to-cloud event and reload if currently viewing
+  useEffect(() => {
+    const handleDocumentPushed = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { documentId: pushedDocId, message } = customEvent.detail;
+      
+      console.log(`📤 [Workspace] Document pushed to cloud: ${pushedDocId}`);
+      
+      // If this is the document currently being viewed, reload it
+      if (documentId === pushedDocId) {
+        console.log(`🔄 [Workspace] Reloading current document after push`);
+        
+        // Show success toast
+        toast({
+          title: "✅ Document synced to cloud!",
+          description: "Reloading fresh content...",
+          duration: 2000,
+        });
+        
+        // Navigate away briefly then back to force fresh load
+        const currentPath = location.pathname;
+        navigate('/workspace');
+        
+        // Navigate back after a short delay to ensure cleanup
+        setTimeout(() => {
+          navigate(currentPath);
+          console.log(`✅ [Workspace] Document reloaded with fresh cloud content`);
+        }, 100);
+      }
+    };
+    
+    window.addEventListener('document-pushed-to-cloud', handleDocumentPushed);
+    return () => window.removeEventListener('document-pushed-to-cloud', handleDocumentPushed);
+  }, [documentId, location.pathname, navigate, toast]);
 
   // Handle mindmap generation from URL params
   useEffect(() => {

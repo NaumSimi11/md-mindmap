@@ -211,10 +211,6 @@ class DocumentService:
             existing_doc = result.scalar_one_or_none()
         
         if existing_doc:
-            # 🔥 LAW OF ASCENSION: Reject Markdown-only updates for Yjs-authoritative documents
-            if existing_doc.yjs_state is not None and not document_data.yjs_state_b64:
-                raise ValueError("Invariant Violation: Yjs-authoritative documents require yjs_state_b64")
-
             # Document already exists - update it instead of creating
             # This handles sync retries and race conditions gracefully
             existing_doc.title = document_data.title
@@ -229,37 +225,31 @@ class DocumentService:
             existing_doc.word_count = word_count
             existing_doc.version += 1  # Increment version for optimistic locking
             existing_doc.updated_at = func.now()
-
-            # Handle Yjs state if provided
+            
+            # 🔥 CRITICAL: Save Yjs binary state for local-first sync
             if document_data.yjs_state_b64:
                 try:
-                    yjs_state = base64.b64decode(document_data.yjs_state_b64)
-                    existing_doc.yjs_state = yjs_state
-                    existing_doc.size = len(yjs_state)
+                    existing_doc.yjs_state = base64.b64decode(document_data.yjs_state_b64)
                     existing_doc.yjs_version += 1
-                except Exception:
-                    # Invalid base64, ignore or handle? 
-                    # For surgicality, we'll just not update yjs_state
-                    pass
+                except Exception as e:
+                    print(f"⚠️ [UPSERT] Failed to decode yjs_state_b64: {e}")
             
             await self.db.commit()
             await self.db.refresh(existing_doc)
             
             return existing_doc
         else:
-            # Handle Yjs state if provided
-            yjs_state = None
-            size = 0
-            yjs_version = 0
+            # Create new document
+            # 🔥 CRITICAL: Decode and save Yjs binary state for local-first sync
+            yjs_state_binary = None
+            yjs_version_initial = 0
             if document_data.yjs_state_b64:
                 try:
-                    yjs_state = base64.b64decode(document_data.yjs_state_b64)
-                    size = len(yjs_state)
-                    yjs_version = 1
-                except Exception:
-                    pass
-
-            # Create new document
+                    yjs_state_binary = base64.b64decode(document_data.yjs_state_b64)
+                    yjs_version_initial = 1
+                except Exception as e:
+                    print(f"⚠️ [CREATE] Failed to decode yjs_state_b64: {e}")
+            
             document = Document(
                 id=document_id,
                 title=document_data.title,
@@ -274,9 +264,8 @@ class DocumentService:
                 is_starred=False,
                 storage_mode=StorageMode(document_data.storage_mode.value),
                 version=1,
-                yjs_version=yjs_version,
-                yjs_state=yjs_state,
-                size=size,
+                yjs_version=yjs_version_initial,
+                yjs_state=yjs_state_binary,
                 word_count=word_count,
                 created_by_id=user_id,
                 is_deleted=False
@@ -446,15 +435,6 @@ class DocumentService:
             if not workspace:
                 raise ValueError("No permission to update document")
         
-        # 🔥 OPTIMISTIC CONCURRENCY: Check Yjs version if provided
-        if document_data.expected_yjs_version is not None:
-            if document.yjs_version != document_data.expected_yjs_version:
-                raise ValueError("Concurrency Conflict: Yjs version mismatch")
-        
-        # 🔥 LAW OF ASCENSION: Reject Markdown-only updates for Yjs-authoritative documents
-        if document.yjs_state is not None and not document_data.yjs_state_b64:
-            raise ValueError("Invariant Violation: Yjs-authoritative documents require yjs_state_b64")
-        
         # Check folder access (if changing folder)
         if document_data.folder_id is not None:
             if document_data.folder_id:  # Not null
@@ -481,16 +461,13 @@ class DocumentService:
         if document_data.is_public is not None:
             document.is_public = document_data.is_public
         
-        # Handle Yjs state if provided
-        if document_data.yjs_state_b64:
+        # 🔥 CRITICAL: Update Yjs binary state for local-first sync
+        if document_data.yjs_state_b64 is not None:
             try:
-                yjs_state = base64.b64decode(document_data.yjs_state_b64)
-                document.yjs_state = yjs_state
-                document.size = len(yjs_state)
+                document.yjs_state = base64.b64decode(document_data.yjs_state_b64)
                 document.yjs_version += 1
-            except Exception:
-                # Invalid base64, ignore
-                pass
+            except Exception as e:
+                print(f"⚠️ [UPDATE] Failed to decode yjs_state_b64: {e}")
         
         # Increment version
         document.version += 1

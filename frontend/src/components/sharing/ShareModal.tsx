@@ -91,10 +91,19 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     setError(null);
     
     try {
-      const [membersData, linksData, doc] = await Promise.all([
+      // 🔥 FIX: First verify document exists
+      const doc = isAuthenticated ? await documentService.getDocument(documentId) : null;
+      
+      if (!doc) {
+        setError('Document not found');
+        setLoading(false);
+        return;
+      }
+      
+      // Document exists, fetch members and links
+      const [membersData, linksData] = await Promise.all([
         SharesClient.listMembers(documentId),
         SharesClient.listShareLinks(documentId),
-        isAuthenticated ? documentService.getDocument(documentId) : Promise.resolve(null as any),
       ]);
       
       setMembers(membersData.members);
@@ -102,7 +111,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({
       setShareLinks(linksData.links);
       setAccessModel((doc as any)?.access_model || null);
     } catch (err) {
-      setError((err as Error).message);
+      const errorMessage = (err as any)?.response?.status === 404 
+        ? 'Document not found' 
+        : (err as Error).message;
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

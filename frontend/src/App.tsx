@@ -29,7 +29,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import WorkspaceTest from "./pages/WorkspaceTest";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
-import { WorkspaceProvider } from "./contexts/WorkspaceContext";
+import { AppDataProvider } from "./contexts/AppDataProvider";
 import { SyncHealthPanel } from "./components/sync/SyncHealthPanel"; // Task 5: Sync diagnostics
 import { GuestAccessHandler } from "./components/guest/GuestAccessHandler";
 import { WorkspaceSettingsPage } from "./components/workspace/WorkspaceSettingsPage";
@@ -45,7 +45,7 @@ const App = () => (
       disableTransitionOnChange
     >
       <TooltipProvider>
-        <WorkspaceProvider>
+        <AppDataProvider>
           <Toaster />
           <Sonner />
           <BrowserRouter>
@@ -101,7 +101,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
-        </WorkspaceProvider>
+        </AppDataProvider>
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>

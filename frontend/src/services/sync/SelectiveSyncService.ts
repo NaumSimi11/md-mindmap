@@ -79,7 +79,7 @@ type DocumentMappingRow = { localId: string; cloudId: string; createdAt: string 
 type WhereClause<T> = { equals: (value: any) => { first: () => Promise<T | undefined> } };
 type SimpleTable<T extends { localId: string }> = {
   where: (field: keyof T) => WhereClause<T>;
-  put: (row: T) => Promise<void>;
+  put: (row: T) => Promise<string>;
   get: (localId: string) => Promise<T | undefined>;
 };
 
@@ -98,6 +98,7 @@ function createInMemoryTable<T extends { localId: string }>(): SimpleTable<T> {
     }),
     put: async (row: T) => {
       byLocal.set(row.localId, row);
+      return row.localId;
     },
     get: async (localId: string) => byLocal.get(localId),
   };
@@ -251,9 +252,9 @@ export class SelectiveSyncService {
               const allWorkspaces = await apiWorkspace.listWorkspaces();
               
               // Handle paginated response: { items: [], total, ... } or direct array
-              const workspacesArray = Array.isArray(allWorkspaces) 
+              const workspacesArray: any[] = Array.isArray(allWorkspaces) 
                 ? allWorkspaces 
-                : (allWorkspaces.items || []);
+                : ((allWorkspaces as any).items || []);
               
               const matchingWorkspace = workspacesArray.find(
                 (ws: any) => ws.name?.toLowerCase() === workspaceName.toLowerCase()
@@ -346,7 +347,6 @@ export class SelectiveSyncService {
       // Try POST (backend handles duplicates with UPSERT)
       try {
         const cloudFolder = await apiFolder.createFolder(cleanWorkspaceId, {
-          id: cleanFolderId, // Send client ID for UPSERT
           name: folderName,
           icon: folderIcon,
           parent_id: parentId,
@@ -362,7 +362,6 @@ export class SelectiveSyncService {
         if (isParentError && parentId) {
           console.log('⚠️ Parent not found, creating folder at root...');
           const cloudFolder = await apiFolder.createFolder(cleanWorkspaceId, {
-            id: cleanFolderId,
             name: folderName,
             icon: folderIcon,
             parent_id: null,
@@ -442,11 +441,19 @@ export class SelectiveSyncService {
         };
       }
       
+      // 🔥 BUG FIX #8: Normalize document ID for Yjs (same as useYjsDocument.ts)
+      // Yjs stores documents without "doc_" prefix, but IndexedDB uses "doc_" prefix
+      const normalizedDocId = documentId.startsWith('doc_') 
+        ? documentId.slice(4) 
+        : documentId;
+      
+      console.log(`🔧 [pushDocument] ID normalization: ${documentId} → ${normalizedDocId}`);
+      
       // 🔥 FIX A: Read content ONLY from Yjs (single source of truth)
-      const contentToSave = this.serializeFromYjs(documentId);
+      const contentToSave = this.serializeFromYjs(normalizedDocId);
 
       // 🔥 PHASE 2: Dual-write Yjs binary
-      const yjsStateB64 = this.extractYjsBinaryBase64(documentId);
+      const yjsStateB64 = this.extractYjsBinaryBase64(normalizedDocId);
 
       // Get local metadata from guest service (title/workspace/folder), but do NOT use it for content
       let localDoc: DocumentMeta | undefined;
@@ -483,8 +490,16 @@ export class SelectiveSyncService {
       
       // Try to get workspace from local cache if not current
       if (!localWorkspace) {
+        // Try backend first
         const allWorkspaces = await backendWorkspaceService.getAllWorkspaces();
         localWorkspace = allWorkspaces.find(w => w.id === workspaceId) || null;
+        
+        // 🔥 BUG FIX #9: If still not found, try guest service (for offline-created workspaces)
+        if (!localWorkspace) {
+          const guestWorkspaces = await guestWorkspaceService.getAllWorkspaces();
+          localWorkspace = guestWorkspaces.find(w => w.id === workspaceId) || null;
+          console.log(`🔧 [pushDocument] Loaded workspace from guest service: ${localWorkspace?.name}`);
+        }
       }
       
       // Get folder info if document is in a folder
@@ -586,7 +601,16 @@ export class SelectiveSyncService {
           cloudId: syncedDoc?.id, // Store backend document ID
           lastSyncedAt: syncedDoc?.updated_at || new Date().toISOString(),
           yjsVersion: syncedDoc?.yjs_version, // Store canonical version
+          yjsStateB64: syncedDoc?.yjs_state_b64, // 🔥 BUG FIX #5: Store binary state
         });
+
+        // 🔥 BUG FIX #5: Also cache in BackendWorkspaceService for immediate access
+        // When user selects the document after push, backend cache must have it!
+        if (isAuthenticated) {
+          const { backendWorkspaceService } = await import('@/services/workspace/BackendWorkspaceService');
+          const backendDoc = await backendWorkspaceService.getDocument(syncedDoc!.id);
+          console.log(`✅ [pushDocument] Cached in backend service: ${syncedDoc!.id}`);
+        }
 
         // Dispatch event to update WorkspaceContext state (UI only)
         window.dispatchEvent(new CustomEvent('document-sync-status-changed', {
@@ -604,6 +628,32 @@ export class SelectiveSyncService {
       } catch (updateError) {
         console.warn('⚠️ [pushDocument] Failed to update sync state:', updateError);
         // Non-fatal - document is still synced to cloud
+      }
+
+      // 🔥 BUG FIX #3: Clear local Yjs storage to force re-hydration from cloud
+      // This fixes content loss after push (local Yjs state becomes stale)
+      try {
+        const { yjsDocumentManager } = await import('@/services/yjs/YjsDocumentManager');
+        
+        // Force destroy in-memory instance (even if editor is using it)
+        yjsDocumentManager.destroyDocument(documentId);
+        console.log(`🧹 [pushDocument] Destroyed in-memory Yjs document`);
+        
+        // Clear IndexedDB persistence
+        await yjsDocumentManager.clearDocumentStorage(documentId);
+        console.log(`🧹 [pushDocument] Cleared local Yjs storage, next open will hydrate from cloud`);
+        
+        // Emit event to tell editor to reload if this document is currently open
+        window.dispatchEvent(new CustomEvent('document-pushed-to-cloud', {
+          detail: { 
+            documentId,
+            cloudId: syncedDoc?.id,
+            message: 'Document synced to cloud! Reloading fresh content...'
+          }
+        }));
+      } catch (clearError) {
+        console.warn('⚠️ [pushDocument] Failed to clear Yjs storage:', clearError);
+        // Non-fatal - document is still synced, but might have stale local state
       }
 
       return {
@@ -651,7 +701,7 @@ export class SelectiveSyncService {
 
       // Fetch from cloud
       console.log(`📥 [FIX 13] Fetching document from cloud: ${documentId} (sending ${toCloudId(documentId)})`);
-      const cloudDoc = await apiDocument.getDocument(toCloudId(documentId));
+      const cloudDoc: any = await apiDocument.getDocument(toCloudId(documentId));
 
       // 🔥 PHASE 3: Apply Yjs binary state if available
       if (cloudDoc.yjs_state_b64) {
@@ -758,7 +808,7 @@ export class SelectiveSyncService {
         };
       }
 
-      const localFolder = guestWorkspaceService.getFolder(folderId);
+      const localFolder = await guestWorkspaceService.getFolder(folderId);
       if (!localFolder) {
         return {
           success: false,
@@ -771,10 +821,10 @@ export class SelectiveSyncService {
 
       // Check if folder exists on cloud
       try {
-        await apiFolder.getFolder(folderId);
+        await apiFolder.getFolder(folderId, localFolder.workspaceId);
         
         // Update existing folder
-        await apiFolder.updateFolder(folderId, {
+        await apiFolder.updateFolder(folderId, localFolder.workspaceId, {
           name: localFolder.name,
           color: undefined, // Can be extended later
         });
@@ -783,8 +833,7 @@ export class SelectiveSyncService {
       } catch (error: any) {
         if (error.response?.status === 404) {
           // Create new folder
-          await apiFolder.createFolder({
-            workspace_id: localFolder.workspaceId,
+          await apiFolder.createFolder(localFolder.workspaceId, {
             name: localFolder.name,
             parent_id: localFolder.parentId || undefined,
             color: undefined,
@@ -832,13 +881,13 @@ export class SelectiveSyncService {
       console.log('☁️ Pushing entire workspace to cloud...');
 
       // Push all folders first (to maintain hierarchy)
-      const folders = guestWorkspaceService.getFolders();
+      const folders = await guestWorkspaceService.getFolders();
       for (const folder of folders) {
         await this.pushFolder(folder.id);
       }
 
       // Push all documents
-      const documents = guestWorkspaceService.getDocuments();
+      const documents = await guestWorkspaceService.getDocuments();
       for (const doc of documents) {
         await this.pushDocument(doc.id);
       }
@@ -863,7 +912,7 @@ export class SelectiveSyncService {
    * Mark document as local-only (prevent future syncs)
    */
   async markAsLocalOnly(documentId: string): Promise<void> {
-    const localDoc = guestWorkspaceService.getDocument(documentId);
+    const localDoc = await guestWorkspaceService.getDocument(documentId);
     if (localDoc) {
       guestWorkspaceService.updateDocument(documentId, {
         syncStatus: 'local',
@@ -875,8 +924,8 @@ export class SelectiveSyncService {
   /**
    * Get sync status for a document
    */
-  getSyncStatus(documentId: string): SyncStatus {
-    const doc = guestWorkspaceService.getDocument(documentId);
+  async getSyncStatus(documentId: string): Promise<SyncStatus> {
+    const doc = await guestWorkspaceService.getDocument(documentId);
     // Prefer canonical metadata field `syncStatus` (newer), fall back to legacy nested `sync.status`.
     return (doc as any)?.syncStatus || (doc as any)?.sync?.status || 'local';
   }
