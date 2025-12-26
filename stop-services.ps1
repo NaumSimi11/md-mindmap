@@ -1,6 +1,4 @@
-# ╔══════════════════════════════════════════════════════════════╗
-# ║     MDReader - Stop All Services (Windows PowerShell)        ║
-# ╚══════════════════════════════════════════════════════════════╝
+# MDReader - Stop All Services (Windows PowerShell)
 
 $ErrorActionPreference = "SilentlyContinue"
 
@@ -9,9 +7,9 @@ $FRONTEND_PORT = 5173
 $HOCUSPOCUS_PORT = 1234
 
 Write-Host ""
-Write-Host "╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Yellow
-Write-Host "║          MDReader - Stopping All Services                    ║" -ForegroundColor Yellow
-Write-Host "╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Yellow
+Write-Host "================================================================" -ForegroundColor Yellow
+Write-Host "          MDReader - Stopping All Services                     " -ForegroundColor Yellow
+Write-Host "================================================================" -ForegroundColor Yellow
 Write-Host ""
 
 function Stop-ProcessOnPort {
@@ -24,13 +22,14 @@ function Stop-ProcessOnPort {
         foreach ($pid in $processes) {
             Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
         }
-        Write-Host "✅ Stopped $ServiceName (port $Port)" -ForegroundColor Green
-    } else {
-        Write-Host "⚪ $ServiceName was not running" -ForegroundColor Gray
+        Write-Host "[OK] Stopped $ServiceName (port $Port)" -ForegroundColor Green
+    }
+    else {
+        Write-Host "[--] $ServiceName was not running" -ForegroundColor Gray
     }
 }
 
-Write-Host "🛑 Stopping services..." -ForegroundColor Blue
+Write-Host "[INFO] Stopping services..." -ForegroundColor Blue
 Write-Host ""
 
 Stop-ProcessOnPort $FRONTEND_PORT "Frontend"
@@ -38,10 +37,9 @@ Stop-ProcessOnPort $BACKEND_PORT "Backend"
 Stop-ProcessOnPort $HOCUSPOCUS_PORT "Hocuspocus"
 
 Write-Host ""
-Write-Host "🐳 Stopping Docker containers..." -ForegroundColor Blue
+Write-Host "[INFO] Stopping Docker containers..." -ForegroundColor Blue
 docker compose down 2>$null
 
 Write-Host ""
-Write-Host "✅ All services stopped!" -ForegroundColor Green
+Write-Host "[OK] All services stopped!" -ForegroundColor Green
 Write-Host ""
-
