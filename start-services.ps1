@@ -34,6 +34,13 @@ Write-Host "      MDReader - Starting All Services (Windows)               " -Fo
 Write-Host "================================================================" -ForegroundColor Cyan
 Write-Host ""
 
+if ($Clean) {
+    Write-Host "[INFO] Clean mode enabled - will reset database" -ForegroundColor Yellow
+}
+if ($WithUser) {
+    Write-Host "[INFO] Will create test user after startup" -ForegroundColor Yellow
+}
+
 # Function to check if port is in use
 function Test-Port {
     param([int]$Port)
@@ -49,8 +56,8 @@ function Stop-ProcessOnPort {
         Write-Host "[WARN] Stopping existing $ServiceName on port $Port..." -ForegroundColor Yellow
         $processes = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue | 
                      Select-Object -ExpandProperty OwningProcess -Unique
-        foreach ($pid in $processes) {
-            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+        foreach ($procId in $processes) {
+            Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
         }
         Start-Sleep -Seconds 2
     }
@@ -103,15 +110,23 @@ Write-Host "----------------------------------------------------------------" -F
 
 # Check if Docker is running
 try {
-    docker info | Out-Null
+    docker info 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Docker not running" }
 }
 catch {
     Write-Host "[ERROR] Docker is not running! Please start Docker Desktop first." -ForegroundColor Red
     exit 1
 }
 
-Write-Host "[INFO] Starting Docker containers..." -ForegroundColor Blue
 Set-Location $PROJECT_ROOT
+
+# Clean database if requested
+if ($Clean) {
+    Write-Host "[INFO] Cleaning database (docker-compose down -v)..." -ForegroundColor Yellow
+    docker compose down -v 2>$null
+}
+
+Write-Host "[INFO] Starting Docker containers..." -ForegroundColor Blue
 docker compose up -d
 
 if (-not (Wait-ForService "localhost" $POSTGRES_PORT "PostgreSQL")) { exit 1 }
@@ -134,19 +149,50 @@ if (-not (Test-Path "venv")) {
 }
 
 # Activate venv and run migrations
-Write-Host "[INFO] Running Alembic migrations..." -ForegroundColor Blue
+Write-Host "[INFO] Installing Python dependencies..." -ForegroundColor Blue
 $activateScript = Join-Path $BACKEND_DIR "venv\Scripts\Activate.ps1"
 & $activateScript
 pip install -r requirements.txt -q
+
+Write-Host "[INFO] Running Alembic migrations..." -ForegroundColor Blue
+$env:PYTHONPATH = $BACKEND_DIR
 alembic upgrade head
-Write-Host "[OK] Migrations completed successfully" -ForegroundColor Green
+
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "[OK] Migrations completed successfully" -ForegroundColor Green
+}
+else {
+    Write-Host "[ERROR] Migration failed" -ForegroundColor Red
+    exit 1
+}
 
 # ----------------------------------------------------------------
-# Step 4: Start Hocuspocus Server
+# Step 4: Create Test User (if requested)
+# ----------------------------------------------------------------
+if ($WithUser -or $Clean) {
+    Write-Host ""
+    Write-Host "----------------------------------------------------------------" -ForegroundColor White
+    Write-Host "  Step 4: Creating Test User" -ForegroundColor White
+    Write-Host "----------------------------------------------------------------" -ForegroundColor White
+    
+    Write-Host "[INFO] Creating test user..." -ForegroundColor Blue
+    $env:PYTHONPATH = $BACKEND_DIR
+    python scripts/create_test_users.py
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[OK] Test user created" -ForegroundColor Green
+    }
+    else {
+        Write-Host "[WARN] User may already exist (continuing...)" -ForegroundColor Yellow
+    }
+}
+
+# ----------------------------------------------------------------
+# Step 5: Start Hocuspocus Server
 # ----------------------------------------------------------------
 Write-Host ""
 Write-Host "----------------------------------------------------------------" -ForegroundColor White
-Write-Host "  Step 4: Starting Hocuspocus Server" -ForegroundColor White
+Write-Host "  Step 5: Starting Hocuspocus Server" -ForegroundColor White
 Write-Host "----------------------------------------------------------------" -ForegroundColor White
 
 Set-Location $HOCUSPOCUS_DIR
@@ -158,36 +204,36 @@ if (-not (Test-Path "node_modules")) {
 }
 
 Write-Host "[INFO] Starting Hocuspocus WebSocket server on port $HOCUSPOCUS_PORT..." -ForegroundColor Blue
-$hocuspocusScript = "Set-Location '$HOCUSPOCUS_DIR'; npm start"
+$hocuspocusScript = "Set-Location '$HOCUSPOCUS_DIR'; npm run dev"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $hocuspocusScript -WindowStyle Minimized
 Start-Sleep -Seconds 3
 
 if (-not (Wait-ForService "localhost" $HOCUSPOCUS_PORT "Hocuspocus WebSocket")) { exit 1 }
 
 # ----------------------------------------------------------------
-# Step 5: Start Backend
+# Step 6: Start Backend
 # ----------------------------------------------------------------
 Write-Host ""
 Write-Host "----------------------------------------------------------------" -ForegroundColor White
-Write-Host "  Step 5: Starting Backend" -ForegroundColor White
+Write-Host "  Step 6: Starting Backend" -ForegroundColor White
 Write-Host "----------------------------------------------------------------" -ForegroundColor White
 
 Set-Location $BACKEND_DIR
 Write-Host "[INFO] Starting FastAPI backend on port $BACKEND_PORT..." -ForegroundColor Blue
 
 # Start backend in background
-$backendScript = "Set-Location '$BACKEND_DIR'; & '$BACKEND_DIR\venv\Scripts\Activate.ps1'; uvicorn app.main:app --host 0.0.0.0 --port $BACKEND_PORT --reload"
+$backendScript = "Set-Location '$BACKEND_DIR'; `$env:PYTHONPATH='$BACKEND_DIR'; & '$BACKEND_DIR\venv\Scripts\Activate.ps1'; uvicorn app.main:app --host 0.0.0.0 --port $BACKEND_PORT --reload"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $backendScript -WindowStyle Minimized
 
 Start-Sleep -Seconds 5
 if (-not (Wait-ForService "localhost" $BACKEND_PORT "Backend API")) { exit 1 }
 
 # ----------------------------------------------------------------
-# Step 6: Start Frontend
+# Step 7: Start Frontend
 # ----------------------------------------------------------------
 Write-Host ""
 Write-Host "----------------------------------------------------------------" -ForegroundColor White
-Write-Host "  Step 6: Starting Frontend" -ForegroundColor White
+Write-Host "  Step 7: Starting Frontend" -ForegroundColor White
 Write-Host "----------------------------------------------------------------" -ForegroundColor White
 
 Set-Location $FRONTEND_DIR
@@ -223,6 +269,15 @@ Write-Host "  [OK] Hocuspocus:  ws://localhost:$HOCUSPOCUS_PORT" -ForegroundColo
 Write-Host "  [OK] Backend:     http://localhost:$BACKEND_PORT" -ForegroundColor White
 Write-Host "  [OK] Frontend:    http://localhost:$FRONTEND_PORT" -ForegroundColor White
 Write-Host ""
+
+if ($WithUser -or $Clean) {
+    Write-Host "TEST CREDENTIALS:" -ForegroundColor Cyan
+    Write-Host "----------------------------------------------------------------" -ForegroundColor White
+    Write-Host "  Email:    naum@example.com" -ForegroundColor White
+    Write-Host "  Password: Kozuvcanka#1" -ForegroundColor White
+    Write-Host ""
+}
+
 Write-Host "OPEN YOUR BROWSER:" -ForegroundColor Cyan
 Write-Host "----------------------------------------------------------------" -ForegroundColor White
 Write-Host "  http://localhost:$FRONTEND_PORT" -ForegroundColor Green
@@ -230,6 +285,12 @@ Write-Host ""
 Write-Host "TO STOP ALL SERVICES:" -ForegroundColor Cyan
 Write-Host "----------------------------------------------------------------" -ForegroundColor White
 Write-Host "  .\stop-services.ps1" -ForegroundColor White
+Write-Host ""
+Write-Host "USAGE:" -ForegroundColor Cyan
+Write-Host "----------------------------------------------------------------" -ForegroundColor White
+Write-Host "  .\start-services.ps1              # Normal start" -ForegroundColor Gray
+Write-Host "  .\start-services.ps1 -Clean       # Clean DB and start fresh" -ForegroundColor Gray
+Write-Host "  .\start-services.ps1 -WithUser    # Create test user" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Ready to go!" -ForegroundColor Green
 
