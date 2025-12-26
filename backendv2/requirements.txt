@@ -18,6 +18,7 @@ psycopg2-binary==2.9.9   # PostgreSQL sync driver (for Alembic)
 # Authentication & Security
 python-jose[cryptography]==3.3.0  # JWT tokens
 passlib[bcrypt]==1.7.4            # Password hashing (bcrypt)
+bcrypt==4.0.1                     # Pin bcrypt for passlib compatibility (4.1+ breaks passlib)
 python-dotenv==1.0.0              # Environment variables
 
 # Validation
