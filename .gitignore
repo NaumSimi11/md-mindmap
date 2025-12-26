@@ -113,3 +113,7 @@ redis_data/
 .temp/
 .tmp/
 
+
+# Local example files with secrets
+backendv2/example.md
+*.local.md
