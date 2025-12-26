@@ -204,11 +204,27 @@ if (-not (Test-Path "node_modules")) {
 }
 
 Write-Host "[INFO] Starting Hocuspocus WebSocket server on port $HOCUSPOCUS_PORT..." -ForegroundColor Blue
-$hocuspocusScript = "Set-Location '$HOCUSPOCUS_DIR'; npm run dev"
-Start-Process powershell -ArgumentList "-NoExit", "-Command", $hocuspocusScript -WindowStyle Minimized
-Start-Sleep -Seconds 3
 
-if (-not (Wait-ForService "localhost" $HOCUSPOCUS_PORT "Hocuspocus WebSocket")) { exit 1 }
+# Set environment variables for Hocuspocus
+$hocuspocusScript = @"
+Set-Location '$HOCUSPOCUS_DIR'
+`$env:HOCUSPOCUS_PORT = '$HOCUSPOCUS_PORT'
+`$env:HOCUSPOCUS_HOST = '0.0.0.0'
+`$env:NODE_ENV = 'development'
+npm start
+"@
+Start-Process powershell -ArgumentList "-NoExit", "-Command", $hocuspocusScript -WindowStyle Minimized
+
+# Give Hocuspocus more time to start on Windows
+Start-Sleep -Seconds 5
+
+if (-not (Wait-ForService "localhost" $HOCUSPOCUS_PORT "Hocuspocus WebSocket" 45)) { 
+    Write-Host "[WARN] Hocuspocus may still be starting. Check the Hocuspocus window for errors." -ForegroundColor Yellow
+    Write-Host "[INFO] Common issues on Windows:" -ForegroundColor Yellow
+    Write-Host "  - Run 'npm install' manually in hocuspocus-server folder" -ForegroundColor Gray
+    Write-Host "  - Check if port 1234 is blocked by firewall" -ForegroundColor Gray
+    Write-Host "  - Try running 'npm start' manually in hocuspocus-server" -ForegroundColor Gray
+}
 
 # ----------------------------------------------------------------
 # Step 6: Start Backend

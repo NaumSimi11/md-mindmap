@@ -6,8 +6,9 @@
   "main": "server-production.js",
   "scripts": {
     "start": "node server-production.js",
-    "dev": "NODE_ENV=development node server-production.js",
-    "prod": "NODE_ENV=production node server-production.js"
+    "dev": "node server-production.js",
+    "dev:unix": "NODE_ENV=development node server-production.js",
+    "prod": "node server-production.js"
   },
   "dependencies": {
     "@hocuspocus/server": "^2.13.5",
