@@ -141,6 +141,8 @@ export const SyncStatusIndicator: React.FC<SyncStatusIndicatorProps> = ({
   return (
     <div 
       className="fixed bottom-4 right-4 z-50 group"
+      data-testid="sync-status-indicator"
+      data-sync-status={status}
       onMouseEnter={() => setExpanded(true)}
       onMouseLeave={() => setExpanded(false)}
     >
@@ -299,6 +301,8 @@ export const SyncStatusBadge: React.FC<Pick<SyncStatusIndicatorProps, 'status' |
         bg-gray-100 dark:bg-gray-800
       `}
       title={config.description}
+      data-testid="sync-status-badge"
+      data-sync-status={status}
     >
       <span className={status === 'connecting' ? 'animate-spin' : ''}>
         {config.icon}

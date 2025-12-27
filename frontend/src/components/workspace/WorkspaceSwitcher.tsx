@@ -43,9 +43,10 @@ export function WorkspaceSwitcher({
         <Button 
           variant="ghost" 
           className="flex items-center gap-2 hover:bg-accent px-3 h-10"
+          data-testid="workspace-switcher-trigger"
         >
           <span className="text-xl">{currentWorkspace.icon}</span>
-          <span className="font-semibold max-w-[200px] truncate">
+          <span className="font-semibold max-w-[200px] truncate" data-testid="current-workspace-name">
             {currentWorkspace.name}
           </span>
           <ChevronDown className="h-4 w-4 opacity-50" />
@@ -61,6 +62,7 @@ export function WorkspaceSwitcher({
         {workspaces.map((workspace) => (
           <DropdownMenuItem
             key={workspace.id}
+            data-testid={`workspace-item-${workspace.slug || workspace.id}`}
             onClick={() => {
               if (workspace.id !== currentWorkspace.id) {
                 onSwitch(workspace);
@@ -105,7 +107,7 @@ export function WorkspaceSwitcher({
           </DropdownMenuItem>
         )}
         
-        <DropdownMenuItem onClick={onCreate} className="cursor-pointer">
+        <DropdownMenuItem onClick={onCreate} className="cursor-pointer" data-testid="create-workspace-button">
           <Plus className="h-4 w-4 mr-2" />
           Create Workspace
         </DropdownMenuItem>

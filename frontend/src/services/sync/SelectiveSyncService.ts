@@ -15,7 +15,7 @@ import { guestWorkspaceService } from '@/services/workspace/GuestWorkspaceServic
 import { backendWorkspaceService } from '@/services/workspace';
 import { yjsDocumentManager } from '@/services/yjs/YjsDocumentManager';
 import { serializeYjsToHtml } from '@/services/snapshots/serializeYjs';
-import { extractUUID } from '@/utils/id-generator';
+import { extractUuid, toCloudId, toLocalDocId as toLocalId } from '@/utils/id';
 import { htmlToMarkdown } from '@/utils/markdownConversion';
 import Dexie from 'dexie';
 import * as Y from 'yjs';
@@ -23,27 +23,8 @@ import * as buffer from 'lib0/buffer';
 import type { DocumentMeta, Workspace, Folder } from '@/services/workspace/types';
 import type { SyncResult, SyncStatus } from '@/types/sync.types';
 
-// ============================================================================
-// 🔥 FIX 13: ID Normalization Helpers
-// ============================================================================
-
-/**
- * Convert any ID to cloud format (strip "doc_" prefix)
- * Backend expects UUIDs without prefixes
- */
-export const toCloudId = (id: string): string => {
-  if (!id) return id;
-  return id.startsWith('doc_') ? id.slice(4) : id;
-};
-
-/**
- * Convert any ID to local format (ensure "doc_" prefix)
- * Frontend uses "doc_" prefix for consistency
- */
-export const toLocalId = (id: string): string => {
-  if (!id) return id;
-  return id.startsWith('doc_') ? id : `doc_${id}`;
-};
+// Re-export for backward compatibility with external imports
+export { toCloudId, toLocalId };
 
 // ============================================================================
 // Workspace ID Mapping Database (Local → Cloud ID mapping)

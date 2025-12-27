@@ -198,6 +198,7 @@ export default function Signup() {
                     onBlur={() => setFocusedField(null)}
                     placeholder="John Doe"
                     required
+                    data-testid="signup-fullname-input"
                     className="pl-11 h-12 bg-white/50 dark:bg-slate-800/50 border-slate-200/50 dark:border-slate-700/50 rounded-xl
                       focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-200
                       hover:bg-white dark:hover:bg-slate-800"
@@ -229,6 +230,7 @@ export default function Signup() {
                     required
                     pattern="^[a-zA-Z0-9_-]+$"
                     title="Username can only contain letters, numbers, hyphens, and underscores"
+                    data-testid="signup-username-input"
                     className="pl-11 h-12 bg-white/50 dark:bg-slate-800/50 border-slate-200/50 dark:border-slate-700/50 rounded-xl
                       focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-200
                       hover:bg-white dark:hover:bg-slate-800"
@@ -258,6 +260,7 @@ export default function Signup() {
                     onBlur={() => setFocusedField(null)}
                     placeholder="you@example.com"
                     required
+                    data-testid="signup-email-input"
                     className="pl-11 h-12 bg-white/50 dark:bg-slate-800/50 border-slate-200/50 dark:border-slate-700/50 rounded-xl
                       focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-200
                       hover:bg-white dark:hover:bg-slate-800"
@@ -287,6 +290,7 @@ export default function Signup() {
                     onBlur={() => setFocusedField(null)}
                     placeholder="••••••••"
                     required
+                    data-testid="signup-password-input"
                     className="pl-11 h-12 bg-white/50 dark:bg-slate-800/50 border-slate-200/50 dark:border-slate-700/50 rounded-xl
                       focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-200
                       hover:bg-white dark:hover:bg-slate-800"
@@ -339,6 +343,7 @@ export default function Signup() {
                     onBlur={() => setFocusedField(null)}
                     placeholder="••••••••"
                     required
+                    data-testid="signup-confirm-password-input"
                     className="pl-11 h-12 bg-white/50 dark:bg-slate-800/50 border-slate-200/50 dark:border-slate-700/50 rounded-xl
                       focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-200
                       hover:bg-white dark:hover:bg-slate-800"
@@ -365,6 +370,7 @@ export default function Signup() {
                 <Button
                   type="submit"
                   disabled={isLoading}
+                  data-testid="signup-submit-button"
                   className="w-full h-12 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700
                     text-white rounded-xl font-medium shadow-lg shadow-violet-500/30 hover:shadow-xl hover:shadow-violet-500/40
                     transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98]

@@ -1037,10 +1037,13 @@ function DocumentItem({
           {isAuthenticated && isOnlineMode && document.sync && (
             <>
               {document.sync.status === 'local' && onPushToCloud && (
-                <DropdownMenuItem onClick={(e) => {
-                  e.stopPropagation();
-                  onPushToCloud();
-                }}>
+                <DropdownMenuItem 
+                  data-testid={`push-to-cloud-${document.slug}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPushToCloud();
+                  }}
+                >
                   <Upload className="h-3.5 w-3.5 mr-2" />
                   Push to Cloud
                 </DropdownMenuItem>

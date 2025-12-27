@@ -161,6 +161,7 @@ export default function Login() {
                     onBlur={() => setFocusedField(null)}
                     placeholder="you@example.com"
                     required
+                    data-testid="login-email-input"
                     className="pl-11 h-12 bg-white/50 dark:bg-slate-800/50 border-slate-200/50 dark:border-slate-700/50 rounded-xl
                       focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200
                       hover:bg-white dark:hover:bg-slate-800"
@@ -212,6 +213,7 @@ export default function Login() {
                     onBlur={() => setFocusedField(null)}
                     placeholder="••••••••"
                     required
+                    data-testid="login-password-input"
                     className="pl-11 h-12 bg-white/50 dark:bg-slate-800/50 border-slate-200/50 dark:border-slate-700/50 rounded-xl
                       focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200
                       hover:bg-white dark:hover:bg-slate-800"
@@ -238,6 +240,7 @@ export default function Login() {
                 <Button
                   type="submit"
                   disabled={isLoading}
+                  data-testid="login-submit-button"
                   className="w-full h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700
                     text-white rounded-xl font-medium shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40
                     transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98]
