@@ -50,6 +50,12 @@ export class DocumentLifecycleManager {
     this.config = { ...DEFAULT_DOCUMENT_CONFIG, ...config };
     this.syncManager = UnifiedSyncManager.getInstance();
     this.registry = DocumentRegistry.getInstance();
+    
+    // Listen for logout to cleanup all document state
+    window.addEventListener('auth:logout', () => {
+      console.log('🚪 [DocumentLifecycleManager] Logout detected, destroying instance...');
+      DocumentLifecycleManager.resetInstance();
+    });
   }
 
   /**

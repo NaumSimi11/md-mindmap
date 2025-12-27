@@ -159,6 +159,26 @@ export class GuestWorkspaceService {
   }
 
   /**
+   * Check if service is initialized
+   */
+  get initialized(): boolean {
+    return this.isInitialized;
+  }
+
+  /**
+   * Assert that service is initialized before performing operations
+   * @throws Error if not initialized
+   */
+  private assertInitialized(operation: string): void {
+    if (!this.isInitialized) {
+      throw new Error(
+        `GuestWorkspaceService.${operation}() called before init(). ` +
+        `Ensure the service is initialized first.`
+      );
+    }
+  }
+
+  /**
    * Initialize guest user
    */
   private async initGuestUser(): Promise<void> {
@@ -287,6 +307,7 @@ export class GuestWorkspaceService {
    * Get all workspaces
    */
   async getAllWorkspaces(): Promise<Workspace[]> {
+    this.assertInitialized('getAllWorkspaces');
     return db.workspaces.orderBy('createdAt').toArray();
   }
 
@@ -294,6 +315,7 @@ export class GuestWorkspaceService {
    * Get current workspace
    */
   async getCurrentWorkspace(): Promise<Workspace | null> {
+    // No guard - safe to return null if not initialized
     if (!this.currentWorkspaceId) return null;
     return db.workspaces.get(this.currentWorkspaceId) || null;
   }
@@ -302,6 +324,7 @@ export class GuestWorkspaceService {
    * Get workspace by ID
    */
   async getWorkspace(id: string): Promise<Workspace | null> {
+    this.assertInitialized('getWorkspace');
     return db.workspaces.get(id) || null;
   }
 
@@ -309,6 +332,7 @@ export class GuestWorkspaceService {
    * Create workspace
    */
   async createWorkspace(input: CreateWorkspaceInput): Promise<Workspace> {
+    this.assertInitialized('createWorkspace');
     const now = new Date().toISOString();
     
     const workspace: Workspace = {
@@ -424,6 +448,7 @@ export class GuestWorkspaceService {
    * Get folder by ID
    */
   async getFolder(id: string): Promise<Folder | null> {
+    this.assertInitialized('getFolder');
     return db.folders.get(id) || null;
   }
 
@@ -431,6 +456,7 @@ export class GuestWorkspaceService {
    * Create folder
    */
   async createFolder(input: CreateFolderInput): Promise<Folder> {
+    this.assertInitialized('createFolder');
     const now = new Date().toISOString();
     
     // Get max position for ordering
@@ -517,6 +543,7 @@ export class GuestWorkspaceService {
    * Get document by ID
    */
   async getDocument(id: string): Promise<DocumentMeta | null> {
+    this.assertInitialized('getDocument');
     return db.documents.get(id) || null;
   }
 
@@ -524,6 +551,7 @@ export class GuestWorkspaceService {
    * Create document
    */
   async createDocument(input: CreateDocumentInput): Promise<DocumentMeta> {
+    this.assertInitialized('createDocument');
     const now = new Date().toISOString();
     
     const document: DocumentMeta = {
@@ -550,6 +578,7 @@ export class GuestWorkspaceService {
    * Update document
    */
   async updateDocument(id: string, input: UpdateDocumentInput): Promise<void> {
+    this.assertInitialized('updateDocument');
     let document = await db.documents.get(id);
     if (!document) {
       // Auto-create fallback: fill in best guess for missing fields.
@@ -587,6 +616,7 @@ export class GuestWorkspaceService {
    * Delete document
    */
   async deleteDocument(id: string): Promise<void> {
+    this.assertInitialized('deleteDocument');
     await db.documents.delete(id);
     console.log(`✅ Deleted document: ${id}`);
   }

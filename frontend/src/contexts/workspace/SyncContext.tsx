@@ -94,26 +94,25 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       const loginUser = customEvent.detail?.user;
       console.log('🔔 [SyncContext] Login event detected:', loginUser?.username || loginUser?.email);
       
-      // Wait for React state to update
-      await new Promise(resolve => setTimeout(resolve, 150));
-      
-      // Verify auth is actually set
+      // Trust the event data - auth:login is only dispatched after successful login
+      // No timeout needed - the event itself is the signal that auth is ready
       const authCheck = authService.isAuthenticated();
       console.log('🔍 [SyncContext] Post-login auth check:', {
         'Direct auth check': authCheck,
         'Has login user': !!loginUser,
-        'React isAuthenticated': isAuthenticated,
-        'React user': !!user,
       });
       
-      if (authCheck) {
+      if (authCheck || loginUser) {
         // Force re-init by incrementing counter
+        // The auth event is authoritative - if we received it, login succeeded
         setInitCounter(prev => prev + 1);
         console.log('✅ [SyncContext] Forcing re-init after login');
         
-        // 🔥 NEW: Trigger batch sync after login
-        // This syncs all pending offline changes to the cloud
-        setTimeout(async () => {
+        // Trigger batch sync after backend service is initialized
+        // Listen for the init complete event instead of using a timeout
+        const handleBackendReady = async () => {
+          window.removeEventListener('sync:backend-ready', handleBackendReady);
+          
           try {
             console.log('🔄 [SyncContext] Starting batch sync after login...');
             const { batchSyncService } = await import('@/services/sync/BatchSyncService');
@@ -143,15 +142,22 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           } catch (error) {
             console.error('❌ [SyncContext] Batch sync failed:', error);
           }
-        }, 1000); // Wait 1s after login to ensure everything is initialized
+        };
+        
+        // If backend is already initialized (rare), run immediately
+        if (backendWorkspaceService.initialized) {
+          handleBackendReady();
+        } else {
+          // Otherwise wait for initialization to complete
+          window.addEventListener('sync:backend-ready', handleBackendReady);
+          
+          // Cleanup after 10s if event never fires (safety net)
+          setTimeout(() => {
+            window.removeEventListener('sync:backend-ready', handleBackendReady);
+          }, 10000);
+        }
       } else {
-        console.warn('⚠️ [SyncContext] Login event but auth check failed, retrying...');
-        // Retry once more after another delay
-        setTimeout(() => {
-          if (authService.isAuthenticated()) {
-            setInitCounter(prev => prev + 1);
-          }
-        }, 200);
+        console.warn('⚠️ [SyncContext] Login event received but auth check failed. This should not happen.');
       }
     };
     

@@ -59,6 +59,12 @@ export class UnifiedSyncManager {
     this.stateMachine = new ConnectionStateMachine(
       this.config.maxReconnectAttempts
     );
+    
+    // Listen for logout to cleanup all sync state
+    window.addEventListener('auth:logout', () => {
+      console.log('🚪 [UnifiedSyncManager] Logout detected, destroying instance...');
+      UnifiedSyncManager.resetInstance();
+    });
   }
 
   /**

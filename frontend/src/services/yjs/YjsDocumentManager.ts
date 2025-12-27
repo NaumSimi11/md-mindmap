@@ -38,6 +38,20 @@ class YjsDocumentManager {
   private constructor() {
     console.log('🔧 YjsDocumentManager initialized');
     this.startCleanupTimer();
+    this.setupLogoutCleanup();
+  }
+
+  /**
+   * Listen for logout events to clean up all documents
+   * Prevents stale document state from persisting across user sessions
+   */
+  private setupLogoutCleanup(): void {
+    window.addEventListener('auth:logout', () => {
+      console.log('🚪 [YjsDocumentManager] Logout detected, cleaning up all documents...');
+      this.destroyAll();
+      // Restart cleanup timer for next session
+      this.startCleanupTimer();
+    });
   }
 
   /**
@@ -276,11 +290,37 @@ class YjsDocumentManager {
       return;
     }
 
+    // 🔥 FIX: Prevent negative refCount (bug where release called more than acquire)
+    if (instance.refCount <= 0) {
+      console.warn(`⚠️ RefCount already 0 for ${documentId}, skipping decrement. This may indicate a double-release bug.`);
+      return;
+    }
+
     instance.refCount--;
+    instance.lastAccessed = Date.now(); // Update last accessed for cleanup timer
+    
     console.log(`📉 Released document ${documentId} (refCount: ${instance.refCount})`);
 
     // Don't destroy immediately - let cleanup timer handle it
     // This allows for quick re-access without re-initialization
+  }
+
+  /**
+   * Get current ref count for a document (for debugging)
+   */
+  public getRefCount(documentId: string): number {
+    return this.documents.get(documentId)?.refCount ?? 0;
+  }
+
+  /**
+   * Debug: List all documents with their ref counts
+   */
+  public debugListDocuments(): Array<{ id: string; refCount: number; lastAccessed: Date }> {
+    return Array.from(this.documents.entries()).map(([id, instance]) => ({
+      id,
+      refCount: instance.refCount,
+      lastAccessed: new Date(instance.lastAccessed),
+    }));
   }
 
   /**

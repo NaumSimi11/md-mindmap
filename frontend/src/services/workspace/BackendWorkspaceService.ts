@@ -28,6 +28,7 @@ import { workspaceService, folderService, documentService } from '@/services/api
 import { authService } from '@/services/api';
 import { generateDocumentId } from '@/utils/id-generator';
 import { selectiveSyncService } from '@/services/sync/SelectiveSyncService';
+import { dispatchSyncBackendReady, EventNames } from '@/events/EventRegistry';
 import type {
   Workspace,
   Folder,
@@ -88,6 +89,22 @@ export class BackendWorkspaceService {
       this.isOnline = false;
       console.log('📴 Backend service: Offline');
     });
+    
+    // Listen for logout to reset state
+    window.addEventListener(EventNames.AUTH_LOGOUT, () => {
+      console.log('🚪 [BackendWorkspaceService] Logout detected, resetting state...');
+      this.reset();
+    });
+  }
+
+  /**
+   * Reset service state on logout
+   * Clears all cached data and resets initialization flag
+   */
+  reset(): void {
+    this.currentWorkspaceId = null;
+    this.isInitialized = false;
+    console.log('✅ [BackendWorkspaceService] State reset');
   }
 
   // ==========================================================================
@@ -147,9 +164,40 @@ export class BackendWorkspaceService {
 
       this.isInitialized = true;
       console.log('✅ Backend workspace service initialized');
+      
+      // Emit event for listeners waiting for backend to be ready
+      dispatchSyncBackendReady();
     } catch (error) {
       console.error('❌ Failed to initialize backend workspace service:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Check if service is initialized
+   * Returns true if initialized OR if user is not authenticated (guest mode)
+   */
+  get initialized(): boolean {
+    return this.isInitialized;
+  }
+
+  /**
+   * Assert that service is initialized before performing operations
+   * Throws error if called before init() completes
+   * 
+   * @throws Error if not initialized and authenticated
+   */
+  private assertInitialized(operation: string): void {
+    // Allow operations if not authenticated (guest mode doesn't use this service)
+    if (!authService.isAuthenticated()) {
+      return;
+    }
+    
+    if (!this.isInitialized) {
+      throw new Error(
+        `BackendWorkspaceService.${operation}() called before init(). ` +
+        `Ensure SyncContext has initialized the service.`
+      );
     }
   }
 
@@ -311,6 +359,8 @@ export class BackendWorkspaceService {
    * Get all workspaces
    */
   async getAllWorkspaces(): Promise<Workspace[]> {
+    this.assertInitialized('getAllWorkspaces');
+    
     // Return from cache (always up-to-date after sync)
     const workspaces = await cacheDb.workspaces.orderBy('createdAt').toArray();
     
@@ -362,6 +412,7 @@ export class BackendWorkspaceService {
    * Get current workspace
    */
   async getCurrentWorkspace(): Promise<Workspace | null> {
+    // No guard needed - safe to return null if not initialized
     if (!this.currentWorkspaceId) return null;
     return cacheDb.workspaces.get(this.currentWorkspaceId) || null;
   }
@@ -370,6 +421,8 @@ export class BackendWorkspaceService {
    * Create workspace
    */
   async createWorkspace(input: CreateWorkspaceInput): Promise<Workspace> {
+    this.assertInitialized('createWorkspace');
+    
     const now = new Date().toISOString();
     
     // Optimistic create (for offline support)
@@ -586,6 +639,8 @@ export class BackendWorkspaceService {
    * Get folders for workspace
    */
   async getFolders(workspaceId?: string): Promise<Folder[]> {
+    this.assertInitialized('getFolders');
+    
     const targetWorkspaceId = workspaceId || this.currentWorkspaceId;
     if (!targetWorkspaceId) return [];
     
@@ -600,6 +655,8 @@ export class BackendWorkspaceService {
    * Create folder
    */
   async createFolder(input: CreateFolderInput): Promise<Folder> {
+    this.assertInitialized('createFolder');
+    
     const now = new Date().toISOString();
     
     // Optimistic create
@@ -724,6 +781,8 @@ export class BackendWorkspaceService {
    * LOCAL-FIRST: Returns from cache. If online and authenticated, syncs from backend first.
    */
   async getDocuments(workspaceId?: string): Promise<DocumentMeta[]> {
+    this.assertInitialized('getDocuments');
+    
     const targetWorkspaceId = workspaceId || this.currentWorkspaceId;
     if (!targetWorkspaceId) return [];
     
@@ -746,6 +805,8 @@ export class BackendWorkspaceService {
    * 🔥 FIX: Smart caching - prefer local if newer, fetch from backend if missing/stale
    */
   async getDocument(id: string): Promise<DocumentMeta | null> {
+    this.assertInitialized('getDocument');
+    
     try {
       // Try cache first
       const cachedDoc = await cacheDb.documents.get(id);
@@ -816,6 +877,8 @@ export class BackendWorkspaceService {
    * User must explicitly sync via "Push to Cloud" button.
    */
   async createDocument(input: CreateDocumentInput): Promise<DocumentMeta> {
+    this.assertInitialized('createDocument');
+    
     const now = new Date().toISOString();
     
     // Generate UUID for document (local-first: IDs generated client-side)
@@ -853,6 +916,8 @@ export class BackendWorkspaceService {
    * User must explicitly sync via "Push to Cloud" button.
    */
   async updateDocument(id: string, input: UpdateDocumentInput): Promise<DocumentMeta> {
+    this.assertInitialized('updateDocument');
+    
     const existing = await cacheDb.documents.get(id);
     if (!existing) throw new Error(`Document not found: ${id}`);
 
@@ -896,6 +961,8 @@ export class BackendWorkspaceService {
    * Delete document
    */
   async deleteDocument(id: string): Promise<void> {
+    this.assertInitialized('deleteDocument');
+    
     // Delete from cache immediately
     await cacheDb.documents.delete(id);
     
