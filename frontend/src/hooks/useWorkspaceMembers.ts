@@ -40,13 +40,55 @@ export const workspaceMembersKeys = {
 // ============================================================================
 
 /**
+ * Check if workspace ID is a local-only ID (not synced to cloud)
+ * Local IDs use format: ws_<timestamp>_<random>
+ * Cloud IDs are UUIDs: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+ */
+function isLocalOnlyWorkspace(workspaceId: string | undefined): boolean {
+  if (!workspaceId) return true;
+  
+  // Check if it's a UUID (cloud workspace)
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidRegex.test(workspaceId)) return false;
+  
+  // Check if it has ws_ prefix with UUID suffix (cloud workspace with local prefix)
+  if (workspaceId.startsWith('ws_')) {
+    const suffix = workspaceId.slice(3);
+    if (uuidRegex.test(suffix)) return false;
+  }
+  
+  // Otherwise it's a local-only workspace (timestamp-based ID)
+  return true;
+}
+
+/**
  * List workspace members
+ * 
+ * NOTE: Only works for cloud-synced workspaces. Local-only workspaces
+ * don't have members (single user).
  */
 export function useWorkspaceMembers(workspaceId: string | undefined) {
+  // 🔥 BUG FIX: Skip API call for local-only workspaces
+  // Local workspaces (ws_<timestamp>_<random>) aren't synced to cloud
+  // and calling listMembers on them causes 422 errors
+  const isLocalOnly = isLocalOnlyWorkspace(workspaceId);
+  
   return useQuery({
     queryKey: workspaceId ? workspaceMembersKeys.workspace(workspaceId) : [],
-    queryFn: () => workspaceId ? WorkspaceMembersClient.listMembers(workspaceId) : null,
-    enabled: !!workspaceId,
+    queryFn: async () => {
+      if (!workspaceId || isLocalOnly) return null;
+      try {
+        return await WorkspaceMembersClient.listMembers(workspaceId);
+      } catch (error: any) {
+        // Gracefully handle "not synced" errors
+        if (error.message?.includes('not synced')) {
+          console.log(`⚠️ Workspace ${workspaceId} not synced, skipping members fetch`);
+          return null;
+        }
+        throw error;
+      }
+    },
+    enabled: !!workspaceId && !isLocalOnly,
   });
 }
 

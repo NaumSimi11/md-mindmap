@@ -28,6 +28,7 @@ const mockGuestWorkspaceService = vi.hoisted(() => ({
   updateFolder: vi.fn(),
   getFolders: vi.fn(() => []),
   getDocuments: vi.fn(() => []),
+  getAllWorkspaces: vi.fn(() => Promise.resolve([])),  // 🔥 NEW: Added for workspace lookup
 }));
 
 const mockWorkspaceService = vi.hoisted(() => ({
@@ -47,7 +48,18 @@ const mockBackendWorkspaceService = vi.hoisted(() => ({
 // Yjs is the single source of truth for content during pushDocument now.
 vi.mock('@/services/yjs/YjsDocumentManager', () => ({
   yjsDocumentManager: {
-    getDocument: vi.fn(() => ({ ydoc: {}, websocketProvider: null, indexeddbProvider: { on: vi.fn(), off: vi.fn() }, isInitialized: true })),
+    getDocumentInstance: vi.fn(() => ({ 
+      ydoc: { getXmlFragment: vi.fn(() => ({ length: 1, toArray: () => [] })) }, 
+      websocketProvider: null, 
+      indexeddbProvider: { on: vi.fn(), off: vi.fn() }, 
+      isInitialized: true 
+    })),  // 🔥 NEW: Added for serializeFromYjs
+    getDocument: vi.fn(() => ({ 
+      ydoc: { getXmlFragment: vi.fn(() => ({ length: 1, toArray: () => [] })) }, 
+      websocketProvider: null, 
+      indexeddbProvider: { on: vi.fn(), off: vi.fn() }, 
+      isInitialized: true 
+    })),
     getYjsBinarySnapshot: vi.fn(() => null),
   },
 }));
@@ -101,7 +113,7 @@ describe('SelectiveSyncService', () => {
 
     it('should return error if document not found locally', async () => {
       mockAuthService.isAuthenticated.mockReturnValue(true);
-      mockGuestWorkspaceService.getDocument.mockReturnValue(undefined);
+      mockGuestWorkspaceService.getDocument.mockResolvedValue(undefined);
 
       const result = await selectiveSyncService.pushDocument('doc-123');
 
@@ -114,7 +126,11 @@ describe('SelectiveSyncService', () => {
       mockAuthService.isAuthenticated.mockReturnValue(true);
       mockWorkspaceService.createWorkspace.mockResolvedValue({ id: 'ws-1', name: 'Local Workspace' });
       mockBackendWorkspaceService.getCurrentWorkspace.mockResolvedValue({ id: 'ws-1', name: 'Local Workspace' });
-      mockGuestWorkspaceService.getDocument.mockReturnValue({
+      mockBackendWorkspaceService.getAllWorkspaces.mockResolvedValue([]);  // 🔥 FIX: Add required mock
+      mockGuestWorkspaceService.getAllWorkspaces.mockResolvedValue([
+        { id: 'ws-1', name: 'Local Workspace' }  // 🔥 FIX: Add required mock
+      ]);
+      mockGuestWorkspaceService.getDocument.mockResolvedValue({
         id: 'doc-123',
         title: 'Test Doc',
         type: 'markdown',
@@ -152,7 +168,7 @@ describe('SelectiveSyncService', () => {
       // It is enforced via expected_yjs_version / backend conflict responses.
       mockWorkspaceService.createWorkspace.mockResolvedValue({ id: 'ws-1', name: 'Local Workspace' });
       mockBackendWorkspaceService.getCurrentWorkspace.mockResolvedValue({ id: 'ws-1', name: 'Local Workspace' });
-      mockGuestWorkspaceService.getDocument.mockReturnValue({ id: 'doc-123', title: 'Test Doc', workspaceId: 'ws-1' });
+      mockGuestWorkspaceService.getDocument.mockResolvedValue({ id: 'doc-123', title: 'Test Doc', workspaceId: 'ws-1' });
       mockDocumentService.updateDocument.mockRejectedValue({ status: 409, message: 'conflict' });
       // pushDocument conflict path triggers a pull, so return a minimal cloud doc
       mockDocumentService.getDocument.mockResolvedValue({ id: 'doc-123', updated_at: new Date().toISOString() });
@@ -259,7 +275,7 @@ describe('SelectiveSyncService', () => {
 
   describe('markAsLocalOnly', () => {
     it('should update document sync status to local', async () => {
-      mockGuestWorkspaceService.getDocument.mockReturnValue({
+      mockGuestWorkspaceService.getDocument.mockResolvedValue({
         id: 'doc-123',
         sync: { status: 'synced', localVersion: 1 },
       });
@@ -274,23 +290,100 @@ describe('SelectiveSyncService', () => {
   });
 
   describe('getSyncStatus', () => {
-    it('should return document sync status', () => {
-      mockGuestWorkspaceService.getDocument.mockReturnValue({
+    it('should return document sync status', async () => {
+      mockGuestWorkspaceService.getDocument.mockResolvedValue({
         id: 'doc-123',
+        syncStatus: 'synced',  // 🔥 FIX: Use new field name
         sync: { status: 'synced', localVersion: 1 },
       });
 
-      const status = selectiveSyncService.getSyncStatus('doc-123');
+      const status = await selectiveSyncService.getSyncStatus('doc-123');
 
       expect(status).toBe('synced');
     });
 
-    it('should return local if document not found', () => {
-      mockGuestWorkspaceService.getDocument.mockReturnValue(undefined);
+    it('should return local if document not found', async () => {
+      mockGuestWorkspaceService.getDocument.mockResolvedValue(undefined);
 
-      const status = selectiveSyncService.getSyncStatus('doc-123');
+      const status = await selectiveSyncService.getSyncStatus('doc-123');
 
       expect(status).toBe('local');
+    });
+  });
+
+  // ============================================================================
+  // REGRESSION TESTS - Bug Fixes (December 2025)
+  // ============================================================================
+
+  describe('Bug Fix Regression Tests', () => {
+    describe('BUG FIX: Workspace name lookup (409 conflict)', () => {
+      it('should lookup workspace from guest service', async () => {
+        mockAuthService.isAuthenticated.mockReturnValue(true);
+        
+        // Guest service has the correctly named workspace
+        mockGuestWorkspaceService.getAllWorkspaces.mockResolvedValue([
+          { id: 'ws-local-123', name: 'My Custom Workspace', description: 'User renamed' }
+        ]);
+        
+        // Backend cache is empty
+        mockBackendWorkspaceService.getCurrentWorkspace.mockResolvedValue(null);
+        mockBackendWorkspaceService.getAllWorkspaces.mockResolvedValue([]);
+        
+        mockGuestWorkspaceService.getDocument.mockResolvedValue({
+          id: 'doc-123',
+          title: 'Test Doc',
+          workspaceId: 'ws-local-123',
+          type: 'markdown',
+          folderId: null,
+          starred: false,
+          tags: [],
+        });
+        
+        // Workspace creation should use correct name
+        mockWorkspaceService.createWorkspace.mockResolvedValue({ 
+          id: 'ws-cloud-456', 
+          name: 'My Custom Workspace' 
+        });
+        mockDocumentService.createDocument.mockResolvedValue({ id: 'doc-123' });
+
+        const result = await selectiveSyncService.pushDocument('doc-123');
+
+        // The push should succeed (workspace found and created)
+        // Main verification: getAllWorkspaces was called on guest service
+        expect(mockGuestWorkspaceService.getAllWorkspaces).toHaveBeenCalled();
+      });
+    });
+
+    describe('BUG FIX: Yjs document instance lookup', () => {
+      it('should use Yjs document manager for content serialization', async () => {
+        mockAuthService.isAuthenticated.mockReturnValue(true);
+        mockBackendWorkspaceService.getCurrentWorkspace.mockResolvedValue({ 
+          id: 'ws-1', 
+          name: 'Test Workspace' 
+        });
+        mockGuestWorkspaceService.getAllWorkspaces.mockResolvedValue([
+          { id: 'ws-1', name: 'Test Workspace' }
+        ]);
+        mockGuestWorkspaceService.getDocument.mockResolvedValue({
+          id: 'doc-123',
+          title: 'Test Doc',
+          workspaceId: 'ws-1',
+          type: 'markdown',
+          folderId: null,
+          starred: false,
+          tags: [],
+        });
+        mockWorkspaceService.createWorkspace.mockResolvedValue({ id: 'ws-1' });
+        mockDocumentService.createDocument.mockResolvedValue({ id: 'doc-123' });
+
+        // Import the mocked yjsDocumentManager
+        const { yjsDocumentManager } = await import('@/services/yjs/YjsDocumentManager');
+        
+        await selectiveSyncService.pushDocument('doc-123');
+
+        // Verify Yjs document manager was used (getDocumentInstance is called first)
+        expect(yjsDocumentManager.getDocumentInstance).toHaveBeenCalled();
+      });
     });
   });
 });

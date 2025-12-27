@@ -84,9 +84,20 @@ export const useTipTapEditor = ({
         }
     }, [editor, editorInstance]);
 
-    // 🔥 STEP 4: Pick up hydrated content from Yjs (one-time only)
+    // 🔥 STEP 4: Pick up hydrated content from Yjs (one-time only per document)
     // This reads the _init_markdown field written by WorkspaceContext
     const hasLoadedInitialRef = useRef(false);
+    const lastYdocRef = useRef<Y.Doc | undefined>(undefined);
+    
+    // 🔥 BUG FIX: Reset hasLoadedInitialRef when ydoc changes (document switch)
+    useEffect(() => {
+        if (ydoc !== lastYdocRef.current) {
+            console.log('🔄 [STEP 4] ydoc changed, resetting initial content flag');
+            hasLoadedInitialRef.current = false;
+            lastYdocRef.current = ydoc;
+        }
+    }, [ydoc]);
+    
     useEffect(() => {
         if (!ydoc || !editor || hasLoadedInitialRef.current) {
             return;

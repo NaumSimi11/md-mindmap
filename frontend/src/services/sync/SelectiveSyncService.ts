@@ -190,7 +190,7 @@ export class SelectiveSyncService {
    * Returns cloud workspace ID (may differ from local ID)
    */
   private async ensureWorkspaceExists(workspaceId: string, localWorkspace: Workspace | null): Promise<string> {
-    const cleanWorkspaceId = extractUUID(workspaceId);
+    const cleanWorkspaceId = extractUuid(workspaceId);
     
     // 🔥 Check if we already have a mapping for this workspace
     const existingMapping = await this.getCloudWorkspaceId(workspaceId);
@@ -211,7 +211,7 @@ export class SelectiveSyncService {
             description: workspaceDescription,
           });
           
-          const cloudWorkspaceId = extractUUID(cloudWorkspace.id);
+          const cloudWorkspaceId = extractUuid(cloudWorkspace.id);
           console.log('✅ Workspace created on cloud:', cloudWorkspace.name, `(cloud ID: ${cloudWorkspaceId})`);
           
           // 🔥 Store mapping: local workspace ID → cloud workspace ID
@@ -242,7 +242,7 @@ export class SelectiveSyncService {
               );
               
               if (matchingWorkspace) {
-                const cloudWorkspaceId = extractUUID(matchingWorkspace.id);
+                const cloudWorkspaceId = extractUuid(matchingWorkspace.id);
                 console.log('✅ Found existing workspace:', matchingWorkspace.name, `(cloud ID: ${cloudWorkspaceId})`);
                 
                 // 🔥 Store mapping: local workspace ID → cloud workspace ID
@@ -253,7 +253,7 @@ export class SelectiveSyncService {
                 // Workspace exists but we can't find it - use first workspace as fallback
                 if (workspacesArray.length > 0) {
                   const fallbackWorkspace = workspacesArray[0];
-                  const cloudWorkspaceId = extractUUID(fallbackWorkspace.id);
+                  const cloudWorkspaceId = extractUuid(fallbackWorkspace.id);
                   console.log('⚠️ Using first available workspace as fallback:', fallbackWorkspace.name);
                   
                   // Store mapping
@@ -289,8 +289,8 @@ export class SelectiveSyncService {
       return undefined; // Document is in root
     }
     
-    const cleanFolderId = extractUUID(folderId);
-    const cleanWorkspaceId = extractUUID(workspaceId);
+    const cleanFolderId = extractUuid(folderId);
+    const cleanWorkspaceId = extractUuid(workspaceId);
     
     // ✅ FIX 3: Skip GET endpoint (backend doesn't support it)
     // Use POST-only approach with best-effort creation
@@ -334,7 +334,7 @@ export class SelectiveSyncService {
         });
         
         console.log('✅ Folder synced to cloud:', cloudFolder.name);
-        return extractUUID(cloudFolder.id);
+        return extractUuid(cloudFolder.id);
       } catch (createError: any) {
         // If parent not found, retry at root
         const isParentError = createError.message?.toLowerCase().includes('parent') ||
@@ -349,7 +349,7 @@ export class SelectiveSyncService {
           });
           
           console.log('✅ Folder synced to cloud (at root):', cloudFolder.name);
-          return extractUUID(cloudFolder.id);
+          return extractUuid(cloudFolder.id);
         }
         
         // Folder sync failed, but don't block document push
@@ -367,19 +367,45 @@ export class SelectiveSyncService {
    * 🔥 FIX A: Serialize content directly from Yjs (single source of truth)
    * - Read ONLY from Yjs
    * - Return markdown string (empty string allowed)
+   * 
+   * 🔥 BUG FIX: This function now:
+   * 1. First checks if Yjs doc exists in memory (editor should have it open)
+   * 2. Falls back to creating/loading from IndexedDB (not recommended for push)
+   * 3. Logs detailed debug info for troubleshooting
    */
   private serializeFromYjs(documentId: string): string {
     try {
-      const instance = yjsDocumentManager.getDocument(documentId, { enableWebSocket: false });
+      // 🔥 IMPORTANT: First try to get EXISTING instance (should be in memory if editor is open)
+      let instance = yjsDocumentManager.getDocumentInstance(documentId);
+      
+      if (!instance) {
+        console.warn(`⚠️ [serializeFromYjs] No Yjs instance in memory for ${documentId}, creating new...`);
+        instance = yjsDocumentManager.getDocument(documentId, { enableWebSocket: false });
+      }
+      
       if (!instance || !instance.ydoc) {
         throw new Error('Cannot push without Yjs doc');
       }
 
+      // 🔥 DEBUG: Log Yjs document state
+      const fragment = instance.ydoc.getXmlFragment('content');
+      console.log(`🔍 [serializeFromYjs] Yjs doc state for ${documentId}:`, {
+        fragmentLength: fragment.length,
+        isInitialized: instance.isInitialized,
+        hasWebSocket: !!instance.websocketProvider,
+        firstChild: fragment.length > 0 ? fragment.toArray()[0]?.constructor?.name : 'none',
+      });
+
       // Serialize to HTML from Yjs fragment, then convert to markdown for backend
       const html = serializeYjsToHtml(instance.ydoc);
-      if (!html) return '';
+      
+      if (!html) {
+        console.warn(`⚠️ [serializeFromYjs] No HTML from Yjs for ${documentId} - document may be empty`);
+        return '';
+      }
 
       const markdown = htmlToMarkdown(html);
+      console.log(`✅ [serializeFromYjs] Serialized ${markdown.length} chars for ${documentId}`);
       return markdown;
     } catch (error: any) {
       console.error('❌ [FIX A] Failed to serialize from Yjs:', error?.message || error);
@@ -467,19 +493,27 @@ export class SelectiveSyncService {
       }
 
       // Get workspace and folder info from local storage for cascading creation
-      let localWorkspace: Workspace | null = currentWorkspace;
+      // 🔥 BUG FIX: Always check BOTH services to get the latest workspace name
+      // Guest service has the authoritative local workspace info (user renames happen there)
+      let localWorkspace: Workspace | null = null;
       
-      // Try to get workspace from local cache if not current
-      if (!localWorkspace) {
-        // Try backend first
+      // 1. First try guest service (has authoritative local workspace data including user renames)
+      const guestWorkspaces = await guestWorkspaceService.getAllWorkspaces();
+      localWorkspace = guestWorkspaces.find(w => w.id === workspaceId) || null;
+      
+      if (localWorkspace) {
+        console.log(`✅ [pushDocument] Found workspace in guest service: ${localWorkspace.name}`);
+      } else {
+        // 2. Fallback to backend cache
         const allWorkspaces = await backendWorkspaceService.getAllWorkspaces();
         localWorkspace = allWorkspaces.find(w => w.id === workspaceId) || null;
         
-        // 🔥 BUG FIX #9: If still not found, try guest service (for offline-created workspaces)
-        if (!localWorkspace) {
-          const guestWorkspaces = await guestWorkspaceService.getAllWorkspaces();
-          localWorkspace = guestWorkspaces.find(w => w.id === workspaceId) || null;
-          console.log(`🔧 [pushDocument] Loaded workspace from guest service: ${localWorkspace?.name}`);
+        if (localWorkspace) {
+          console.log(`✅ [pushDocument] Found workspace in backend cache: ${localWorkspace.name}`);
+        } else if (currentWorkspace) {
+          // 3. Last fallback: current workspace
+          localWorkspace = currentWorkspace;
+          console.log(`⚠️ [pushDocument] Using current workspace as fallback: ${localWorkspace?.name}`);
         }
       }
       
