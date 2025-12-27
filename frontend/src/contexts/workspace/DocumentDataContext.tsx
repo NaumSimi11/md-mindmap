@@ -42,26 +42,48 @@ export interface Document {
   };
 }
 
-// Map DocumentMeta to Document
+/**
+ * Map DocumentMeta to Document with validation and defaults
+ * 
+ * Handles:
+ * - Missing/undefined fields with safe defaults
+ * - Invalid date strings (returns current date)
+ * - Undefined arrays (returns empty array)
+ * - Undefined syncStatus (defaults to 'local')
+ */
 function mapDocumentMetaToDocument(meta: DocumentMeta | any): Document {
+  // Safe date parsing - returns current date if invalid
+  const parseDate = (dateValue: string | Date | undefined | null): Date => {
+    if (!dateValue) return new Date();
+    const parsed = new Date(dateValue);
+    return isNaN(parsed.getTime()) ? new Date() : parsed;
+  };
+
+  // Safe optional date parsing - returns undefined if invalid/missing
+  const parseOptionalDate = (dateValue: string | Date | undefined | null): Date | undefined => {
+    if (!dateValue) return undefined;
+    const parsed = new Date(dateValue);
+    return isNaN(parsed.getTime()) ? undefined : parsed;
+  };
+
   return {
-    id: meta.id,
-    type: meta.type,
-    title: meta.title,
+    id: meta.id || '',
+    type: meta.type || 'markdown',
+    title: meta.title || 'Untitled',
     content: meta.content || '',
-    folderId: meta.folderId,
-    workspaceId: meta.workspaceId,
-    starred: meta.starred,
-    tags: meta.tags,
-    createdAt: new Date(meta.createdAt),
-    updatedAt: new Date(meta.updatedAt),
-    lastOpenedAt: meta.lastOpenedAt ? new Date(meta.lastOpenedAt) : undefined,
-    metadata: {},
+    folderId: meta.folderId ?? null,
+    workspaceId: meta.workspaceId || '',
+    starred: meta.starred ?? false,
+    tags: Array.isArray(meta.tags) ? meta.tags : [],
+    createdAt: parseDate(meta.createdAt),
+    updatedAt: parseDate(meta.updatedAt),
+    lastOpenedAt: parseOptionalDate(meta.lastOpenedAt),
+    metadata: meta.metadata || {},
     sync: {
-      status: meta.syncStatus,
+      status: meta.syncStatus || 'local',
       cloudId: meta.cloudId,
-      lastSyncedAt: meta.lastSyncedAt ? new Date(meta.lastSyncedAt) : undefined,
-      localVersion: meta.version,
+      lastSyncedAt: parseOptionalDate(meta.lastSyncedAt),
+      localVersion: meta.version ?? 1,
       yjsVersion: meta.yjsVersion,
       yjsStateB64: meta.yjsStateB64,
     },

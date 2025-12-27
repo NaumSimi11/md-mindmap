@@ -108,7 +108,7 @@ describe('SelectiveSyncService', () => {
 
       expect(result.success).toBe(false);
       expect(result.status).toBe('error');
-      expect(result.error).toBe('Not authenticated');
+      expect(result.error).toContain('Not authenticated');
     });
 
     it('should return error if document not found locally', async () => {
@@ -188,7 +188,7 @@ describe('SelectiveSyncService', () => {
 
       expect(result.success).toBe(false);
       expect(result.status).toBe('error');
-      expect(result.error).toBe('Not authenticated');
+      expect(result.error).toContain('Not authenticated');
     });
 
     it('should pull document from cloud and update local', async () => {

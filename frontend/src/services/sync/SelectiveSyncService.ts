@@ -440,11 +440,13 @@ export class SelectiveSyncService {
    */
   async pushDocument(documentId: string, liveContent?: string, retryCount = 0): Promise<SyncResult> {
     try {
+      // Precondition: User must be authenticated to push to cloud
       if (!authService.isAuthenticated()) {
+        console.warn('⚠️ [pushDocument] Called without authentication. Login required to sync to cloud.');
         return {
           success: false,
           status: 'error',
-          error: 'Not authenticated',
+          error: 'Not authenticated. Please login to sync documents to the cloud.',
         };
       }
       
@@ -704,11 +706,13 @@ export class SelectiveSyncService {
    */
   async pullDocument(documentId: string): Promise<SyncResult> {
     try {
+      // Precondition: User must be authenticated to pull from cloud
       if (!authService.isAuthenticated()) {
+        console.warn('⚠️ [pullDocument] Called without authentication. Login required to sync from cloud.');
         return {
           success: false,
           status: 'error',
-          error: 'Not authenticated',
+          error: 'Not authenticated. Please login to sync documents from the cloud.',
         };
       }
 

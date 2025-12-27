@@ -1,10 +1,13 @@
 /**
  * Authentication Service
  * Handles user authentication and session management
+ * 
+ * Uses safeStorage to handle SSR and private browsing mode gracefully
  */
 
 import { apiClient } from './ApiClient';
 import { API_ENDPOINTS } from '@/config/api.config';
+import { safeStorage, jsonStorage, StorageKeys } from '@/utils/storage';
 import type { User, LoginRequest, SignupRequest, AuthResponse } from '@/types/api.types';
 
 export class AuthService {
@@ -23,7 +26,7 @@ export class AuthService {
     
     // Store tokens
     apiClient.setToken(response.access_token);
-    localStorage.setItem('refresh_token', response.refresh_token);
+    safeStorage.setItem(StorageKeys.REFRESH_TOKEN, response.refresh_token);
     
     // Backend might not return user in signup response, fetch it if missing
     if (!response.user) {
@@ -37,7 +40,7 @@ export class AuthService {
       };
     }
     
-    localStorage.setItem('user', JSON.stringify(response.user));
+    jsonStorage.set(StorageKeys.USER, response.user);
     return response;
   }
 
@@ -56,7 +59,7 @@ export class AuthService {
     
     // Store tokens
     apiClient.setToken(response.access_token);
-    localStorage.setItem('refresh_token', response.refresh_token);
+    safeStorage.setItem(StorageKeys.REFRESH_TOKEN, response.refresh_token);
     
     // Backend doesn't return user in login response, fetch it
     if (!response.user) {
@@ -70,7 +73,7 @@ export class AuthService {
       };
     }
     
-    localStorage.setItem('user', JSON.stringify(response.user));
+    jsonStorage.set(StorageKeys.USER, response.user);
     return response;
   }
 
@@ -92,7 +95,7 @@ export class AuthService {
    */
   async getCurrentUser(): Promise<User> {
     const user = await apiClient.get<User>(API_ENDPOINTS.auth.me);
-    localStorage.setItem('user', JSON.stringify(user));
+    jsonStorage.set(StorageKeys.USER, user);
     return user;
   }
 
@@ -100,7 +103,7 @@ export class AuthService {
    * Refresh access token
    */
   async refreshToken(): Promise<string> {
-    const refreshToken = localStorage.getItem('refresh_token');
+    const refreshToken = safeStorage.getItem(StorageKeys.REFRESH_TOKEN);
     
     if (!refreshToken) {
       throw new Error('No refresh token available');
@@ -116,7 +119,7 @@ export class AuthService {
       apiClient.setToken(response.access_token);
     }
     if (response.refresh_token) {
-      localStorage.setItem('refresh_token', response.refresh_token);
+      safeStorage.setItem(StorageKeys.REFRESH_TOKEN, response.refresh_token);
     }
 
     return response;
@@ -124,23 +127,18 @@ export class AuthService {
 
   /**
    * Check if user is authenticated
+   * Uses safeStorage for SSR/private browsing compatibility
    */
   isAuthenticated(): boolean {
-    return !!localStorage.getItem('auth_token');
+    return !!safeStorage.getItem(StorageKeys.AUTH_TOKEN);
   }
 
   /**
    * Get stored user
+   * Uses jsonStorage for type-safe parsing with SSR/private browsing fallback
    */
   getStoredUser(): User | null {
-    const userStr = localStorage.getItem('user');
-    if (!userStr) return null;
-    
-    try {
-      return JSON.parse(userStr);
-    } catch {
-      return null;
-    }
+    return jsonStorage.get<User>(StorageKeys.USER);
   }
 
   /**
@@ -148,8 +146,8 @@ export class AuthService {
    */
   clearSession(): void {
     apiClient.clearToken();
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user');
+    safeStorage.removeItem(StorageKeys.REFRESH_TOKEN);
+    safeStorage.removeItem(StorageKeys.USER);
   }
 }
 

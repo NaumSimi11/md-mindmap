@@ -1,9 +1,13 @@
 /**
  * API Client
  * Handles all HTTP requests to the backend
+ * 
+ * IMPORTANT: Token is now loaded dynamically on each request, not at construction.
+ * This ensures tokens are fresh and handles SSR/private browsing mode.
  */
 
 import { API_CONFIG, API_ENDPOINTS } from '@/config/api.config';
+import { safeStorage, StorageKeys } from '@/utils/storage';
 
 export interface ApiError {
   message: string;
@@ -13,48 +17,58 @@ export interface ApiError {
 
 export class ApiClient {
   private baseUrl: string;
+  // Token is cached but refreshed on every request
   private token: string | null = null;
   // Prevent concurrent refreshes; shared promise for ongoing refresh
   private refreshPromise: Promise<any> | null = null;
 
   constructor() {
     this.baseUrl = API_CONFIG.baseUrl;
-    this.loadToken();
+    // 🔥 FIX: Don't load token at construction - load dynamically on each request
+    // This prevents stale tokens and handles SSR/private browsing mode
   }
 
   /**
    * Set authentication token
+   * Updates both in-memory cache and storage
    */
   setToken(token: string) {
     this.token = token;
-    localStorage.setItem('auth_token', token);
+    safeStorage.setItem(StorageKeys.AUTH_TOKEN, token);
   }
 
   /**
    * Clear authentication token
+   * Clears both in-memory cache and storage
    */
   clearToken() {
     this.token = null;
-    localStorage.removeItem('auth_token');
+    safeStorage.removeItem(StorageKeys.AUTH_TOKEN);
   }
 
   /**
-   * Load token from localStorage
+   * Get the current token, loading from storage if needed
+   * Always reads fresh from storage to handle external changes (login in another tab)
    */
-  private loadToken() {
-    this.token = localStorage.getItem('auth_token');
+  private getToken(): string | null {
+    // Always read fresh from storage to catch external changes
+    const storedToken = safeStorage.getItem(StorageKeys.AUTH_TOKEN);
+    this.token = storedToken;
+    return this.token;
   }
 
   /**
    * Get authorization headers
+   * Token is loaded fresh on each call
    */
   private getHeaders(): HeadersInit {
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
     };
 
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
+    const token = this.getToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
     return headers;
@@ -294,9 +308,11 @@ export class ApiClient {
       });
     }
 
+    // Get fresh token for file upload (no Content-Type header for multipart)
+    const token = this.getToken();
     const headers: HeadersInit = {};
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
     const url = `${this.baseUrl}${endpoint}`;

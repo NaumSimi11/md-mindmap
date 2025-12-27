@@ -15,6 +15,7 @@ import * as Y from 'yjs';
 import { IndexeddbPersistence } from 'y-indexeddb';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import { SnapshotManager } from '@/services/snapshots/SnapshotManager';
+import { safeStorage, StorageKeys } from '@/utils/storage';
 
 interface YjsDocumentInstance {
   ydoc: Y.Doc;
@@ -99,7 +100,7 @@ class YjsDocumentManager {
         console.log(`🔄 [UPGRADE] Adding WebSocket to existing document: ${documentId}`);
         
         try {
-          const authToken = localStorage.getItem('auth_token');
+          const authToken = safeStorage.getItem(StorageKeys.AUTH_TOKEN);
           
           if (!authToken) {
             console.warn(`⚠️ No auth token found for WebSocket upgrade`);
@@ -182,8 +183,8 @@ class YjsDocumentManager {
       
       if (enableWebSocket && isAuthenticated) {
         try {
-          // Get JWT token for authentication
-          const authToken = localStorage.getItem('auth_token');
+          // Get JWT token for authentication (using safeStorage for SSR/private mode)
+          const authToken = safeStorage.getItem(StorageKeys.AUTH_TOKEN);
           
           if (!authToken) {
             console.warn(`⚠️ No auth token found, WebSocket will connect as guest`);
