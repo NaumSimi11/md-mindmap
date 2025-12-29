@@ -94,6 +94,12 @@ htmlcov/
 .tox/
 .hypothesis/
 
+# Playwright test artifacts
+test-results/
+playwright-report/
+**/test-results/
+**/playwright-report/
+
 # ============================================================
 # Database
 # ============================================================
@@ -102,6 +108,12 @@ htmlcov/
 *.sqlite3
 postgres_data/
 redis_data/
+
+# Redis data files
+**/.data/
+*.rdb
+*.aof
+appendonlydir/
 
 # ============================================================
 # Misc
@@ -113,7 +125,20 @@ redis_data/
 .temp/
 .tmp/
 
+# ============================================================
+# Backup & Temp Files
+# ============================================================
+*.backup
+*.pid
 
-# Local example files with secrets
+# ============================================================
+# Root Level Logs (escaped from logs/ folder)
+# ============================================================
+/backend.log
+/frontend.log
+
+# ============================================================
+# Local Example Files with Secrets
+# ============================================================
 backendv2/example.md
 *.local.md
