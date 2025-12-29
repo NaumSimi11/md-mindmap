@@ -43,6 +43,7 @@ import { useCommentStore } from '@/stores/commentStore';
 import { SyncStatusBadge } from './SyncStatusBadge';
 import { ShareModal } from '../sharing/ShareModal';
 import { VersionHistoryPanel } from '../versioning/VersionHistoryPanel';
+import { PresenceList } from '../collaboration/PresenceList';
 
 // Utils & Services
 import { autoFormatText, generateAIFormatPrompt, needsFormatting } from '@/utils/autoFormat';
@@ -196,9 +197,25 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
 
   // 🔥 RULES OF HOOKS FIX: ALL hooks must run unconditionally
   // Get Yjs document (may be undefined initially)
-  const { ydoc, websocketProvider, status } = useYjsDocument(documentId);
+  const { ydoc, websocketProvider, status, syncStatus: yjsSyncStatus } = useYjsDocument(documentId);
   
   console.log('✅ [STEP 3] Yjs document status:', status, 'for document:', documentId);
+
+  // 🔥 Collaboration cursor user info
+  const currentUser = useMemo(() => {
+    if (!user) return undefined;
+    // Generate consistent color from user ID or email
+    const seed = user.id || user.email || 'anonymous';
+    const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+      hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+    }
+    return {
+      name: user.display_name || user.email?.split('@')[0] || 'Anonymous',
+      color: colors[Math.abs(hash) % colors.length],
+    };
+  }, [user]);
 
   // 🔥 Initialize TipTap with Yjs (ydoc may be undefined initially, that's OK)
   // When ydoc changes from undefined → defined, editor will re-initialize
@@ -213,6 +230,8 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
     setContextMenu,
     ydoc, // May be undefined initially (will trigger re-init when defined)
     provider: websocketProvider,
+    localSynced: yjsSyncStatus.local,  // 🔥 FIX: Wait for IndexedDB sync before loading _init_markdown
+    currentUser, // 🔥 NEW: User info for collaboration cursors
   });
 
   // Editor Mode Hook
@@ -716,6 +735,9 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
 
   return (
     <div className="h-screen flex flex-col bg-background relative">
+      {/* 🔥 Collaboration Presence List - Shows other users editing */}
+      <PresenceList provider={websocketProvider as any} />
+      
       {viewReady && (
         <FloatingSideToolbar
           editor={editor}

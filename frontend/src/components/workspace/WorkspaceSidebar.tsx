@@ -38,6 +38,7 @@ import {
   Download,
   Upload,
   Lock,
+  RefreshCw,
 } from 'lucide-react';
 import { workspaceService, type Document, type Folder as WorkspaceFolder } from '@/services/workspace-legacy/WorkspaceService';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -295,9 +296,8 @@ export function WorkspaceSidebar({
       const result = await selectiveSyncService.pushDocument(documentId);
       if (result.success) {
         console.log('✅ Document pushed to cloud');
-        // ✅ FIX 1: Removed refreshDocuments() - push must NOT touch sidebar
-        // The document is already in the local index
-        // Sync state will be updated via FIX 2
+        // 🔥 Refresh to update sync status badge in UI
+        await refreshDocuments();
       } else if (result.status === 'conflict') {
         alert(`Conflict: ${result.error}\n\nPlease resolve the conflict manually.`);
       } else {
@@ -1033,39 +1033,47 @@ function DocumentItem({
             {document.starred ? 'Unstar' : 'Star'}
           </DropdownMenuItem>
           
-          {/* Sync Actions - Only for authenticated users in online mode */}
-          {isAuthenticated && isOnlineMode && document.sync && (
+          {/* Cloud Sync Toggle - Only for authenticated users */}
+          {isAuthenticated && isOnlineMode && (
             <>
-              {document.sync.status === 'local' && onPushToCloud && (
+              {/* If local → Enable Cloud Sync */}
+              {(!document.sync || document.sync.status === 'local') && onPushToCloud && (
                 <DropdownMenuItem 
-                  data-testid={`push-to-cloud-${document.slug}`}
+                  data-testid={`enable-sync-${document.slug}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     onPushToCloud();
                   }}
                 >
-                  <Upload className="h-3.5 w-3.5 mr-2" />
-                  Push to Cloud
+                  <Cloud className="h-3.5 w-3.5 mr-2 text-blue-500" />
+                  Enable Cloud Sync
                 </DropdownMenuItem>
               )}
               
-              {document.sync.status === 'synced' && onPullFromCloud && (
-                <DropdownMenuItem onClick={(e) => {
-                  e.stopPropagation();
-                  onPullFromCloud();
-                }}>
-                  <Download className="h-3.5 w-3.5 mr-2" />
-                  Pull from Cloud
-                </DropdownMenuItem>
+              {/* If synced → Show sync status + disable option */}
+              {document.sync?.status === 'synced' && (
+                <>
+                  <DropdownMenuItem disabled className="opacity-70">
+                    <Cloud className="h-3.5 w-3.5 mr-2 text-green-500" />
+                    Cloud Sync: ON
+                  </DropdownMenuItem>
+                  {onMarkLocalOnly && (
+                    <DropdownMenuItem onClick={(e) => {
+                      e.stopPropagation();
+                      onMarkLocalOnly();
+                    }}>
+                      <CloudOff className="h-3.5 w-3.5 mr-2" />
+                      Disable Cloud Sync
+                    </DropdownMenuItem>
+                  )}
+                </>
               )}
               
-              {document.sync.status === 'synced' && onMarkLocalOnly && (
-                <DropdownMenuItem onClick={(e) => {
-                  e.stopPropagation();
-                  onMarkLocalOnly();
-                }}>
-                  <CloudOff className="h-3.5 w-3.5 mr-2" />
-                  Keep Local Only
+              {/* If syncing → Show syncing status */}
+              {document.sync?.status === 'syncing' && (
+                <DropdownMenuItem disabled className="opacity-70">
+                  <RefreshCw className="h-3.5 w-3.5 mr-2 animate-spin" />
+                  Syncing...
                 </DropdownMenuItem>
               )}
             </>

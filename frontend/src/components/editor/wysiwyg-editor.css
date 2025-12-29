@@ -1644,3 +1644,155 @@
 .ProseMirror .vimeo-embed:hover::after {
   opacity: 0.7;
 }
+
+/* ===========================
+   Collaboration Cursors
+   Shows other users' cursors in real-time with avatar bubbles
+   
+   TipTap uses: .collaboration-carets__caret, .collaboration-carets__label
+   Custom uses: .collaboration-cursor__caret, .collaboration-cursor__avatar
+   =========================== */
+
+/* Remote user cursor (caret line) - both TipTap default and custom */
+.collaboration-cursor__caret,
+.collaboration-carets__caret {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 2px solid;
+  border-right: none;
+  word-break: normal;
+  pointer-events: none;
+}
+
+/* 🔥 Avatar circle at cursor position */
+.collaboration-cursor__avatar {
+  position: absolute;
+  top: -28px;
+  left: -12px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  user-select: none;
+  pointer-events: auto; /* Allow hover for tooltip */
+  cursor: pointer;
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    0 0 0 2px white;
+  animation: collaboration-avatar-pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 100;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.collaboration-cursor__avatar:hover {
+  transform: scale(1.15);
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.25),
+    0 0 0 3px white;
+  z-index: 101;
+}
+
+/* Tooltip on hover (using data-tooltip attribute) */
+.collaboration-cursor__avatar::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.85);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.collaboration-cursor__avatar::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: rgba(0, 0, 0, 0.85);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+
+.collaboration-cursor__avatar:hover::after,
+.collaboration-cursor__avatar:hover::before {
+  opacity: 1;
+  visibility: visible;
+}
+
+@keyframes collaboration-avatar-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* TipTap default label - style it nicely as fallback */
+.collaboration-carets__label {
+  position: absolute;
+  top: -1.6em;
+  left: -2px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  padding: 3px 8px;
+  border-radius: 6px 6px 6px 0;
+  user-select: none;
+  pointer-events: none;
+  color: white;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  animation: collaboration-avatar-pop 0.2s ease-out;
+  z-index: 100;
+}
+
+/* Selection highlight from other users */
+.collaboration-cursor__selection {
+  opacity: 0.25;
+}
+
+/* Subtle pulse on the cursor line */
+.collaboration-cursor__caret::before,
+.collaboration-carets__caret::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  animation: collaboration-cursor-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes collaboration-cursor-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}

@@ -113,56 +113,41 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       const backendWorkspaces = await backendWorkspaceService.getAllWorkspaces();
       console.log(`☁️ [WorkspaceData] Loaded ${backendWorkspaces.length} backend workspace(s)`);
       
-      // 3. Merge by canonical workspace key
-      const guestMapped = guestWorkspaces.map(ws => ({
-        ...mapWorkspace(ws),
-        syncStatus: 'local' as const,
-      }));
-      
+      // 3. Merge workspaces - prioritize cloud, add ONE local workspace
       const backendMapped = backendWorkspaces.map(mapWorkspace);
       
-      // Deduplicate by canonical key
-      const workspaceMap = new Map<string, Workspace>();
+      // For logged-in users: Show cloud workspaces + single "Local Workspace"
+      // Find or create the primary local workspace (for offline work)
+      const primaryLocalWorkspace = guestWorkspaces[0];
       
-      // Add guest workspaces first (local)
-      guestMapped.forEach(ws => {
-        const key = getCanonicalWorkspaceKey({ id: ws.id });
-        workspaceMap.set(key, ws);
-      });
+      // Start with cloud workspaces
+      const allWorkspaces: Workspace[] = [...backendMapped];
       
-      // Overlay backend workspaces (cloud truth)
-      backendMapped.forEach(ws => {
-        const key = getCanonicalWorkspaceKey({ id: ws.id });
-        const existing = workspaceMap.get(key);
-        workspaceMap.set(key, {
-          ...existing,
-          ...ws,
-        });
-      });
-      
-      const allWorkspaces = Array.from(workspaceMap.values());
-
-      // Development invariant check
-      if (process.env.NODE_ENV === 'development') {
-        const seen = new Set<string>();
-        for (const ws of allWorkspaces) {
-          const key = getCanonicalWorkspaceKey({ id: ws.id });
-          if (seen.has(key)) {
-            console.error('[WorkspaceData] Duplicate canonical key:', {
-              key,
-              workspaces: allWorkspaces
-                .filter(w => getCanonicalWorkspaceKey({ id: w.id }) === key)
-                .map(w => ({ id: w.id, name: w.name, syncStatus: w.syncStatus })),
-            });
-            break;
-          }
-          seen.add(key);
+      // Add ONE local workspace if it exists (for offline editing)
+      if (primaryLocalWorkspace) {
+        const localMapped: Workspace = {
+          ...mapWorkspace(primaryLocalWorkspace),
+          syncStatus: 'local' as const,
+          // Mark clearly as local-only
+          name: primaryLocalWorkspace.name === 'Local Workspace' 
+            ? 'Local Workspace' 
+            : primaryLocalWorkspace.name,
+          description: 'Your local workspace (not synced)',
+        };
+        
+        // Only add if not already represented in cloud workspaces
+        const alreadyInCloud = backendMapped.some(
+          bws => bws.name === primaryLocalWorkspace.name
+        );
+        
+        if (!alreadyInCloud) {
+          allWorkspaces.push(localMapped);
         }
       }
 
       setWorkspaces(allWorkspaces);
       
-      console.log(`✅ [WorkspaceData] Merged: ${guestMapped.length} local + ${backendMapped.length} cloud = ${allWorkspaces.length} total`);
+      console.log(`✅ [WorkspaceData] Loaded: ${backendMapped.length} cloud + ${primaryLocalWorkspace ? 1 : 0} local = ${allWorkspaces.length} total`);
 
       // 4. Load current workspace (prefer last used, or first available)
       const lastWorkspaceId = localStorage.getItem(LAST_WORKSPACE_KEY);

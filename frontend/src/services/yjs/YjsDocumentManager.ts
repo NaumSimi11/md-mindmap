@@ -84,9 +84,10 @@ class YjsDocumentManager {
       enableWebSocket?: boolean;
       websocketUrl?: string;
       isAuthenticated?: boolean;
+      currentUser?: { name: string; color: string }; // 🔥 NEW: User info for presence
     } = {}
   ): YjsDocumentInstance {
-    const { enableWebSocket = false, websocketUrl = 'ws://localhost:1234', isAuthenticated = false } = options;
+    const { enableWebSocket = false, websocketUrl = 'ws://localhost:1234', isAuthenticated = false, currentUser } = options;
 
     // Check if document already exists
     if (this.documents.has(documentId)) {
@@ -123,6 +124,38 @@ class YjsDocumentManager {
               token: authToken || '',
               // Pass share token via requestHeaders (NOT token parameter)
               requestHeaders: shareToken ? { 'x-share-token': shareToken } : undefined,
+              // 🔥 FIX: Handle auth failures - refresh token and recreate provider
+              onAuthenticationFailed: async ({ reason }) => {
+                console.warn(`🔐 [Auth Failed - Upgrade] ${documentId}: ${reason}`);
+                console.log(`🔄 Attempting token refresh and reconnect...`);
+                
+                try {
+                  const { authService } = await import('@/services/api/AuthService');
+                  await authService.refreshToken();
+                  
+                  const newToken = safeStorage.getItem(StorageKeys.AUTH_TOKEN);
+                  if (newToken && instance.websocketProvider) {
+                    console.log(`✅ Token refreshed, recreating WebSocket provider...`);
+                    instance.websocketProvider.destroy();
+                    
+                    const newProvider = new HocuspocusProvider({
+                      url: websocketUrl,
+                      name: documentId,
+                      document: instance.ydoc,
+                      token: newToken,
+                      requestHeaders: shareToken ? { 'x-share-token': shareToken } : undefined,
+                    });
+                    
+                    instance.websocketProvider = newProvider;
+                    console.log(`✅ WebSocket provider recreated with new token`);
+                  }
+                } catch (refreshError) {
+                  console.error(`❌ Token refresh failed:`, refreshError);
+                  safeStorage.removeItem(StorageKeys.AUTH_TOKEN);
+                  safeStorage.removeItem(StorageKeys.REFRESH_TOKEN);
+                  console.error(`🚨 Session expired. Please log in again.`);
+                }
+              },
             });
             
             console.log(`🔥 [UPGRADE DEBUG] Hocuspocus provider created:`, {
@@ -143,6 +176,16 @@ class YjsDocumentManager {
             });
             
             instance.websocketProvider = websocketProvider;
+            
+            // 🔥 NEW: Set user presence info on awareness
+            if (currentUser) {
+              websocketProvider.awareness.setLocalStateField('user', {
+                name: currentUser.name,
+                color: currentUser.color,
+              });
+              console.log(`👤 [UPGRADE] Awareness set for user: ${currentUser.name}`);
+            }
+            
             console.log(`✅ [UPGRADE] WebSocket added successfully for ${documentId} (with auth: true) - Room: ${(websocketProvider as any).roomname}`);
           }
         } catch (wsError) {
@@ -215,6 +258,67 @@ class YjsDocumentManager {
             token: authToken || '',
             // Pass share token via requestHeaders (NOT token parameter)
             requestHeaders: shareToken ? { 'x-share-token': shareToken } : undefined,
+            // 🔥 FIX: Handle auth failures - refresh token and recreate provider
+            onAuthenticationFailed: async ({ reason }) => {
+              console.warn(`🔐 [Auth Failed] ${documentId}: ${reason}`);
+              console.log(`🔄 Attempting token refresh and reconnect...`);
+              
+              try {
+                // Dynamic import to avoid circular dependency
+                const { authService } = await import('@/services/api/AuthService');
+                await authService.refreshToken();
+                
+                // Get new token
+                const newToken = safeStorage.getItem(StorageKeys.AUTH_TOKEN);
+                if (newToken) {
+                  console.log(`✅ Token refreshed, recreating WebSocket provider...`);
+                  
+                  // Get the document instance
+                  const instance = this.documents.get(documentId);
+                  if (instance && instance.websocketProvider) {
+                    // Destroy old provider
+                    instance.websocketProvider.destroy();
+                    
+                    // Create new provider with fresh token
+                    const newProvider = new HocuspocusProvider({
+                      url: websocketUrl,
+                      name: documentId,
+                      document: ydoc,
+                      token: newToken,
+                      requestHeaders: shareToken ? { 'x-share-token': shareToken } : undefined,
+                    });
+                    
+                    // Update instance
+                    instance.websocketProvider = newProvider;
+                    
+                    newProvider.on('status', (event: { status: string }) => {
+                      console.log(`🌐 WebSocket status for ${documentId}:`, event.status);
+                    });
+                    
+                    newProvider.on('sync', (isSynced: boolean) => {
+                      console.log(`🔄 WebSocket sync for ${documentId}:`, isSynced);
+                    });
+                    
+                    // 🔥 Re-set awareness on new provider
+                    if (currentUser) {
+                      newProvider.awareness.setLocalStateField('user', {
+                        name: currentUser.name,
+                        color: currentUser.color,
+                      });
+                      console.log(`👤 Awareness re-set after token refresh: ${currentUser.name}`);
+                    }
+                    
+                    console.log(`✅ WebSocket provider recreated with new token`);
+                  }
+                }
+              } catch (refreshError) {
+                console.error(`❌ Token refresh failed:`, refreshError);
+                // Token refresh failed - user needs to re-login
+                safeStorage.removeItem(StorageKeys.AUTH_TOKEN);
+                safeStorage.removeItem(StorageKeys.REFRESH_TOKEN);
+                console.error(`🚨 Session expired. Please log in again.`);
+              }
+            },
           });
           
           console.log(`🔥 [DEBUG] Hocuspocus provider created:`, {
@@ -233,6 +337,15 @@ class YjsDocumentManager {
           websocketProvider.on('connection-error', (error: any) => {
             console.error(`❌ WebSocket connection error for ${documentId}:`, error);
           });
+          
+          // 🔥 NEW: Set user presence info on awareness
+          if (currentUser) {
+            websocketProvider.awareness.setLocalStateField('user', {
+              name: currentUser.name,
+              color: currentUser.color,
+            });
+            console.log(`👤 Awareness set for user: ${currentUser.name}`);
+          }
           
           console.log(`🌐 WebSocket enabled for ${documentId} (with auth: ${!!authToken})`);
         } catch (wsError) {

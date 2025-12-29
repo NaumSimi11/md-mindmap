@@ -26,6 +26,9 @@ import {
   X,
 } from 'lucide-react';
 import { documentTemplates_service, type DocumentTemplate } from '@/services/workspace-legacy/DocumentTemplates';
+import { syncModeService } from '@/services/sync/SyncModeService';
+import { authService } from '@/services/api';
+import { toast } from 'sonner';
 
 interface NewDocumentModalProps {
   isOpen: boolean;
@@ -97,6 +100,22 @@ export function NewDocumentModal({
       // Show success message
       console.log(`✅ Created ${type}: ${title} (ID: ${doc.id})`);
       
+      // 🔥 AUTO-SYNC: If user is authenticated, auto-enable cloud sync
+      if (authService.isAuthenticated() && doc.id) {
+        // Delay slightly to ensure document is saved locally first
+        setTimeout(async () => {
+          try {
+            const result = await syncModeService.enableCloudSync(doc.id);
+            if (result.success) {
+              console.log(`☁️ Auto-synced new document to cloud: ${doc.id}`);
+              toast.success('Document saved to cloud');
+            }
+          } catch (e) {
+            console.warn('Auto-sync failed, document saved locally:', e);
+          }
+        }, 500);
+      }
+      
       // Pass full document object, not just ID
       onDocumentCreated(doc.id, doc);
       onClose();
@@ -116,6 +135,21 @@ export function NewDocumentModal({
       
       // Show success message
       console.log(`✅ Created from template "${template.name}": ${title} (ID: ${doc.id})`);
+      
+      // 🔥 AUTO-SYNC: If user is authenticated, auto-enable cloud sync
+      if (authService.isAuthenticated() && doc.id) {
+        setTimeout(async () => {
+          try {
+            const result = await syncModeService.enableCloudSync(doc.id);
+            if (result.success) {
+              console.log(`☁️ Auto-synced new document to cloud: ${doc.id}`);
+              toast.success('Document saved to cloud');
+            }
+          } catch (e) {
+            console.warn('Auto-sync failed, document saved locally:', e);
+          }
+        }, 500);
+      }
       
       // Pass full document object, not just ID
       onDocumentCreated(doc.id, doc);

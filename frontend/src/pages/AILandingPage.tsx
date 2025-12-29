@@ -185,14 +185,27 @@ Generate 5-20 nodes with a clear hierarchy. Position nodes in a radial layout ar
       const tempDoc = await createDocument(docType, title, content);
 
       // Store content in Yjs if markdown
+      // 🔥 FIX: Use _init_markdown field (TipTap reads from this, not getText('content'))
       if (docType === 'markdown') {
         const Y = await import('yjs');
         const { IndexeddbPersistence } = await import('y-indexeddb');
-        const ydoc = new Y.Doc();
-        const ytext = ydoc.getText('content');
-        ytext.insert(0, content);
+        const { markdownToHtml } = await import('@/utils/markdownConversion');
         
-        const persistence = new IndexeddbPersistence(`mdreader-${tempDoc.id}`, ydoc);
+        const ydoc = new Y.Doc();
+        
+        // Convert markdown to HTML for TipTap to parse
+        const html = markdownToHtml(content);
+        
+        // Store in _init_markdown field (TipTap's useTipTapEditor reads this)
+        const ytext = ydoc.getText('_init_markdown');
+        ytext.insert(0, html);
+        
+        // 🔥 FIX: Normalize ID to match useYjsDocument hook (strips doc_ prefix)
+        const normalizedDocId = tempDoc.id.startsWith('doc_') 
+          ? tempDoc.id.slice(4) 
+          : tempDoc.id;
+        
+        const persistence = new IndexeddbPersistence(`mdreader-${normalizedDocId}`, ydoc);
         await new Promise(resolve => persistence.once('synced', resolve));
         persistence.destroy();
       }
@@ -293,13 +306,26 @@ Generate 5-20 nodes with a clear hierarchy. Position nodes in a radial layout ar
         const doc = await createDocument('markdown', title, content);
         
         // Store content in Yjs document
+        // 🔥 FIX: Use _init_markdown field (TipTap reads from this, not getText('content'))
         const Y = await import('yjs');
         const { IndexeddbPersistence } = await import('y-indexeddb');
-        const ydoc = new Y.Doc();
-        const ytext = ydoc.getText('content');
-        ytext.insert(0, content);
+        const { markdownToHtml } = await import('@/utils/markdownConversion');
         
-        const persistence = new IndexeddbPersistence(`mdreader-${doc.id}`, ydoc);
+        const ydoc = new Y.Doc();
+        
+        // Convert markdown to HTML for TipTap to parse
+        const html = markdownToHtml(content);
+        
+        // Store in _init_markdown field (TipTap's useTipTapEditor reads this)
+        const ytext = ydoc.getText('_init_markdown');
+        ytext.insert(0, html);
+        
+        // 🔥 FIX: Normalize ID to match useYjsDocument hook (strips doc_ prefix)
+        const normalizedDocId = doc.id.startsWith('doc_') 
+          ? doc.id.slice(4) 
+          : doc.id;
+        
+        const persistence = new IndexeddbPersistence(`mdreader-${normalizedDocId}`, ydoc);
         await new Promise(resolve => persistence.once('synced', resolve));
         persistence.destroy();
         
@@ -442,14 +468,27 @@ Create 5-8 slides with varied layouts: title, content, bullets, diagram.`,
       );
 
       // Store content in Yjs if markdown
+      // 🔥 FIX: Use _init_markdown field (TipTap reads from this, not getText('content'))
       if (finalType === 'markdown') {
         const Y = await import('yjs');
         const { IndexeddbPersistence } = await import('y-indexeddb');
-        const ydoc = new Y.Doc();
-        const ytext = ydoc.getText('content');
-        ytext.insert(0, content);
+        const { markdownToHtml } = await import('@/utils/markdownConversion');
         
-        const persistence = new IndexeddbPersistence(`mdreader-${tempDoc.id}`, ydoc);
+        const ydoc = new Y.Doc();
+        
+        // Convert markdown to HTML for TipTap to parse
+        const html = markdownToHtml(content);
+        
+        // Store in _init_markdown field (TipTap's useTipTapEditor reads this)
+        const ytext = ydoc.getText('_init_markdown');
+        ytext.insert(0, html);
+        
+        // 🔥 FIX: Normalize ID to match useYjsDocument hook (strips doc_ prefix)
+        const normalizedDocId = tempDoc.id.startsWith('doc_') 
+          ? tempDoc.id.slice(4) 
+          : tempDoc.id;
+        
+        const persistence = new IndexeddbPersistence(`mdreader-${normalizedDocId}`, ydoc);
         await new Promise(resolve => persistence.once('synced', resolve));
         persistence.destroy();
       }

@@ -55,10 +55,15 @@ interface GetExtensionsOptions {
   aiAutocompleteEnabled: boolean;
   ydoc?: Y.Doc;  // 🔥 NEW: Yjs document
   provider?: any;  // 🔥 NEW: WebSocket provider
+  // 🔥 NEW: User info for collaboration cursors
+  currentUser?: {
+    name: string;
+    color: string;
+  };
 }
 
 export function getExtensions(options: GetExtensionsOptions) {
-  const { ydoc, provider } = options;
+  const { ydoc, provider, currentUser } = options;
   
   // 🔥 NUCLEAR FIX: Manually include StarterKit extensions WITHOUT History
   // This guarantees no history/undo-redo extension conflicts with Yjs Collaboration
@@ -166,13 +171,43 @@ export function getExtensions(options: GetExtensionsOptions) {
     
     // ✅ OPTIONAL: Add collaboration cursors if WebSocket provider available
     if (provider) {
-      console.log('✅ [STEP 3] Collaboration cursors enabled (WebSocket available)');
+      // Use provided user info or generate defaults
+      const userName = currentUser?.name || 'Anonymous';
+      const userColor = currentUser?.color || generateUserColor(userName);
+      
+      console.log('✅ [STEP 3] Collaboration cursors enabled:', { userName, userColor });
       baseExtensions.push(
         CollaborationCaret.configure({
           provider,
           user: {
-            name: 'User',
-            color: '#' + Math.floor(Math.random()*16777215).toString(16),
+            name: userName,
+            color: userColor,
+          },
+          // 🔥 Custom render: Avatar circle with initials at cursor position
+          render: (user: { name: string; color: string }) => {
+            console.log('🎨 [Collaboration] Rendering cursor for:', user);
+            
+            // Create cursor container (matches TipTap's default class names)
+            const cursor = document.createElement('span');
+            cursor.classList.add('collaboration-carets__caret');
+            cursor.setAttribute('style', `border-color: ${user.color}`);
+            
+            // Create avatar circle with initials (instead of just a label)
+            const avatar = document.createElement('div');
+            avatar.classList.add('collaboration-cursor__avatar');
+            avatar.setAttribute('style', `background-color: ${user.color}`);
+            
+            // Get initials
+            const initials = getInitials(user.name);
+            avatar.textContent = initials;
+            
+            // Add tooltip with full name on hover
+            avatar.setAttribute('data-tooltip', user.name);
+            avatar.title = user.name;
+            
+            cursor.appendChild(avatar);
+            
+            return cursor;
           },
         })
       );
@@ -183,5 +218,48 @@ export function getExtensions(options: GetExtensionsOptions) {
   // Note: No warning logged when ydoc is undefined - this is expected during initial mount
   
   return baseExtensions;
+}
+
+/**
+ * Get initials from a name (e.g., "John Doe" → "JD", "ljubo" → "LJ")
+ */
+function getInitials(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return '?';
+  
+  const parts = trimmed.split(/\s+/);
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+  }
+  // Single word - take first 1-2 chars
+  return trimmed.slice(0, 2).toUpperCase();
+}
+
+/**
+ * Generate a consistent color from a string (user name/id)
+ * Same name always gets the same color
+ */
+function generateUserColor(str: string): string {
+  const colors = [
+    '#3b82f6', // blue
+    '#ef4444', // red
+    '#10b981', // green
+    '#f59e0b', // amber
+    '#8b5cf6', // purple
+    '#ec4899', // pink
+    '#06b6d4', // cyan
+    '#f97316', // orange
+    '#14b8a6', // teal
+    '#6366f1', // indigo
+  ];
+  
+  // Simple hash function
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash = hash & hash;
+  }
+  
+  return colors[Math.abs(hash) % colors.length];
 }
 

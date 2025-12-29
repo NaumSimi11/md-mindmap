@@ -17,6 +17,12 @@ interface UseTipTapEditorProps {
     setContextMenu: (menu: { visible: boolean; x: number; y: number; selectedText: string }) => void;
     ydoc?: Y.Doc;  // 🔥 Will be used in STEP 3
     provider?: any;  // 🔥 Will be used in STEP 3
+    localSynced?: boolean;  // 🔥 FIX: Wait for IndexedDB sync before checking _init_markdown
+    // 🔥 NEW: Current user info for collaboration cursors
+    currentUser?: {
+        name: string;
+        color: string;
+    };
 }
 
 export const useTipTapEditor = ({
@@ -31,6 +37,8 @@ export const useTipTapEditor = ({
     setContextMenu,
     ydoc,
     provider,
+    localSynced = false,  // 🔥 FIX: Wait for IndexedDB sync before checking _init_markdown
+    currentUser,  // 🔥 NEW: User info for collaboration cursors
 }: UseTipTapEditorProps) => {
     const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
     const editorRef = useRef<Editor | null>(null);
@@ -51,7 +59,8 @@ export const useTipTapEditor = ({
         aiAutocompleteEnabled,
         ydoc,        // ✅ STEP 3: Yjs document for collaboration
         provider,    // ✅ STEP 3: WebSocket provider (optional)
-    }), [setShowDiagramMenu, setShowAIModal, setShowTableModal, aiAutocompleteEnabled, ydoc, provider]);
+        currentUser, // ✅ NEW: User info for collaboration cursors
+    }), [setShowDiagramMenu, setShowAIModal, setShowTableModal, aiAutocompleteEnabled, ydoc, provider, currentUser]);
 
     // Get editor event handlers
     // ❌ STEP 1: Removed onContentChange (no longer needed)
@@ -99,7 +108,12 @@ export const useTipTapEditor = ({
     }, [ydoc]);
     
     useEffect(() => {
-        if (!ydoc || !editor || hasLoadedInitialRef.current) {
+        // 🔥 FIX: Wait for IndexedDB to sync BEFORE checking _init_markdown
+        // Without this, we check before the content is loaded from IndexedDB
+        if (!ydoc || !editor || hasLoadedInitialRef.current || !localSynced) {
+            if (!localSynced && ydoc && editor) {
+                console.log('⏳ [STEP 4] Waiting for IndexedDB sync before loading content...');
+            }
             return;
         }
         
@@ -109,6 +123,7 @@ export const useTipTapEditor = ({
         
         if (!htmlContent) {
             // No initial content to load
+            console.log('ℹ️ [STEP 4] No _init_markdown content found (blank document or already loaded)');
             hasLoadedInitialRef.current = true;
             return;
         }
@@ -130,7 +145,7 @@ export const useTipTapEditor = ({
         
         console.log('✅ [STEP 4] Initial content loaded and temp field cleared');
         hasLoadedInitialRef.current = true;
-    }, [ydoc, editor, isProgrammaticUpdateRef]);
+    }, [ydoc, editor, isProgrammaticUpdateRef, localSynced]);
 
     return {
         editor,

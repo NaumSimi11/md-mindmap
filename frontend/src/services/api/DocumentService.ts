@@ -38,7 +38,19 @@ export class DocumentService {
    * CRITICAL: This is a VIEW (not a workspace container).
    */
   async listSharedWithMe(): Promise<Document[]> {
-    return apiClient.get<Document[]>(`/api/v1/documents/shared-with-me`);
+    const response = await apiClient.get<any>(`/api/v1/documents/shared-with-me`);
+    
+    // Handle paginated response: { items: [], total, page, page_size, has_more }
+    if (response.items && Array.isArray(response.items)) {
+      return response.items;
+    }
+    // Fallback: if response is already an array
+    if (Array.isArray(response)) {
+      return response;
+    }
+    // If neither, return empty array
+    console.warn('⚠️ Unexpected shared-with-me response format:', response);
+    return [];
   }
 
   /**

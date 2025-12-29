@@ -9,6 +9,10 @@
  * - Graceful shutdown
  */
 
+// Load environment variables from .env file
+import dotenv from 'dotenv';
+dotenv.config();
+
 import { Server } from '@hocuspocus/server';
 // DatabaseExtension REMOVED - we use backend API + snapshot system for persistence
 // import { createDatabaseExtension } from './extensions/DatabaseExtension.js';

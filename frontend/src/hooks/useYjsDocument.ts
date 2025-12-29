@@ -33,6 +33,33 @@ import { useSyncMode } from './useSyncMode';
 import { yjsDocumentManager } from '@/services/yjs/YjsDocumentManager';
 
 /**
+ * Generate a consistent color from a string (user ID or email)
+ * Same user always gets the same color
+ */
+function generateUserColor(str: string): string {
+  const colors = [
+    '#3b82f6', // blue
+    '#ef4444', // red
+    '#10b981', // green
+    '#f59e0b', // amber
+    '#8b5cf6', // purple
+    '#ec4899', // pink
+    '#06b6d4', // cyan
+    '#f97316', // orange
+    '#14b8a6', // teal
+    '#6366f1', // indigo
+  ];
+  
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash = hash & hash;
+  }
+  
+  return colors[Math.abs(hash) % colors.length];
+}
+
+/**
  * Sync status types
  */
 export type SyncStatus = 
@@ -77,6 +104,12 @@ const RETRY_CONFIG = {
 export function useYjsDocument(documentId: string): UseYjsDocumentReturn {
   const { user, isAuthenticated } = useAuth();
   const { isOnlineMode } = useSyncMode();
+  
+  // 🔥 NEW: Generate user info for presence/awareness
+  const currentUser = user ? {
+    name: user.display_name || user.email?.split('@')[0] || 'Anonymous',
+    color: generateUserColor(user.id || user.email || 'anonymous'),
+  } : undefined;
   
   // Core state
   const [ydoc, setYdoc] = useState<Y.Doc | null>(null);
@@ -152,6 +185,7 @@ export function useYjsDocument(documentId: string): UseYjsDocumentReturn {
         enableWebSocket: isAuthenticated && online && isOnlineMode,
         websocketUrl: 'ws://localhost:1234',
         isAuthenticated,
+        currentUser, // 🔥 NEW: Pass user info for presence
       });
 
       if (!mountedRef.current) {

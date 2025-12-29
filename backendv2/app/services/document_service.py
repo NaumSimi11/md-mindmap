@@ -22,6 +22,7 @@ from datetime import datetime
 from app.models.document import Document, StorageMode
 from app.models.workspace import Workspace
 from app.models.folder import Folder
+from app.models.document_share import DocumentShare
 from app.schemas.document import DocumentCreate, DocumentUpdate, SortBy, SortOrder
 
 
@@ -285,7 +286,7 @@ class DocumentService:
         """
         Get document by ID
         
-        Checks access: owner, workspace owner, or public document
+        Checks access: owner, public document, or explicit document share
         
         Raises:
             ValueError: If document not found or no access
@@ -312,8 +313,20 @@ class DocumentService:
         if document.is_public:
             return document
         
-        # Note: Workspace owner does NOT automatically have access to all documents
-        # Only document creator or public documents are accessible
+        # 3. Explicit document share
+        share_result = await self.db.execute(
+            select(DocumentShare).where(
+                and_(
+                    DocumentShare.document_id == document_id,
+                    DocumentShare.principal_id == user_id,
+                    DocumentShare.principal_type == 'user',
+                    DocumentShare.status == 'active'
+                )
+            )
+        )
+        share = share_result.scalars().first()
+        if share:
+            return document
         
         raise ValueError("No access to document")
     
@@ -418,10 +431,11 @@ class DocumentService:
         if not document:
             raise ValueError("Document not found")
         
-        # Check permission (creator or workspace owner)
+        # Check permission (creator, workspace owner, or editor via document share)
         is_creator = str(document.created_by_id) == user_id
+        has_permission = is_creator
         
-        if not is_creator:
+        if not has_permission:
             # Check if workspace owner
             result = await self.db.execute(
                 select(Workspace).where(
@@ -432,8 +446,28 @@ class DocumentService:
                 )
             )
             workspace = result.scalars().first()
-            if not workspace:
-                raise ValueError("No permission to update document")
+            if workspace:
+                has_permission = True
+        
+        if not has_permission:
+            # Check if user has editor access via document share
+            result = await self.db.execute(
+                select(DocumentShare).where(
+                    and_(
+                        DocumentShare.document_id == document_id,
+                        DocumentShare.principal_id == user_id,
+                        DocumentShare.principal_type == 'user',
+                        DocumentShare.status == 'active',
+                        DocumentShare.role.in_(['editor', 'admin', 'owner'])
+                    )
+                )
+            )
+            share = result.scalars().first()
+            if share:
+                has_permission = True
+        
+        if not has_permission:
+            raise ValueError("No permission to update document")
         
         # Check folder access (if changing folder)
         if document_data.folder_id is not None:

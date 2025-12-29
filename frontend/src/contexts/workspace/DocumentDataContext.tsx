@@ -529,13 +529,14 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
       title,
       type,
       folderId,
+      content, // pass initial content through to guest service
     });
     
     const doc: Document = {
       id: guestDoc.id,
       type: guestDoc.type,
       title: guestDoc.title,
-      content: '',
+      content: guestDoc.content || content || '',
       folderId: guestDoc.folderId,
       workspaceId: guestDoc.workspaceId,
       starred: guestDoc.starred,

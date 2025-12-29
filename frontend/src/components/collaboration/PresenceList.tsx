@@ -70,14 +70,17 @@ export const PresenceList: React.FC<PresenceListProps> = ({
   
   useEffect(() => {
     if (!provider) {
+      console.log('👥 [PresenceList] No provider available');
       setUsers([]);
       return;
     }
     
     const awareness = provider.awareness;
+    console.log('👥 [PresenceList] Provider connected, clientID:', awareness.clientID);
     
     const updateUsers = () => {
       const states = awareness.getStates();
+      console.log('👥 [PresenceList] Awareness states:', states.size, 'users');
       const activeUsers: User[] = [];
       
       states.forEach((state, clientId) => {
@@ -112,40 +115,45 @@ export const PresenceList: React.FC<PresenceListProps> = ({
   const visibleUsers = useMemo(() => users.slice(0, maxVisible), [users, maxVisible]);
   const hiddenCount = users.length - visibleUsers.length;
   
+  // 🔥 Show nothing when no other users - avatars are shown at cursor positions
   if (users.length === 0) {
     return null;
   }
   
+  // 🔥 Compact presence indicator - just shows count
+  // Avatars are now displayed at cursor positions in the document
   return (
-    <div className="fixed top-4 right-4 z-40 flex items-center gap-2">
-      {/* User Avatars */}
-      <div className="flex items-center -space-x-2">
-        {visibleUsers.map((user) => (
-          <UserAvatar key={user.clientId} user={user} />
-        ))}
+    <div className="fixed top-16 right-4 z-40">
+      <div 
+        className="flex items-center gap-2 px-3 py-2 rounded-full bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm border border-gray-200 dark:border-gray-700 shadow-lg cursor-pointer hover:shadow-xl transition-shadow"
+        title={users.map(u => u.name).join(', ')}
+      >
+        {/* Stacked mini avatars */}
+        <div className="flex items-center -space-x-1.5">
+          {visibleUsers.slice(0, 3).map((user) => (
+            <div
+              key={user.clientId}
+              className="w-6 h-6 rounded-full border-2 border-white dark:border-gray-800 flex items-center justify-center text-[10px] font-bold text-white shadow-sm"
+              style={{ backgroundColor: user.color }}
+              title={user.name}
+            >
+              {getInitials(user.name)}
+            </div>
+          ))}
+          {users.length > 3 && (
+            <div className="w-6 h-6 rounded-full border-2 border-white dark:border-gray-800 bg-gray-300 dark:bg-gray-600 flex items-center justify-center text-[10px] font-medium text-gray-700 dark:text-gray-200">
+              +{users.length - 3}
+            </div>
+          )}
+        </div>
         
-        {hiddenCount > 0 && (
-          <div
-            className="
-              w-8 h-8 rounded-full
-              bg-gray-200 dark:bg-gray-700
-              border-2 border-white dark:border-gray-900
-              flex items-center justify-center
-              text-xs font-medium text-gray-600 dark:text-gray-300
-            "
-            title={`${hiddenCount} more user${hiddenCount > 1 ? 's' : ''}`}
-          >
-            +{hiddenCount}
-          </div>
-        )}
-      </div>
-      
-      {/* Active Indicator */}
-      <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm">
-        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-        <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
-          {users.length} {users.length === 1 ? 'user' : 'users'} editing
-        </span>
+        {/* Live indicator */}
+        <div className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+            {users.length} live
+          </span>
+        </div>
       </div>
     </div>
   );

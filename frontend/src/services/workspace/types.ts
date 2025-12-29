@@ -6,6 +6,13 @@
  */
 
 /**
+ * Workspace Sync Mode
+ * - 'local': Guest workspace, never syncs
+ * - 'cloud': Authenticated workspace, syncs to backend
+ */
+export type WorkspaceSyncMode = 'local' | 'cloud';
+
+/**
  * Workspace - Top-level container for folders and documents
  */
 export interface Workspace {
@@ -16,10 +23,18 @@ export interface Workspace {
   createdAt: string;       // ISO 8601
   updatedAt: string;       // ISO 8601
   
+  // Sync mode - controls workspace behavior
+  syncMode: WorkspaceSyncMode;  // 🔥 NEW: 'local' for guests, 'cloud' for authenticated
+  
   // Sync metadata
   syncStatus: 'local' | 'synced' | 'syncing' | 'conflict';
+  cloudId?: string;        // Backend workspace ID (when synced)
   lastSyncedAt?: string;   // ISO 8601
   version: number;         // Optimistic locking
+  
+  // Owner info (for cloud workspaces)
+  ownerId?: string;
+  isShared?: boolean;
 }
 
 /**
@@ -43,6 +58,14 @@ export interface Folder {
 }
 
 /**
+ * Sync Mode - Controls whether a document auto-syncs to cloud
+ * - 'local-only': Never syncs (default for guests)
+ * - 'cloud-enabled': Automatically syncs when online
+ * - 'pending-sync': First sync in progress
+ */
+export type SyncMode = 'local-only' | 'cloud-enabled' | 'pending-sync';
+
+/**
  * Document Metadata + Content - Full document info (stored in IndexedDB)
  */
 export interface DocumentMeta {
@@ -58,8 +81,11 @@ export interface DocumentMeta {
   updatedAt: string;       // ISO 8601
   lastOpenedAt?: string;   // ISO 8601
   
+  // Sync mode - controls auto-sync behavior
+  syncMode: SyncMode;      // 🔥 NEW: Controls if document auto-syncs
+  
   // Sync metadata
-  syncStatus: 'local' | 'synced' | 'syncing' | 'conflict' | 'pending';
+  syncStatus: 'local' | 'synced' | 'syncing' | 'conflict' | 'pending' | 'modified' | 'error';
   cloudId?: string;        // Backend document ID (when synced)
   lastSyncedAt?: string;   // ISO 8601
   yjsVersion?: number;     // Canonical Yjs version from cloud

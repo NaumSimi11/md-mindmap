@@ -12,14 +12,32 @@
  * 4. UIStateProvider (modals & prompts)
  */
 
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useEffect } from 'react';
 import { SyncProvider } from './workspace/SyncContext';
 import { WorkspaceDataProvider } from './workspace/WorkspaceDataContext';
 import { DocumentDataProvider } from './workspace/DocumentDataContext';
 import { UIStateProvider } from './ui/UIStateContext';
+import { autoSyncManager } from '@/services/sync/AutoSyncManager';
 
 interface AppDataProviderProps {
   children: ReactNode;
+}
+
+/**
+ * AutoSyncInitializer - Initializes the auto-sync system
+ */
+function AutoSyncInitializer({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    console.log('🔄 [AutoSync] Initializing auto-sync system...');
+    autoSyncManager.init();
+    
+    return () => {
+      console.log('🔄 [AutoSync] Cleaning up auto-sync system...');
+      autoSyncManager.destroy();
+    };
+  }, []);
+
+  return <>{children}</>;
 }
 
 export function AppDataProvider({ children }: AppDataProviderProps) {
@@ -28,7 +46,9 @@ export function AppDataProvider({ children }: AppDataProviderProps) {
       <WorkspaceDataProvider>
         <DocumentDataProvider>
           <UIStateProvider>
-            {children}
+            <AutoSyncInitializer>
+              {children}
+            </AutoSyncInitializer>
           </UIStateProvider>
         </DocumentDataProvider>
       </WorkspaceDataProvider>

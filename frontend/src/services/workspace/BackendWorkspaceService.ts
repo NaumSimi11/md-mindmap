@@ -90,21 +90,35 @@ export class BackendWorkspaceService {
       console.log('📴 Backend service: Offline');
     });
     
-    // Listen for logout to reset state
-    window.addEventListener(EventNames.AUTH_LOGOUT, () => {
-      console.log('🚪 [BackendWorkspaceService] Logout detected, resetting state...');
-      this.reset();
+    // Listen for logout to reset state and clear cache
+    window.addEventListener(EventNames.AUTH_LOGOUT, async () => {
+      console.log('🚪 [BackendWorkspaceService] Logout detected, resetting state and clearing cache...');
+      await this.reset();
     });
   }
 
   /**
    * Reset service state on logout
    * Clears all cached data and resets initialization flag
+   * 
+   * 🔥 CRITICAL: Must clear IndexedDB cache to prevent cross-user data leakage!
+   * Without this, a new user logging in would see the previous user's cached data.
    */
-  reset(): void {
+  async reset(): Promise<void> {
     this.currentWorkspaceId = null;
     this.isInitialized = false;
-    console.log('✅ [BackendWorkspaceService] State reset');
+    
+    // 🔥 Clear ALL cached data to prevent cross-user data leakage
+    try {
+      await cacheDb.workspaces.clear();
+      await cacheDb.documents.clear();
+      await cacheDb.folders.clear();
+      await cacheDb.settings.clear();
+      await cacheDb.workspaceMappings.clear();
+      console.log('✅ [BackendWorkspaceService] State and cache cleared');
+    } catch (error) {
+      console.error('❌ [BackendWorkspaceService] Failed to clear cache:', error);
+    }
   }
 
   // ==========================================================================

@@ -33,6 +33,7 @@ import { AppDataProvider } from "./contexts/AppDataProvider";
 import { SyncHealthPanel } from "./components/sync/SyncHealthPanel"; // Task 5: Sync diagnostics
 import { GuestAccessHandler } from "./components/guest/GuestAccessHandler";
 import { WorkspaceSettingsPage } from "./components/workspace/WorkspaceSettingsPage";
+import SyncTest from "./pages/SyncTest"; // Sync mode testing
 
 const queryClient = new QueryClient();
 
@@ -96,6 +97,9 @@ const App = () => (
             
             {/* Task 5: Sync Health Diagnostics */}
             <Route path="/sync-health" element={<SyncHealthPanel />} />
+            
+            {/* Sync Mode Testing */}
+            <Route path="/sync-test" element={<SyncTest />} />
             
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
