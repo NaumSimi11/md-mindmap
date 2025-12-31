@@ -1,7 +1,9 @@
 # MDReader - Service Startup Script (Windows PowerShell)
 #
 # Usage:
-#   .\start-services.ps1              # Start with existing data
+#   .\start-services.ps1              # Interactive mode selection
+#   .\start-services.ps1 -Web         # Start in Web mode
+#   .\start-services.ps1 -Tauri       # Start in Tauri (Desktop) mode
 #   .\start-services.ps1 -Clean       # Clean database and start fresh
 #   .\start-services.ps1 -WithUser    # Start and create test user
 #
@@ -12,7 +14,9 @@
 
 param(
     [switch]$Clean,
-    [switch]$WithUser
+    [switch]$WithUser,
+    [switch]$Web,
+    [switch]$Tauri
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,9 +32,68 @@ $BACKEND_DIR = Join-Path $PROJECT_ROOT "backendv2"
 $FRONTEND_DIR = Join-Path $PROJECT_ROOT "frontend"
 $HOCUSPOCUS_DIR = Join-Path $PROJECT_ROOT "hocuspocus-server"
 
+# Determine run mode
+$RUN_MODE = ""
+if ($Web) {
+    $RUN_MODE = "web"
+}
+elseif ($Tauri) {
+    $RUN_MODE = "tauri"
+}
+
+# ----------------------------------------------------------------
+# Mode Selection (if not specified via args)
+# ----------------------------------------------------------------
+function Select-RunMode {
+    Write-Host ""
+    Write-Host "================================================================" -ForegroundColor Cyan
+    Write-Host "          MDReader - Choose Your Environment                   " -ForegroundColor Cyan
+    Write-Host "================================================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  Select how you want to run MDReader:" -ForegroundColor White
+    Write-Host ""
+    Write-Host "    [1]  " -ForegroundColor Green -NoNewline
+    Write-Host "Web Mode" -ForegroundColor White -NoNewline
+    Write-Host "         (Browser - Vite dev server)" -ForegroundColor DarkGray
+    Write-Host "    [2]  " -ForegroundColor Blue -NoNewline
+    Write-Host "Tauri Mode" -ForegroundColor White -NoNewline
+    Write-Host "       (Desktop App - Native window)" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  Tip: Use -Web or -Tauri flag to skip this prompt" -ForegroundColor DarkGray
+    Write-Host ""
+    
+    while ($true) {
+        $choice = Read-Host "  Enter your choice [1/2]"
+        switch ($choice) {
+            {$_ -in "1", "web", "w"} {
+                Write-Host ""
+                Write-Host "  Selected: Web Mode" -ForegroundColor Green
+                return "web"
+            }
+            {$_ -in "2", "tauri", "t", "desktop", "d"} {
+                Write-Host ""
+                Write-Host "  Selected: Tauri Desktop Mode" -ForegroundColor Blue
+                return "tauri"
+            }
+            default {
+                Write-Host "  Invalid choice. Please enter 1 or 2." -ForegroundColor Red
+            }
+        }
+    }
+}
+
+# Show mode selection if not specified
+if (-not $RUN_MODE) {
+    $RUN_MODE = Select-RunMode
+}
+
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host "      MDReader - Starting All Services (Windows)               " -ForegroundColor Cyan
+if ($RUN_MODE -eq "tauri") {
+    Write-Host "     MDReader - Starting Services (Tauri Desktop Mode)        " -ForegroundColor Cyan
+} else {
+    Write-Host "     MDReader - Starting Services (Web Mode)                  " -ForegroundColor Cyan
+}
 Write-Host "================================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -245,11 +308,15 @@ Start-Sleep -Seconds 5
 if (-not (Wait-ForService "localhost" $BACKEND_PORT "Backend API")) { exit 1 }
 
 # ----------------------------------------------------------------
-# Step 7: Start Frontend
+# Step 7: Start Frontend (Web or Tauri)
 # ----------------------------------------------------------------
 Write-Host ""
 Write-Host "----------------------------------------------------------------" -ForegroundColor White
-Write-Host "  Step 7: Starting Frontend" -ForegroundColor White
+if ($RUN_MODE -eq "tauri") {
+    Write-Host "  Step 7: Starting Tauri Desktop App" -ForegroundColor White
+} else {
+    Write-Host "  Step 7: Starting Frontend (Web)" -ForegroundColor White
+}
 Write-Host "----------------------------------------------------------------" -ForegroundColor White
 
 Set-Location $FRONTEND_DIR
@@ -260,14 +327,33 @@ if (-not (Test-Path "node_modules")) {
     npm install
 }
 
-Write-Host "[INFO] Starting React frontend on port $FRONTEND_PORT..." -ForegroundColor Blue
-
-# Start frontend in background
-$frontendScript = "Set-Location '$FRONTEND_DIR'; npm run dev"
-Start-Process powershell -ArgumentList "-NoExit", "-Command", $frontendScript -WindowStyle Minimized
-
-Start-Sleep -Seconds 5
-if (-not (Wait-ForService "localhost" $FRONTEND_PORT "Frontend")) { exit 1 }
+if ($RUN_MODE -eq "tauri") {
+    Write-Host "[INFO] Starting Tauri Desktop Application..." -ForegroundColor Blue
+    Write-Host "       (This will open a native desktop window)" -ForegroundColor DarkGray
+    
+    # Start Tauri in background (it handles its own dev server)
+    $tauriScript = "Set-Location '$FRONTEND_DIR'; npm run tauri:dev"
+    Start-Process powershell -ArgumentList "-NoExit", "-Command", $tauriScript -WindowStyle Normal
+    
+    # Wait a bit for Tauri to start (it takes longer than web)
+    Write-Host "[INFO] Waiting for Tauri to initialize..." -ForegroundColor Blue
+    Start-Sleep -Seconds 10
+    
+    if (-not (Wait-ForService "localhost" $FRONTEND_PORT "Tauri Dev Server" 60)) { 
+        Write-Host "[WARN] Tauri may still be starting. Check the Tauri window for errors." -ForegroundColor Yellow
+    }
+    
+    Write-Host "[OK] Tauri Desktop App is launching!" -ForegroundColor Green
+} else {
+    Write-Host "[INFO] Starting React frontend on port $FRONTEND_PORT..." -ForegroundColor Blue
+    
+    # Start frontend in background
+    $frontendScript = "Set-Location '$FRONTEND_DIR'; npm run dev"
+    Start-Process powershell -ArgumentList "-NoExit", "-Command", $frontendScript -WindowStyle Minimized
+    
+    Start-Sleep -Seconds 5
+    if (-not (Wait-ForService "localhost" $FRONTEND_PORT "Frontend")) { exit 1 }
+}
 
 # ----------------------------------------------------------------
 # Done!
@@ -283,7 +369,20 @@ Write-Host "  [OK] PostgreSQL:  localhost:$POSTGRES_PORT" -ForegroundColor White
 Write-Host "  [OK] Redis:       localhost:$REDIS_PORT" -ForegroundColor White
 Write-Host "  [OK] Hocuspocus:  ws://localhost:$HOCUSPOCUS_PORT" -ForegroundColor White
 Write-Host "  [OK] Backend:     http://localhost:$BACKEND_PORT" -ForegroundColor White
-Write-Host "  [OK] Frontend:    http://localhost:$FRONTEND_PORT" -ForegroundColor White
+if ($RUN_MODE -eq "tauri") {
+    Write-Host "  [OK] Tauri:       Desktop App" -ForegroundColor Blue
+} else {
+    Write-Host "  [OK] Frontend:    http://localhost:$FRONTEND_PORT" -ForegroundColor White
+}
+Write-Host ""
+
+Write-Host "MODE:" -ForegroundColor Cyan
+Write-Host "----------------------------------------------------------------" -ForegroundColor White
+if ($RUN_MODE -eq "tauri") {
+    Write-Host "  Tauri Desktop Mode - Native window should open automatically" -ForegroundColor Blue
+} else {
+    Write-Host "  Web Mode - Open in browser: http://localhost:$FRONTEND_PORT" -ForegroundColor Green
+}
 Write-Host ""
 
 if ($WithUser -or $Clean) {
@@ -294,17 +393,15 @@ if ($WithUser -or $Clean) {
     Write-Host ""
 }
 
-Write-Host "OPEN YOUR BROWSER:" -ForegroundColor Cyan
-Write-Host "----------------------------------------------------------------" -ForegroundColor White
-Write-Host "  http://localhost:$FRONTEND_PORT" -ForegroundColor Green
-Write-Host ""
 Write-Host "TO STOP ALL SERVICES:" -ForegroundColor Cyan
 Write-Host "----------------------------------------------------------------" -ForegroundColor White
 Write-Host "  .\stop-services.ps1" -ForegroundColor White
 Write-Host ""
 Write-Host "USAGE:" -ForegroundColor Cyan
 Write-Host "----------------------------------------------------------------" -ForegroundColor White
-Write-Host "  .\start-services.ps1              # Normal start" -ForegroundColor Gray
+Write-Host "  .\start-services.ps1              # Interactive mode" -ForegroundColor Gray
+Write-Host "  .\start-services.ps1 -Web         # Web mode" -ForegroundColor Gray
+Write-Host "  .\start-services.ps1 -Tauri       # Tauri desktop mode" -ForegroundColor Gray
 Write-Host "  .\start-services.ps1 -Clean       # Clean DB and start fresh" -ForegroundColor Gray
 Write-Host "  .\start-services.ps1 -WithUser    # Create test user" -ForegroundColor Gray
 Write-Host ""

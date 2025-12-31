@@ -5,7 +5,9 @@
 # ╚══════════════════════════════════════════════════════════════╝
 #
 # Usage:
-#   ./start-services.sh              # Start with existing data
+#   ./start-services.sh              # Interactive mode selection
+#   ./start-services.sh --web        # Start in Web mode
+#   ./start-services.sh --tauri      # Start in Tauri (Desktop) mode
 #   ./start-services.sh --clean      # Clean database and start fresh
 #   ./start-services.sh --with-user  # Start and create test user
 
@@ -20,6 +22,7 @@ MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 BOLD='\033[1m'
+DIM='\033[2m'
 
 # Configuration
 BACKEND_PORT=7001
@@ -33,6 +36,8 @@ FRONTEND_DIR="$PROJECT_ROOT/frontend"
 # Parse arguments
 CLEAN_DB=false
 CREATE_USER=false
+RUN_MODE=""  # Will be "web" or "tauri"
+
 for arg in "$@"; do
     case $arg in
         --clean)
@@ -43,14 +48,72 @@ for arg in "$@"; do
             CREATE_USER=true
             shift
             ;;
+        --web)
+            RUN_MODE="web"
+            shift
+            ;;
+        --tauri)
+            RUN_MODE="tauri"
+            shift
+            ;;
         *)
             ;;
     esac
 done
 
+# ----------------------------------------------------------------
+# Mode Selection (if not specified via args)
+# ----------------------------------------------------------------
+select_mode() {
+    echo -e "${CYAN}${BOLD}"
+    echo "╔══════════════════════════════════════════════════════════════╗"
+    echo "║          MDReader - Choose Your Environment                  ║"
+    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo -e "${NC}"
+    echo ""
+    echo -e "  ${BOLD}Select how you want to run MDReader:${NC}"
+    echo ""
+    echo -e "    ${GREEN}[1]${NC}  🌐  ${BOLD}Web Mode${NC}         ${DIM}(Browser - Vite dev server)${NC}"
+    echo -e "    ${BLUE}[2]${NC}  🖥️   ${BOLD}Tauri Mode${NC}       ${DIM}(Desktop App - Native window)${NC}"
+    echo ""
+    echo -e "  ${DIM}Tip: Use --web or --tauri flag to skip this prompt${NC}"
+    echo ""
+    
+    while true; do
+        read -p "  Enter your choice [1/2]: " choice
+        case $choice in
+            1|web|w)
+                RUN_MODE="web"
+                echo ""
+                echo -e "  ${GREEN}✓${NC} Selected: ${BOLD}Web Mode${NC}"
+                break
+                ;;
+            2|tauri|t|desktop|d)
+                RUN_MODE="tauri"
+                echo ""
+                echo -e "  ${BLUE}✓${NC} Selected: ${BOLD}Tauri Desktop Mode${NC}"
+                break
+                ;;
+            *)
+                echo -e "  ${RED}Invalid choice. Please enter 1 or 2.${NC}"
+                ;;
+        esac
+    done
+    echo ""
+}
+
+# Show mode selection if not specified
+if [ -z "$RUN_MODE" ]; then
+    select_mode
+fi
+
 echo -e "${CYAN}${BOLD}"
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║          MDReader - Starting All Services                    ║"
+if [ "$RUN_MODE" = "tauri" ]; then
+echo "║     MDReader - Starting Services (Tauri Desktop Mode)        ║"
+else
+echo "║     MDReader - Starting Services (Web Mode)                  ║"
+fi
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
@@ -222,23 +285,59 @@ echo $BACKEND_PID > /tmp/mdreader-backend.pid
 sleep 3
 wait_for_service localhost $BACKEND_PORT "Backend API"
 
-# Step 7: Start Frontend
+# Step 7: Start Frontend (Web or Tauri)
 echo ""
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}  Step 7: Starting Frontend${NC}"
+if [ "$RUN_MODE" = "tauri" ]; then
+    echo -e "${BOLD}  Step 7: Starting Tauri Desktop App${NC}"
+else
+    echo -e "${BOLD}  Step 7: Starting Frontend (Web)${NC}"
+fi
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 cd "$FRONTEND_DIR"
-echo -e "${BLUE}⚛️  Starting React frontend on port $FRONTEND_PORT...${NC}"
 
-# Start frontend in background
-npm run dev > /tmp/mdreader-frontend.log 2>&1 &
-FRONTEND_PID=$!
-echo $FRONTEND_PID > /tmp/mdreader-frontend.pid
+# Check if node_modules exists
+if [ ! -d "node_modules" ]; then
+    echo -e "${YELLOW}📦 Installing frontend dependencies...${NC}"
+    npm install
+fi
 
-# Wait for frontend
-sleep 5
-wait_for_service localhost $FRONTEND_PORT "Frontend"
+if [ "$RUN_MODE" = "tauri" ]; then
+    echo -e "${BLUE}🖥️  Starting Tauri Desktop Application...${NC}"
+    echo -e "${DIM}   (This will open a native desktop window)${NC}"
+    
+    # Check if Tauri CLI is available
+    if ! npx tauri --version >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  Installing Tauri CLI...${NC}"
+        npm install @tauri-apps/cli
+    fi
+    
+    # Start Tauri in background (it handles its own dev server)
+    npm run tauri:dev > /tmp/mdreader-tauri.log 2>&1 &
+    FRONTEND_PID=$!
+    echo $FRONTEND_PID > /tmp/mdreader-frontend.pid
+    
+    # Wait a bit for Tauri to start (it takes longer than web)
+    echo -e "${BLUE}⏳ Waiting for Tauri to initialize...${NC}"
+    sleep 8
+    
+    # Tauri runs its own vite server, so check for frontend port
+    wait_for_service localhost $FRONTEND_PORT "Tauri Dev Server"
+    
+    echo -e "${GREEN}✅ Tauri Desktop App is launching!${NC}"
+else
+    echo -e "${BLUE}⚛️  Starting React frontend on port $FRONTEND_PORT...${NC}"
+    
+    # Start frontend in background
+    npm run dev > /tmp/mdreader-frontend.log 2>&1 &
+    FRONTEND_PID=$!
+    echo $FRONTEND_PID > /tmp/mdreader-frontend.pid
+    
+    # Wait for frontend
+    sleep 5
+    wait_for_service localhost $FRONTEND_PORT "Frontend"
+fi
 
 # Success Summary
 echo ""
@@ -254,12 +353,20 @@ echo -e "  ${GREEN}✅${NC} PostgreSQL:  ${CYAN}localhost:$POSTGRES_PORT${NC}"
 echo -e "  ${GREEN}✅${NC} Redis:       ${CYAN}localhost:$REDIS_PORT${NC}"
 echo -e "  ${GREEN}✅${NC} Hocuspocus:  ${CYAN}ws://localhost:1234${NC}  (PID: $HOCUSPOCUS_PID)"
 echo -e "  ${GREEN}✅${NC} Backend:     ${CYAN}http://localhost:$BACKEND_PORT${NC}  (PID: $BACKEND_PID)"
+if [ "$RUN_MODE" = "tauri" ]; then
+echo -e "  ${GREEN}✅${NC} Tauri:       ${BLUE}Desktop App${NC}  (PID: $FRONTEND_PID)"
+else
 echo -e "  ${GREEN}✅${NC} Frontend:    ${CYAN}http://localhost:$FRONTEND_PORT${NC}  (PID: $FRONTEND_PID)"
+fi
 echo ""
 
-echo -e "${BOLD}🌐 OPEN YOUR BROWSER:${NC}"
+echo -e "${BOLD}🎯 MODE:${NC}"
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "  ${MAGENTA}${BOLD}http://localhost:$FRONTEND_PORT${NC}"
+if [ "$RUN_MODE" = "tauri" ]; then
+echo -e "  ${BLUE}🖥️  Tauri Desktop Mode${NC} - Native window should open automatically"
+else
+echo -e "  ${GREEN}🌐 Web Mode${NC} - Open in browser: ${MAGENTA}${BOLD}http://localhost:$FRONTEND_PORT${NC}"
+fi
 echo ""
 
 if [ "$CREATE_USER" = true ] || [ "$CLEAN_DB" = true ]; then
@@ -272,16 +379,22 @@ fi
 
 echo -e "${BOLD}📝 LOGS:${NC}"
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "  Backend:  ${CYAN}tail -f /tmp/mdreader-backend.log${NC}"
-echo -e "  Frontend: ${CYAN}tail -f /tmp/mdreader-frontend.log${NC}"
+echo -e "  Backend:    ${CYAN}tail -f /tmp/mdreader-backend.log${NC}"
+if [ "$RUN_MODE" = "tauri" ]; then
+echo -e "  Tauri:      ${CYAN}tail -f /tmp/mdreader-tauri.log${NC}"
+else
+echo -e "  Frontend:   ${CYAN}tail -f /tmp/mdreader-frontend.log${NC}"
+fi
+echo -e "  Hocuspocus: ${CYAN}tail -f /tmp/mdreader-hocuspocus.log${NC}"
 echo ""
 
 echo -e "${BOLD}⚙️  MANAGEMENT:${NC}"
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "  Stop all:    ${CYAN}./stop-services.sh${NC}"
-echo -e "  Clean start: ${CYAN}./start-services.sh --clean${NC}"
-echo -e "  With user:   ${CYAN}./start-services.sh --with-user${NC}"
+echo -e "  Stop all:      ${CYAN}./stop-services.sh${NC}"
+echo -e "  Web mode:      ${CYAN}./start-services.sh --web${NC}"
+echo -e "  Tauri mode:    ${CYAN}./start-services.sh --tauri${NC}"
+echo -e "  Clean start:   ${CYAN}./start-services.sh --clean${NC}"
+echo -e "  With user:     ${CYAN}./start-services.sh --with-user${NC}"
 echo ""
 
 echo -e "${GREEN}🚀 Ready to go!${NC}"
-

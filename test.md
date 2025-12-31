@@ -38,5 +38,5 @@ things tha tneed to be done :
  - we do not show history on not logged users for now - we should hide history if we are not on the cloud - or we shoyld implement offline history ( this to be brainstoemd , leave it for later)
 
  - we should fix the tauri , and test on tauri from now on 
- - we should change the startup script - when we run it - it shold ask us if we want to run on web or tauri
+ - ✅ DONE: updated startup scripts (start-services.sh + start-services.ps1) to ask for Web or Tauri mode interactively
 
