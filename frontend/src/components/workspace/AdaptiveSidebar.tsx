@@ -17,7 +17,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { FileStack, Hash, ChevronLeft, ChevronRight, FolderOpen, Plus, Sparkles, Zap, PanelLeftClose } from 'lucide-react';
+import { FileStack, Hash, ChevronRight, FolderOpen, PanelLeftClose } from 'lucide-react';
 import { WorkspaceSidebar } from './WorkspaceSidebar';
 import { DocumentOutline } from '../editor/DocumentOutline';
 import { ContextDocuments } from './ContextDocuments';
@@ -126,8 +126,8 @@ export function AdaptiveSidebar({
   if (collapsed) {
     return (
       <div className="relative w-12 flex flex-col items-center py-4">
-        {/* Apple-Inspired Collapsed Background */}
-        <div className="absolute inset-0 bg-gradient-to-b from-white/95 via-slate-50/90 to-white/95 dark:from-slate-900/95 dark:via-slate-800/90 dark:to-slate-900/95 backdrop-blur-2xl border-r border-slate-200/50 dark:border-slate-700/50 shadow-[0_0_20px_rgba(0,0,0,0.05)] dark:shadow-[0_0_20px_rgba(0,0,0,0.2)] rounded-r-2xl" />
+        {/* Apple-Inspired Collapsed Background - Enhanced light mode */}
+        <div className="absolute inset-0 bg-gradient-to-b from-white via-slate-50/95 to-white dark:from-slate-900/95 dark:via-slate-800/90 dark:to-slate-900/95 backdrop-blur-2xl border-r border-slate-300/60 dark:border-slate-700/50 shadow-[2px_0_12px_rgba(0,0,0,0.08)] dark:shadow-[0_0_20px_rgba(0,0,0,0.2)] rounded-r-2xl" />
 
         {/* Subtle Apple gradients */}
         <div className="absolute inset-0 overflow-hidden rounded-r-2xl dark:opacity-30">
@@ -178,8 +178,8 @@ export function AdaptiveSidebar({
 
   return (
     <div className="relative w-72 flex flex-col h-full">
-      {/* Apple-Inspired Premium Background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-white/95 via-slate-50/90 to-white/95 dark:from-slate-900/95 dark:via-slate-800/90 dark:to-slate-900/95 backdrop-blur-2xl border-r border-slate-200/50 dark:border-slate-700/50 shadow-[0_0_40px_rgba(0,0,0,0.05)] dark:shadow-[0_0_40px_rgba(0,0,0,0.2)]" />
+      {/* Apple-Inspired Premium Background - Enhanced light mode visibility */}
+      <div className="absolute inset-0 bg-gradient-to-b from-white via-slate-50/95 to-white dark:from-slate-900/95 dark:via-slate-800/90 dark:to-slate-900/95 backdrop-blur-2xl border-r border-slate-300/60 dark:border-slate-700/50 shadow-[4px_0_16px_rgba(0,0,0,0.08)] dark:shadow-[0_0_40px_rgba(0,0,0,0.2)]" />
 
       {/* Apple-Style Subtle Animated Gradients - Only in Light Mode */}
       <div className="absolute inset-0 overflow-hidden rounded-r-2xl dark:opacity-30">
@@ -290,19 +290,6 @@ export function AdaptiveSidebar({
                   </div>
                 </div>
               )}
-            </div>
-
-            {/* Fixed-position collapse button */}
-            <div className="fixed bottom-6 left-[calc(16rem+1rem)] z-50">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onToggleCollapse}
-                className="justify-center gap-2 text-sm bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl border border-slate-200/60 dark:border-slate-700/60 hover:bg-white dark:hover:bg-slate-800 hover:shadow-lg hover:shadow-blue-500/30 transition-all duration-300 rounded-xl py-2.5 px-4 shadow-lg"
-              >
-                <ChevronLeft className="h-4 w-4" />
-                <span className="font-medium hidden sm:inline">Collapse</span>
-              </Button>
             </div>
           </div>
         ) : (

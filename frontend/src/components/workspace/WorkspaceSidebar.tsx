@@ -792,7 +792,7 @@ export function WorkspaceSidebar({
       </ScrollArea>
 
       {/* Footer Stats - Always visible at bottom */}
-      <div className="flex-shrink-0 p-3 border-t border-border text-xs text-slate-600 dark:text-slate-400 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+      <div className="flex-shrink-0 p-3 border-t border-slate-300/70 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-400 bg-slate-50/80 dark:bg-slate-900/50 backdrop-blur-sm shadow-[0_-2px_8px_rgba(0,0,0,0.04)] dark:shadow-none">
         <div className="flex items-center justify-between">
           <span>{backendDocuments.length} documents</span>
           <span>{folderTree.length} folders</span>

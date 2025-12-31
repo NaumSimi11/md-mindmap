@@ -516,13 +516,15 @@ CONSTRAINTS:
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] md:max-w-3xl lg:max-w-4xl h-[90vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-primary" />
+      <DialogContent className="w-[90vw] max-w-3xl max-h-[85vh] flex flex-col bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-2xl rounded-2xl overflow-hidden p-0">
+        <DialogHeader className="flex-shrink-0 p-4 pb-3 border-b border-slate-200/50 dark:border-slate-700/50">
+          <DialogTitle className="flex items-center gap-3 text-lg font-bold text-slate-900 dark:text-white">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-purple-500/25">
+              <Sparkles className="w-4 h-4 text-white" />
+            </div>
             AI Assistant
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
             {selectedText
               ? `Working with ${wordCount} selected words`
               : `Based on your document (${wordCount} words)`}
@@ -530,31 +532,42 @@ CONSTRAINTS:
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'text' | 'diagrams')} className="flex-1 flex flex-col">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="text" className="flex items-center gap-2">
-              <PenLine className="w-4 h-4" />
-              Text
-            </TabsTrigger>
-            <TabsTrigger value="diagrams" className="flex items-center gap-2">
-              <Workflow className="w-4 h-4" />
-              Diagrams
-            </TabsTrigger>
-          </TabsList>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'text' | 'diagrams')} className="flex-1 flex flex-col min-h-0 px-4 pt-3 overflow-hidden">
+          {/* Tabs container with connected background */}
+          <div className="flex-shrink-0 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-1 mb-3">
+            <TabsList className="grid w-full grid-cols-2 bg-transparent">
+              <TabsTrigger 
+                value="text" 
+                className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold transition-all data-[state=active]:bg-white data-[state=active]:dark:bg-slate-900 data-[state=active]:shadow-md data-[state=active]:text-violet-600 data-[state=active]:dark:text-violet-400 data-[state=inactive]:text-slate-500 data-[state=inactive]:dark:text-slate-400 data-[state=inactive]:hover:text-slate-700 data-[state=inactive]:dark:hover:text-slate-300"
+              >
+                <PenLine className="w-4 h-4" />
+                Text
+              </TabsTrigger>
+              <TabsTrigger 
+                value="diagrams" 
+                className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold transition-all data-[state=active]:bg-white data-[state=active]:dark:bg-slate-900 data-[state=active]:shadow-md data-[state=active]:text-cyan-600 data-[state=active]:dark:text-cyan-400 data-[state=inactive]:text-slate-500 data-[state=inactive]:dark:text-slate-400 data-[state=inactive]:hover:text-slate-700 data-[state=inactive]:dark:hover:text-slate-300"
+              >
+                <Workflow className="w-4 h-4" />
+                Diagrams
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* TEXT TAB */}
-          <TabsContent value="text" className="flex-1 flex flex-col mt-4">
-            <ScrollArea className="flex-1 pr-4">
-              <div className="space-y-4">
+          <TabsContent value="text" className="flex-1 flex flex-col min-h-0 overflow-hidden m-0">
+            <ScrollArea className="flex-1 min-h-0">
+              <div className="space-y-4 pr-3">
                 {/* AI Warning */}
                 {!aiService.isConfigured() && (
-                  <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-500 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1">
-                      <p className="text-xs font-medium text-yellow-900 dark:text-yellow-100">
+                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 border border-amber-200/60 dark:border-amber-700/40 rounded-xl p-3 flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center flex-shrink-0">
+                      <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
                         AI service not configured
                       </p>
-                      <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-0.5">
+                      <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
                         Add your OpenAI API key in the .env file to use AI features.
                       </p>
                     </div>
@@ -603,44 +616,45 @@ CONSTRAINTS:
                   </div>
                 )}
 
-                {/* Quick Actions */}
+                {/* Quick Actions - Horizontal scroll */}
                 <div>
-                  <Label className="text-xs text-muted-foreground mb-2 block">Quick Actions</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {TEXT_ACTIONS.map((action) => (
-                      <button
-                        key={action.id}
-                        onClick={() => handleTextAction(action)}
-                        className="flex flex-col items-center gap-1 p-3 rounded-lg border hover:border-primary hover:bg-primary/5 transition-all group"
-                        title={action.description}
-                      >
-                        <div className="text-primary group-hover:scale-110 transition-transform">
-                          {action.icon}
-                        </div>
-                        <span className="text-xs font-medium">{action.label}</span>
-                      </button>
-                    ))}
+                  <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 block">Quick Actions</Label>
+                  <div className="overflow-x-auto scrollbar-thin pb-2 -mx-1 px-1">
+                    <div className="flex gap-3">
+                      {TEXT_ACTIONS.map((action) => (
+                        <button
+                          key={action.id}
+                          onClick={() => handleTextAction(action)}
+                          className="flex-shrink-0 w-24 flex flex-col items-center gap-2 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-violet-400 dark:hover:border-violet-500 hover:bg-violet-50 dark:hover:bg-violet-950/30 hover:shadow-md transition-all group"
+                          title={action.description}
+                        >
+                          <div className="w-9 h-9 rounded-lg bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center text-violet-600 dark:text-violet-400 group-hover:scale-110 transition-transform">
+                            {action.icon}
+                          </div>
+                          <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 text-center leading-tight">{action.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
                 {/* Prompt Input */}
-                <div>
-                  <Label className="text-xs text-muted-foreground mb-2 block">
+                <div className="relative">
+                  <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 block">
                     Your prompt {contextFiles.length > 0 && '(use @ to mention files)'}
                   </Label>
-                  <Textarea
+                  <textarea
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     onKeyDown={handleAtMention}
                     placeholder={selectedText ? "What would you like to do with the selected text?" : "What would you like AI to write?"}
-                    className="min-h-[120px] resize-none"
+                    className="w-full min-h-[80px] resize-none border border-slate-200 dark:border-slate-700 focus:border-violet-500 dark:focus:border-violet-400 rounded-xl text-sm bg-white dark:bg-slate-800/50 p-3 focus:outline-none"
                   />
 
                   {/* File Picker Dropdown */}
                   {showFilePicker && contextFiles.length > 0 && (
                     <div
-                      className="absolute z-50 bg-popover border rounded-lg shadow-lg p-2 max-h-48 overflow-auto"
-                      style={{ top: filePickerPosition.top, left: filePickerPosition.left }}
+                      className="absolute z-50 bg-popover border rounded-lg shadow-lg p-2 max-h-48 overflow-auto top-full left-0 mt-1"
                     >
                       {contextFiles.map((file) => (
                         <button
@@ -658,38 +672,20 @@ CONSTRAINTS:
               </div>
             </ScrollArea>
 
-            {/* Actions */}
-            <div className="flex items-center justify-between pt-4 border-t mt-4">
-              <div className="text-xs text-muted-foreground">
-                {getGuestCredits().remaining} AI credits remaining
+            {/* Actions - Fixed at bottom */}
+            <div className="flex-shrink-0 flex items-center justify-between p-4 border-t border-slate-200/60 dark:border-slate-700/60 mt-3 bg-white/80 dark:bg-slate-900/80">
+              <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                {getGuestCredits().remaining} credits
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => onOpenChange(false)}>
+                <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
                   Cancel
                 </Button>
-                {lastResult && (
-                  <Button
-                    onClick={handleRegenerate}
-                    disabled={isGenerating}
-                    variant="outline"
-                  >
-                    {isGenerating ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Regenerating...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4 mr-2" />
-                        Regenerate
-                      </>
-                    )}
-                  </Button>
-                )}
                 <Button
+                  size="sm"
                   onClick={() => handleGenerateText()}
                   disabled={isGenerating || !prompt.trim()}
-                  className="gradient-primary text-white"
+                  className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white shadow-lg shadow-violet-500/25 border-0"
                 >
                   {isGenerating ? (
                     <>
@@ -708,18 +704,20 @@ CONSTRAINTS:
           </TabsContent>
 
           {/* DIAGRAMS TAB */}
-          <TabsContent value="diagrams" className="flex-1 flex flex-col mt-4">
-            <ScrollArea className="flex-1 pr-4">
-              <div className="space-y-4">
+          <TabsContent value="diagrams" className="flex-1 flex flex-col min-h-0 overflow-hidden m-0">
+            <ScrollArea className="flex-1 min-h-0">
+              <div className="space-y-4 pr-3">
                 {/* AI Warning */}
                 {!aiService.isConfigured() && (
-                  <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-500 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1">
-                      <p className="text-xs font-medium text-yellow-900 dark:text-yellow-100">
+                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 border border-amber-200/60 dark:border-amber-700/40 rounded-xl p-3 flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center flex-shrink-0">
+                      <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
                         AI service not configured
                       </p>
-                      <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-0.5">
+                      <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
                         Add your OpenAI API key in the .env file to use AI features.
                       </p>
                     </div>
@@ -768,27 +766,31 @@ CONSTRAINTS:
                   </div>
                 )}
 
-                {/* Diagram Type Selector */}
+                {/* Diagram Type Selector - Horizontal scroll */}
                 <div>
-                  <Label className="text-xs text-muted-foreground mb-2 block">Diagram Type</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {DIAGRAM_TYPES.map((type) => {
-                      const Icon = type.icon;
-                      return (
-                        <button
-                          key={type.id}
-                          onClick={() => setSelectedDiagramType(type.id)}
-                          className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all ${selectedDiagramType === type.id
-                            ? 'border-primary bg-primary/10'
-                            : 'hover:border-primary hover:bg-primary/5'
-                            }`}
-                          title={type.description}
-                        >
-                          <Icon className="w-4 h-4 text-primary" />
-                          <span className="text-xs font-medium">{type.title}</span>
-                        </button>
-                      );
-                    })}
+                  <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 block">Diagram Type</Label>
+                  <div className="overflow-x-auto scrollbar-thin pb-2 -mx-1 px-1">
+                    <div className="flex gap-3">
+                      {DIAGRAM_TYPES.map((type) => {
+                        const Icon = type.icon;
+                        return (
+                          <button
+                            key={type.id}
+                            onClick={() => setSelectedDiagramType(type.id)}
+                            className={`flex-shrink-0 w-24 flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${selectedDiagramType === type.id
+                              ? 'border-cyan-400 dark:border-cyan-500 bg-cyan-50 dark:bg-cyan-950/30 shadow-md'
+                              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-cyan-400 dark:hover:border-cyan-500 hover:bg-cyan-50 dark:hover:bg-cyan-950/30'
+                              }`}
+                            title={type.description}
+                          >
+                            <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${selectedDiagramType === type.id ? 'bg-cyan-100 dark:bg-cyan-900/50' : 'bg-slate-100 dark:bg-slate-700/50'}`}>
+                              <Icon className={`w-5 h-5 ${selectedDiagramType === type.id ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-500 dark:text-slate-400'}`} />
+                            </div>
+                            <span className={`text-[11px] font-semibold text-center leading-tight ${selectedDiagramType === type.id ? 'text-cyan-700 dark:text-cyan-300' : 'text-slate-700 dark:text-slate-300'}`}>{type.title}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 
@@ -805,23 +807,22 @@ CONSTRAINTS:
                 </div>
 
                 {/* Prompt Input */}
-                <div>
-                  <Label className="text-xs text-muted-foreground mb-2 block">
+                <div className="relative">
+                  <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 block">
                     Describe your diagram {contextFiles.length > 0 && '(use @ to mention files)'}
                   </Label>
-                  <Textarea
+                  <textarea
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     onKeyDown={handleAtMention}
                     placeholder={enhanceMode ? "How would you like to improve this diagram?" : getAutoDiagramPrompt() || "Describe the diagram you want to create..."}
-                    className="min-h-[100px] resize-none"
+                    className="w-full min-h-[70px] resize-none border border-slate-200 dark:border-slate-700 focus:border-cyan-500 dark:focus:border-cyan-400 rounded-xl text-sm bg-white dark:bg-slate-800/50 p-3 focus:outline-none"
                   />
 
                   {/* File Picker Dropdown */}
                   {showFilePicker && contextFiles.length > 0 && (
                     <div
-                      className="absolute z-50 bg-popover border rounded-lg shadow-lg p-2 max-h-48 overflow-auto"
-                      style={{ top: filePickerPosition.top, left: filePickerPosition.left }}
+                      className="absolute z-50 bg-popover border rounded-lg shadow-lg p-2 max-h-48 overflow-auto top-full left-0 mt-1"
                     >
                       {contextFiles.map((file) => (
                         <button
@@ -880,47 +881,30 @@ CONSTRAINTS:
               </div>
             </ScrollArea>
 
-            {/* Actions */}
-            <div className="flex items-center justify-between pt-4 border-t mt-4">
-              <div className="text-xs text-muted-foreground">
-                {getGuestCredits().remaining} AI credits remaining
+            {/* Actions - Fixed at bottom */}
+            <div className="flex-shrink-0 flex items-center justify-between p-4 border-t border-slate-200/60 dark:border-slate-700/60 mt-3 bg-white/80 dark:bg-slate-900/80">
+              <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                {getGuestCredits().remaining} credits
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => onOpenChange(false)}>
+                <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
                   Cancel
                 </Button>
-                {generatedDiagramCode && (
-                  <Button
-                    onClick={handleRegenerate}
-                    disabled={isGenerating}
-                    variant="outline"
-                  >
-                    {isGenerating ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Regenerating...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4 mr-2" />
-                        Regenerate
-                      </>
-                    )}
-                  </Button>
-                )}
                 {generatedDiagramCode ? (
                   <Button
+                    size="sm"
                     onClick={handleInsertDiagram}
-                    className="bg-green-600 hover:bg-green-700 text-white"
+                    className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/25 border-0"
                   >
                     <FileText className="w-4 h-4 mr-2" />
-                    Insert Diagram
+                    Insert
                   </Button>
                 ) : (
                   <Button
+                    size="sm"
                     onClick={handleGenerateDiagram}
                     disabled={isGenerating}
-                    className="gradient-primary text-white"
+                    className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-lg shadow-cyan-500/25 border-0"
                   >
                     {isGenerating ? (
                       <>
@@ -930,7 +914,7 @@ CONSTRAINTS:
                     ) : (
                       <>
                         <Sparkles className="w-4 h-4 mr-2" />
-                        Generate Diagram
+                        Generate
                       </>
                     )}
                   </Button>

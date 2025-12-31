@@ -276,55 +276,51 @@ export function WorkspaceHome({
           </div>
 
           {hasAnyDocs ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
               {recentDocs.map((doc, index) => (
                 <button
                   key={doc.id}
                   onClick={() => onDocumentSelect(doc.id)}
-                  className="group relative overflow-hidden rounded-2xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200/50 dark:border-slate-700/50 hover:border-blue-500/50 transition-all duration-300 hover:shadow-[0_20px_40px_rgba(59,130,246,0.15)] hover:-translate-y-1"
-                  style={{ animationDelay: `${index * 100}ms` }}
+                  className="group relative overflow-hidden rounded-2xl bg-white/90 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200/60 dark:border-slate-700/50 hover:border-blue-500/50 transition-all duration-300 hover:shadow-[0_12px_32px_rgba(59,130,246,0.12)] hover:-translate-y-1 text-left"
+                  style={{ animationDelay: `${index * 50}ms` }}
                 >
                   {/* Gradient overlay on hover */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/0 via-transparent to-sky-500/0 group-hover:from-blue-500/5 group-hover:via-blue-500/2 group-hover:to-sky-500/5 transition-all duration-500" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/0 to-sky-500/0 group-hover:from-blue-500/5 group-hover:to-sky-500/5 transition-all duration-300" />
 
-                  {/* Animated border effect */}
-                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <div className="relative p-5 flex items-start gap-4">
+                    {/* Icon */}
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-100 to-sky-100 dark:from-blue-500/15 dark:to-sky-600/15 flex items-center justify-center group-hover:scale-105 transition-transform duration-300 flex-shrink-0 shadow-sm border border-blue-200/50 dark:border-blue-500/20">
+                      {getDocumentIcon(doc.type)}
+                    </div>
 
-                  <div className="relative p-7 flex flex-col justify-center min-h-[140px]">
-                    {/* Header: icon + title row */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4 min-w-0">
-                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500/15 to-sky-600/15 flex items-center justify-center group-hover:scale-110 group-hover:bg-blue-500/20 transition-all duration-500 shrink-0">
-                          {getDocumentIcon(doc.type)}
-                        </div>
-                        <div className="min-w-0 flex flex-col gap-1.5">
-                          <h3 className="font-bold text-base text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
-                            {doc.title || 'Untitled Document'}
-                          </h3>
-                          <div className="flex items-center gap-2.5 text-[11px] text-slate-500 dark:text-slate-400">
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800/80 text-[10px] font-semibold text-slate-600 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50">
-                              {getDocumentIcon(doc.type)}
-                              <span className="capitalize tracking-wide">{getDocumentTypeLabel(doc.type)}</span>
-                            </span>
-                            {(doc.lastOpenedAt || doc.updatedAt) && (
-                              <span className="text-[11px] text-slate-500 dark:text-slate-500 font-medium">
-                                {new Date((doc.lastOpenedAt || doc.updatedAt) as any).toLocaleDateString()}
-                              </span>
-                            )}
-                          </div>
-                        </div>
+                    {/* Content */}
+                    <div className="flex-1 min-w-0 flex flex-col gap-2">
+                      {/* Title row with star */}
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-semibold text-sm text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2 leading-snug">
+                          {doc.title || 'Untitled Document'}
+                        </h3>
+                        {doc.starred && (
+                          <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500 flex-shrink-0 mt-0.5" />
+                        )}
                       </div>
 
-                      {doc.starred && (
-                        <div className="w-8 h-8 rounded-xl bg-yellow-500/10 flex items-center justify-center shrink-0 border border-yellow-500/20 shadow-sm">
-                          <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                        </div>
-                      )}
+                      {/* Metadata row */}
+                      <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800/80 text-[10px] font-medium text-slate-600 dark:text-slate-400">
+                          {getDocumentTypeLabel(doc.type)}
+                        </span>
+                        {(doc.lastOpenedAt || doc.updatedAt) && (
+                          <span className="text-slate-400 dark:text-slate-500">
+                            {new Date((doc.lastOpenedAt || doc.updatedAt) as any).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
                   {/* Shine effect */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out" />
                 </button>
               ))}
             </div>

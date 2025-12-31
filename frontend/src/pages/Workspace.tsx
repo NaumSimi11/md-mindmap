@@ -16,7 +16,7 @@ import { DesktopWorkspaceSelector } from '@/components/workspace/DesktopWorkspac
 // import { SyncStatusIndicator } from '@/components/offline/SyncStatusIndicator'; // ⚠️ REMOVED - Now in WYSIWYGEditor
 import { WorkspaceHome } from '@/components/workspace/WorkspaceHome';
 import { FileWatcherIndicator } from '@/components/workspace/FileWatcherIndicator';
-import { CollaborationSidebar } from '@/components/workspace/CollaborationSidebar';
+// CollaborationSidebar removed - not implemented yet
 import { QuickSwitcherModal } from '@/components/workspace/QuickSwitcherModal';
 import { WorkspaceMembersModal } from '@/components/workspace/WorkspaceMembersModal';
 import { useQuickSwitcher } from '@/hooks/useQuickSwitcher';
@@ -30,7 +30,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Search, Sparkles, Presentation as PresentationIcon, User, Settings, LogOut, Clock, Database, Users } from 'lucide-react';
+import { Plus, Search, Sparkles, Presentation as PresentationIcon, User, Settings, LogOut, Clock, Database, X } from 'lucide-react';
 import { getGuestCredits } from '@/lib/guestCredits';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { usePlatform } from '@/contexts/PlatformContext';
@@ -128,7 +128,7 @@ export default function Workspace() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
-  const [showCollaborationSidebar, setShowCollaborationSidebar] = useState(false);
+  // Collaboration sidebar removed - not implemented yet
   const [activityEvents, setActivityEvents] = useState<any[]>([]);
   const [websocketProvider, setWebsocketProvider] = useState<WebsocketProvider | null>(null);
 
@@ -913,7 +913,7 @@ export default function Workspace() {
         {!focusMode && (
           <div className="relative flex-shrink-0 px-3 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4 bg-white dark:bg-slate-900">
             {/* Premium background with gradients and glassmorphism */}
-            <div className="absolute inset-0 bg-gradient-to-r from-white via-slate-50/90 to-white dark:from-slate-900 dark:via-slate-800/90 dark:to-slate-900 backdrop-blur-2xl border-b border-slate-200/50 dark:border-slate-700/50 shadow-[0_4px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]" />
+            <div className="absolute inset-0 bg-gradient-to-r from-white via-slate-50/95 to-white dark:from-slate-900 dark:via-slate-800/90 dark:to-slate-900 backdrop-blur-2xl border-b border-slate-300/60 dark:border-slate-700/50 shadow-[0_2px_12px_rgba(0,0,0,0.08)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]" />
 
             {/* Subtle animated gradients - only visible in light mode - hidden on small screens for performance */}
             <div className="absolute inset-0 overflow-hidden dark:opacity-30 hidden sm:block">
@@ -926,6 +926,17 @@ export default function Workspace() {
               <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                 {currentDocument && (
                   <>
+                    {/* Close Document Button - Back to Workspace Home */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => navigate('/workspace')}
+                      className="h-8 w-8 p-0 rounded-lg hover:bg-muted/50 flex-shrink-0"
+                      title="Close document"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+
                     <div className="relative group min-w-0 flex-1 max-w-[200px] sm:max-w-[300px] lg:max-w-[400px]">
                       <input
                         type="text"
@@ -1075,17 +1086,6 @@ export default function Workspace() {
                 <FileWatcherIndicator />
               </div>
 
-              {/* Collaboration Toggle */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowCollaborationSidebar(!showCollaborationSidebar)}
-                className="h-7 w-7 sm:h-8 sm:w-8 p-0 hidden sm:flex items-center justify-center"
-                title="Collaboration"
-              >
-                <Users className="h-4 w-4" />
-              </Button>
-
               {/* Theme Toggle */}
                 <ThemeToggle />
               </div>
@@ -1138,16 +1138,6 @@ export default function Workspace() {
       <DragDropZone />
 
       {/* Version history moved into the editor header (single source of truth) */}
-
-      {/* Collaboration Sidebar */}
-      <CollaborationSidebar
-        isOpen={showCollaborationSidebar}
-        onClose={() => setShowCollaborationSidebar(false)}
-        collaborators={[]}
-        activityEvents={activityEvents}
-        currentDocumentTitle={currentDocument?.title}
-        onClearActivity={() => setActivityEvents([])}
-      />
 
       {/* Quick Switcher (Cmd+K) */}
       <QuickSwitcherModal

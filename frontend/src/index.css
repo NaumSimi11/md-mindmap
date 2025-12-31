@@ -206,70 +206,73 @@
     --shadow-warm: 0 0 20px hsl(25 85% 55% / 0.2);
   }
 
-  /* Apple-Inspired Light Mode - Premium & Sophisticated */
+  /* Apple-Inspired Light Mode - Premium & Sophisticated with Better Contrast */
   :root:not(.dark) {
-    /* Pure Apple backgrounds - clean and minimal */
-    --bg-primary: linear-gradient(135deg, #ffffff 0%, #fafbfc 50%, #f5f5f7 100%);
-    --bg-secondary: linear-gradient(135deg, #fafbfc 0%, #f5f5f7 100%);
+    /* Warm off-white backgrounds - easier on eyes */
+    --bg-primary: linear-gradient(135deg, #fafafa 0%, #f5f5f7 50%, #efefef 100%);
+    --bg-secondary: linear-gradient(135deg, #f5f5f7 0%, #efefef 100%);
 
-    /* Apple system background - pure white */
-    --background: 0 0% 100%;
+    /* Slightly warm white background */
+    --background: 40 10% 98%;
 
-    /* Apple deep charcoal text - maximum readability */
-    --foreground: 0 0% 9%; /* #1D1D1F */
+    /* Deep charcoal text - maximum readability */
+    --foreground: 220 15% 15%; /* Slightly blue-black for better contrast */
 
-    /* Apple text hierarchy - sophisticated contrast */
-    --text-primary: 0 0% 9%;     /* Deep charcoal for headings */
-    --text-secondary: 0 0% 27%;  /* #434343 for body text */
-    --text-tertiary: 0 0% 45%;   /* #737373 for subtitles */
-    --text-muted: 0 0% 55%;      /* #8E8E93 for hints */
+    /* Text hierarchy - better contrast */
+    --text-primary: 220 15% 15%;     /* Deep charcoal for headings */
+    --text-secondary: 220 10% 30%;   /* Darker for body text */
+    --text-tertiary: 220 8% 45%;     /* Visible for subtitles */
+    --text-muted: 220 5% 55%;        /* Still readable hints */
 
-    /* Apple card system - pure white with subtle depth */
+    /* Card system - with visible shadow-ready backgrounds */
     --card: 0 0% 100%;
-    --card-hover: 0 0% 99%;
-    --card-foreground: 0 0% 9%;
+    --card-hover: 40 10% 98%;
+    --card-foreground: 220 15% 15%;
 
-    /* Apple glass morphism - ultra subtle */
-    --surface-glass: 0 0% 0% / 0.01;
-    --surface-glass-hover: 0 0% 0% / 0.03;
+    /* Glass morphism - more visible */
+    --surface-glass: 0 0% 0% / 0.03;
+    --surface-glass-hover: 0 0% 0% / 0.06;
 
-    /* Apple system surfaces - minimal grays */
+    /* System surfaces */
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 9%;
+    --popover-foreground: 220 15% 15%;
 
-    /* Apple secondary surfaces - #F5F5F7 */
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 9%;
+    /* Secondary surfaces - more visible gray */
+    --secondary: 220 10% 94%;
+    --secondary-foreground: 220 15% 15%;
 
-    /* Apple muted surfaces - #F2F2F7 */
-    --muted: 0 0% 97%;
-    --muted-foreground: 0 0% 27%;
+    /* Muted surfaces - visible but subtle */
+    --muted: 220 10% 92%;
+    --muted-foreground: 220 10% 35%;
 
-    /* Apple accent - pure white on colored backgrounds */
+    /* Accent */
     --accent-foreground: 0 0% 100%;
 
-    /* Apple borders - ultra subtle #C6C6C8 */
-    --border: 0 0% 78%;
-    --border-subtle: 0 0% 85%;
-    --border-accent: 212 100% 48% / 0.15;
+    /* Borders - MORE VISIBLE for section definition */
+    --border: 220 10% 75%;
+    --border-subtle: 220 8% 82%;
+    --border-accent: 212 100% 48% / 0.25;
 
-    /* Apple inputs - clean and minimal */
-    --input: 0 0% 78%;
+    /* Inputs */
+    --input: 220 10% 75%;
 
-    /* Apple glass morphism - premium but subtle */
-    --glass-bg: rgba(255, 255, 255, 0.95);
-    --glass-border: rgba(0, 0, 0, 0.06);
-    --glass-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-    --glass-glow: 0 0 20px rgba(0, 123, 255, 0.1);
+    /* Glass morphism - STRONGER shadows for depth */
+    --glass-bg: rgba(255, 255, 255, 0.92);
+    --glass-border: rgba(0, 0, 0, 0.12);
+    --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+    --glass-glow: 0 0 24px rgba(0, 123, 255, 0.15);
 
-    /* Apple shadows - sophisticated depth */
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px 0 rgba(0, 0, 0, 0.04);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
-    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-    --shadow-glow: 0 0 20px rgba(0, 123, 255, 0.15);
-    --shadow-warm: 0 0 10px rgba(255, 69, 58, 0.1);
+    /* Shadows - STRONGER for better depth perception */
+    --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
+    --shadow: 0 2px 6px 0 rgba(0, 0, 0, 0.12), 0 1px 3px -1px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 6px 12px -2px rgba(0, 0, 0, 0.12), 0 3px 6px -2px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 12px 24px -4px rgba(0, 0, 0, 0.14), 0 6px 10px -4px rgba(0, 0, 0, 0.08);
+    --shadow-xl: 0 24px 40px -8px rgba(0, 0, 0, 0.16), 0 12px 16px -6px rgba(0, 0, 0, 0.10);
+    --shadow-glow: 0 0 24px rgba(0, 123, 255, 0.20);
+    --shadow-warm: 0 0 16px rgba(255, 69, 58, 0.15);
+
+    /* Section divider for light mode */
+    --section-divider: 220 10% 88%;
   }
 }
 
@@ -365,19 +368,60 @@
   /* Light mode body override - Remove duplicate */
   /* :root:not(.dark) body removed - handled by semantic tokens now */
 
-  /* Light mode glass card override */
+  /* Light mode glass card override - ENHANCED VISIBILITY */
   :root:not(.dark) .glass-card {
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(214, 211, 209, 0.3);
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(0, 0, 0, 0.1);
     backdrop-filter: blur(20px);
     color: hsl(var(--foreground));
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   }
 
   :root:not(.dark) .glass-card:hover {
-    background: rgba(255, 255, 255, 0.95);
-    border-color: rgba(59, 130, 246, 0.3);
-    box-shadow: 0 8px 32px rgba(59, 130, 246, 0.15);
+    background: rgba(255, 255, 255, 1);
+    border-color: rgba(59, 130, 246, 0.35);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(59, 130, 246, 0.15);
     transform: translateY(-2px);
+  }
+
+  /* Light mode card elevations */
+  :root:not(.dark) .card-elevated {
+    background: white;
+    border: 1px solid hsl(var(--border));
+    box-shadow: var(--shadow-md);
+  }
+
+  :root:not(.dark) .card-elevated:hover {
+    box-shadow: var(--shadow-lg);
+    border-color: hsl(var(--border-accent));
+  }
+
+  /* Light mode section dividers */
+  :root:not(.dark) .section-divider {
+    border-bottom: 1px solid hsl(var(--section-divider));
+  }
+
+  /* Light mode sidebar with visible boundaries */
+  :root:not(.dark) .sidebar-container {
+    background: rgba(255, 255, 255, 0.98);
+    border-right: 1px solid hsl(var(--border));
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.06);
+  }
+
+  /* Light mode header with shadow */
+  :root:not(.dark) .header-elevated {
+    background: rgba(255, 255, 255, 0.95);
+    border-bottom: 1px solid hsl(var(--border));
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    backdrop-filter: blur(12px);
+  }
+
+  /* Light mode panels */
+  :root:not(.dark) .panel-raised {
+    background: white;
+    border: 1px solid hsl(var(--border));
+    box-shadow: var(--shadow);
+    border-radius: var(--radius);
   }
 
   /* Light mode text overrides */
@@ -1209,4 +1253,48 @@
   .floating-hamburger {
     display: none !important;
   }
+}
+
+/* Custom Scrollbar Utilities */
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.5);
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 163, 184, 0.7);
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb,
+.scrollbar-thumb-slate-600::-webkit-scrollbar-thumb {
+  background-color: rgba(71, 85, 105, 0.5);
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb:hover,
+.scrollbar-thumb-slate-600::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(71, 85, 105, 0.7);
+}
+
+/* Hide scrollbar but allow scroll */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
