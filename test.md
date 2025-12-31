@@ -25,4 +25,5 @@ tempaltes to be fixes ( design and the creating from design )
  - we do not show history on not logged users for now - we should hide history if we are not on the cloud - or we shoyld implement offline history ( this to be brainstoemd)
  - we should fix the tauri , and test on tauri from now on
  - we should change the startup script - when we run it - it shold ask us if we want to run on web or tauri
+
  
