@@ -14,6 +14,22 @@ import { guestWorkspaceService } from '@/services/workspace';
 import { yjsHydrationService } from '@/services/yjs/YjsHydrationService';
 import ReloadModalWrapper from '../ReloadModalWrapper';
 
+/** Document sync category for smart prompt */
+interface DocumentSyncCategory {
+  /** Never synced - pure local documents */
+  pureLocal: number;
+  /** Has cloudId but modified while offline */
+  modifiedOffline: number;
+  /** Total documents needing sync */
+  total: number;
+  /** Document details for display */
+  documents: Array<{
+    id: string;
+    title: string;
+    category: 'pure-local' | 'modified-offline';
+  }>;
+}
+
 interface UIStateContextType {
   /** Reload prompt for external file changes */
   reloadPrompt: {
@@ -26,9 +42,9 @@ interface UIStateContextType {
   /** Dismiss reload prompt */
   dismissReloadPrompt: () => void;
   
-  /** Guest document migration prompt */
+  /** Guest document migration prompt - now with categories */
   guestDocumentPrompt: {
-    count: number;
+    categories: DocumentSyncCategory;
     workspaceId: string;
   } | null;
   
@@ -59,7 +75,7 @@ export function UIStateProvider({ children }: { children: ReactNode }) {
   } | null>(null);
   
   const [guestDocumentPrompt, setGuestDocumentPrompt] = useState<{
-    count: number;
+    categories: DocumentSyncCategory;
     workspaceId: string;
   } | null>(null);
   
@@ -106,11 +122,55 @@ export function UIStateProvider({ children }: { children: ReactNode }) {
         const guestDocs = await guestWorkspaceService.getDocuments();
         if (guestDocs.length > 0) {
           const currentWs = await guestWorkspaceService.getCurrentWorkspace();
-          console.log(`📋 [UIState] Found ${guestDocs.length} guest documents after login`);
-          setGuestDocumentPrompt({
-            count: guestDocs.length,
-            workspaceId: currentWs?.id || '',
-          });
+          
+          // 🔥 Categorize documents by sync status
+          const categories: DocumentSyncCategory = {
+            pureLocal: 0,
+            modifiedOffline: 0,
+            total: 0,
+            documents: [],
+          };
+          
+          for (const doc of guestDocs) {
+            // Check if document has a cloudId (was previously synced)
+            const hasCloudId = !!doc.cloudId;
+            // Check if it's modified (has local changes)
+            const isModified = doc.syncStatus === 'modified' || doc.syncStatus === 'pending';
+            // Check if it's pure local (never synced)
+            const isPureLocal = doc.syncStatus === 'local' && !hasCloudId;
+            
+            if (isPureLocal) {
+              categories.pureLocal++;
+              categories.documents.push({
+                id: doc.id,
+                title: doc.title,
+                category: 'pure-local',
+              });
+            } else if (hasCloudId && (isModified || doc.syncStatus === 'local')) {
+              // Has cloudId but has local changes made offline
+              categories.modifiedOffline++;
+              categories.documents.push({
+                id: doc.id,
+                title: doc.title,
+                category: 'modified-offline',
+              });
+            }
+          }
+          
+          categories.total = categories.pureLocal + categories.modifiedOffline;
+          
+          if (categories.total > 0) {
+            console.log(`📋 [UIState] Found documents after login:`, {
+              pureLocal: categories.pureLocal,
+              modifiedOffline: categories.modifiedOffline,
+              total: categories.total,
+            });
+            
+            setGuestDocumentPrompt({
+              categories,
+              workspaceId: currentWs?.id || '',
+            });
+          }
         }
       } catch (error) {
         console.warn('⚠️ [UIState] Failed to check guest documents:', error);
@@ -142,19 +202,24 @@ export function UIStateProvider({ children }: { children: ReactNode }) {
     if (!guestDocumentPrompt) return;
     
     try {
-      console.log(`🚀 [UIState] Pushing ${guestDocumentPrompt.count} guest documents...`);
-      const guestDocs = await guestWorkspaceService.getDocuments();
+      const { categories } = guestDocumentPrompt;
+      console.log(`🚀 [UIState] Pushing ${categories.total} documents...`, {
+        pureLocal: categories.pureLocal,
+        modifiedOffline: categories.modifiedOffline,
+      });
       
       const { selectiveSyncService } = await import('@/services/sync/SelectiveSyncService');
       
       let successCount = 0;
       let failCount = 0;
       
-      for (const doc of guestDocs) {
+      // Push each categorized document
+      for (const doc of categories.documents) {
         try {
           const result = await selectiveSyncService.pushDocument(doc.id);
           if (result.success) {
             successCount++;
+            console.log(`✅ [UIState] Pushed ${doc.title} (${doc.category})`);
           } else {
             failCount++;
             console.warn(`⚠️ [UIState] Failed to push ${doc.title}:`, result.error);
@@ -173,7 +238,7 @@ export function UIStateProvider({ children }: { children: ReactNode }) {
       // Refresh documents to show newly synced ones
       await refreshDocuments();
     } catch (error) {
-      console.error('❌ [UIState] Failed to push guest documents:', error);
+      console.error('❌ [UIState] Failed to push documents:', error);
     }
   };
 
@@ -202,33 +267,66 @@ export function UIStateProvider({ children }: { children: ReactNode }) {
         </React.Suspense>
       )}
       
-      {/* Guest document migration prompt */}
+      {/* Guest document migration prompt - Enhanced with categories */}
       {guestDocumentPrompt && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-              📋 Local Documents Found
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-lg w-full mx-4 p-6">
+            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white flex items-center gap-2">
+              <span className="text-2xl">📋</span> Documents Need Syncing
             </h2>
+            
+            {/* Category breakdown */}
+            <div className="space-y-3 mb-6">
+              {guestDocumentPrompt.categories.pureLocal > 0 && (
+                <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <span className="text-xl">📄</span>
+                  <div>
+                    <p className="font-medium text-blue-900 dark:text-blue-100">
+                      {guestDocumentPrompt.categories.pureLocal} local document{guestDocumentPrompt.categories.pureLocal !== 1 ? 's' : ''}
+                    </p>
+                    <p className="text-sm text-blue-700 dark:text-blue-300">
+                      Created while not logged in. Never synced to cloud.
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              {guestDocumentPrompt.categories.modifiedOffline > 0 && (
+                <div className="flex items-start gap-3 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <span className="text-xl">🔄</span>
+                  <div>
+                    <p className="font-medium text-amber-900 dark:text-amber-100">
+                      {guestDocumentPrompt.categories.modifiedOffline} modified offline
+                    </p>
+                    <p className="text-sm text-amber-700 dark:text-amber-300">
+                      Changes made while offline. Need to sync with cloud.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+            
             <p className="text-gray-600 dark:text-gray-300 mb-6">
-              You have <strong>{guestDocumentPrompt.count} local document{guestDocumentPrompt.count !== 1 ? 's' : ''}</strong> created before logging in.
-              Would you like to push them to the cloud to sync across devices?
+              Would you like to push {guestDocumentPrompt.categories.total === 1 ? 'this document' : 'these documents'} to the cloud?
             </p>
+            
             <div className="flex gap-3">
               <button
                 onClick={handlePushGuestDocuments}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium transition-colors"
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors shadow-sm"
               >
                 ☁️ Push to Cloud
               </button>
               <button
                 onClick={dismissGuestDocumentPrompt}
-                className="flex-1 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-md font-medium transition-colors"
+                className="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-4 py-2.5 rounded-lg font-medium transition-colors"
               >
                 Keep Local
               </button>
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-4">
-              💡 Tip: Local documents will remain accessible but won't sync across devices.
+            
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-4 text-center">
+              💡 Local documents remain accessible but won't sync across devices.
             </p>
           </div>
         </div>

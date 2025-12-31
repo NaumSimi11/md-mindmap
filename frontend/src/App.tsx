@@ -33,6 +33,7 @@ import { AppDataProvider } from "./contexts/AppDataProvider";
 import { SyncHealthPanel } from "./components/sync/SyncHealthPanel"; // Task 5: Sync diagnostics
 import { GuestAccessHandler } from "./components/guest/GuestAccessHandler";
 import { WorkspaceSettingsPage } from "./components/workspace/WorkspaceSettingsPage";
+import { UserSettings } from "./pages/UserSettings";
 import SyncTest from "./pages/SyncTest"; // Sync mode testing
 
 const queryClient = new QueryClient();
@@ -68,6 +69,7 @@ const App = () => (
             {/* NEW: Main Workspace (AI Office Suite) - Guest & Auth Support */}
             <Route path="/workspace" element={<Workspace />} />
             <Route path="/workspace/:workspaceId/settings" element={<ProtectedRoute><WorkspaceSettingsPage /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute><UserSettings /></ProtectedRoute>} />
             <Route path="/workspace/doc/:id/edit" element={<Workspace />} />
             <Route path="/workspace/doc/:id/mindmap" element={<Workspace />} />
             <Route path="/workspace/doc/:id/slides" element={<Workspace />} />

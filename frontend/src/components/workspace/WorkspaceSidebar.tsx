@@ -12,7 +12,7 @@
  * - Starred documents section
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,12 +66,14 @@ interface WorkspaceSidebarProps {
   onDocumentSelect: (documentId: string) => void;
   currentDocumentId?: string;
   onLoadDemo?: () => void;
+  className?: string;
 }
 
 export function WorkspaceSidebar({
   onDocumentSelect,
   currentDocumentId,
   onLoadDemo,
+  className = "w-72 flex flex-col h-full",
 }: WorkspaceSidebarProps) {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
@@ -126,6 +128,8 @@ export function WorkspaceSidebar({
   const [documentToDelete, setDocumentToDelete] = useState<{ id: string; name: string } | null>(null);
   // Workspace rename UI moved to the sidebar WorkspaceSwitcher (single source of truth)
   const [workspaceKey, setWorkspaceKey] = useState(0);
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   
   // Auto-expand all folders when they load
   useEffect(() => {
@@ -374,30 +378,97 @@ export function WorkspaceSidebar({
 
   const { data: sharedWithMeDocs = [], isLoading: sharedLoading } = useSharedWithMeDocuments(isAuthenticated);
 
+  // Limit documents displayed for better performance and stable height
+  const MAX_DOCUMENTS = 20;
+
   return (
-    <div key={`workspace-${workspaceKey}`} className="w-72 border-r border-border bg-card flex flex-col h-full" data-testid="workspace-sidebar">
+    <div key={`workspace-${workspaceKey}`} className={className} data-testid="workspace-sidebar">
       {/* Header */}
-      <div className="p-4 border-b border-border">
+      <div className="p-4 border-b border-slate-200/50 dark:border-slate-700/50">
         {/* Workspace identity + management is handled by AdaptiveSidebar's WorkspaceSwitcher */}
 
-        {/* Search */}
-        <div className="mb-3">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] font-medium text-muted-foreground">
+
+        {/* Search + Import row */}
+        <div className="mb-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400">
               Documents
             </span>
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-[11px] text-slate-600 dark:text-slate-400">
               ⌘K quick search
             </span>
           </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Filter documents…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
+          <div className="flex items-center justify-between gap-2">
+            {/* Import button on the left */}
+            {activeSection !== 'shared' && (
+              <ImportDocumentButton
+                variant="outline"
+                size="sm"
+                compact={isSearchExpanded}
+                className={`transition-all duration-300 ${
+                  isSearchExpanded ? 'w-9 px-0 justify-center' : 'px-3'
+                }`}
+                data-testid="import-document-button"
+              />
+            )}
+
+            {/* Animated search control on the right */}
+            <div
+              className={`
+                relative flex items-center justify-end
+                transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
+                ${isSearchExpanded ? 'flex-1' : 'w-9'}
+              `}
+            >
+              {/* Collapsed search icon button */}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={`
+                  h-9 w-9 rounded-xl border shadow-sm
+                  bg-white/60 dark:bg-slate-900/70 border-slate-200/70 dark:border-slate-700/70
+                  hover:bg-white/90 dark:hover:bg-slate-900 hover:shadow-lg
+                  transition-all duration-300 transform
+                  ${isSearchExpanded ? 'opacity-0 scale-90 translate-x-1 pointer-events-none' : 'opacity-100 scale-100'}
+                `}
+                onClick={() => {
+                  setIsSearchExpanded(true);
+                  requestAnimationFrame(() => {
+                    searchInputRef.current?.focus();
+                  });
+                }}
+                aria-label="Filter documents"
+              >
+                <Search className="h-4 w-4 text-slate-700 dark:text-slate-200" />
+              </Button>
+
+              {/* Expanding input pill */}
+              <div
+                className={`
+                  flex items-center rounded-xl bg-slate-100/90 dark:bg-slate-800/90 
+                  border border-slate-200/70 dark:border-slate-700/70 shadow-sm
+                  transition-all duration-300 transform origin-right
+                  ${isSearchExpanded ? 'opacity-100 scale-100 pl-2 pr-2 w-full' : 'opacity-0 scale-95 pl-0 pr-0 w-0 pointer-events-none'}
+                `}
+              >
+                <Search
+                  className={`
+                    h-4 w-4 text-slate-500 dark:text-slate-400 mr-2
+                    transition-opacity duration-300
+                    ${isSearchExpanded ? 'opacity-100' : 'opacity-0'}
+                  `}
+                />
+                <Input
+                  ref={searchInputRef}
+                  placeholder="Filter documents…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onBlur={() => setIsSearchExpanded(false)}
+                  className="h-7 bg-transparent border-none px-0 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -423,9 +494,6 @@ export function WorkspaceSidebar({
                 <FolderPlus className="h-4 w-4" />
               </Button>
             </div>
-            
-            {/* Import Button */}
-            <ImportDocumentButton variant="outline" size="sm" className="w-full" data-testid="import-document-button" />
           </div>
         )}
       </div>
@@ -468,68 +536,84 @@ export function WorkspaceSidebar({
       />
 
       {/* Section Tabs */}
-      <div className="flex border-b border-border">
+      <div className="flex border-b border-slate-200/50 dark:border-slate-700/50 bg-slate-50/30 dark:bg-slate-800/30">
         <button
-          className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${activeSection === 'all'
-              ? 'text-primary border-b-2 border-primary'
-              : 'text-muted-foreground hover:text-foreground'
-            }`}
+          className={`flex-1 px-3 py-3 text-xs font-medium transition-all duration-200 relative ${
+            activeSection === 'all'
+              ? 'text-slate-900 dark:text-white bg-white dark:bg-slate-800 shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-700/50'
+          }`}
           onClick={() => setActiveSection('all')}
         >
           All
+          {activeSection === 'all' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 to-sky-500 rounded-full" />
+          )}
         </button>
         <button
-          className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${activeSection === 'recent'
-              ? 'text-primary border-b-2 border-primary'
-              : 'text-muted-foreground hover:text-foreground'
-            }`}
+          className={`flex-1 px-3 py-3 text-xs font-medium transition-all duration-200 relative ${
+            activeSection === 'recent'
+              ? 'text-slate-900 dark:text-white bg-white dark:bg-slate-800 shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-700/50'
+          }`}
           onClick={() => setActiveSection('recent')}
         >
           <Clock className="h-3 w-3 inline mr-1" />
           Recent
+          {activeSection === 'recent' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full" />
+          )}
         </button>
         <button
-          className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${activeSection === 'starred'
-              ? 'text-primary border-b-2 border-primary'
-              : 'text-muted-foreground hover:text-foreground'
-            }`}
+          className={`flex-1 px-3 py-3 text-xs font-medium transition-all duration-200 relative ${
+            activeSection === 'starred'
+              ? 'text-slate-900 dark:text-white bg-white dark:bg-slate-800 shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-700/50'
+          }`}
           onClick={() => setActiveSection('starred')}
         >
           <Star className="h-3 w-3 inline mr-1" />
           Starred
+          {activeSection === 'starred' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-full" />
+          )}
         </button>
         <button
-          className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${activeSection === 'shared'
-              ? 'text-primary border-b-2 border-primary'
-              : 'text-muted-foreground hover:text-foreground'
-            }`}
+          className={`flex-1 px-3 py-3 text-xs font-medium transition-all duration-200 relative ${
+            activeSection === 'shared'
+              ? 'text-slate-900 dark:text-white bg-white dark:bg-slate-800 shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-700/50'
+          }`}
           onClick={() => setActiveSection('shared')}
         >
           <Users className="h-3 w-3 inline mr-1" />
           Shared
+          {activeSection === 'shared' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full" />
+          )}
         </button>
       </div>
 
-      {/* Document List */}
-      <ScrollArea className="flex-1">
+      {/* Document List - Scrollable, takes remaining space */}
+      <ScrollArea className="flex-1 min-h-0">
         <div className="p-2">
           {activeSection === 'shared' ? (
             <div className="space-y-1">
               {sharedLoading ? (
-                <div className="text-center text-sm text-muted-foreground py-8">Loading…</div>
+                <div className="text-center text-sm text-slate-600 dark:text-slate-400 py-8">Loading…</div>
               ) : sharedWithMeDocs.length === 0 ? (
-                <div className="text-center text-sm text-muted-foreground py-8">
+                <div className="text-center text-sm text-slate-600 dark:text-slate-400 py-8">
                   No documents shared with you
                 </div>
               ) : (
-                sharedWithMeDocs.map((doc: any) => (
+                sharedWithMeDocs.slice(0, MAX_DOCUMENTS).map((doc: any) => (
                   <div
                     key={doc.id}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-accent cursor-pointer"
+                    className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100/50 dark:hover:bg-slate-700/50 cursor-pointer transition-colors"
                     title={doc.title}
                     onClick={() => onDocumentSelect(doc.id)}
                   >
-                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <FileText className="h-4 w-4 text-slate-600 dark:text-slate-400" />
                     <span className="text-sm truncate flex-1" style={{ maxWidth: '150px' }}>
                       {doc.title}
                     </span>
@@ -551,11 +635,11 @@ export function WorkspaceSidebar({
             // Search Results
             <div className="space-y-1">
               {filteredDocuments.length === 0 ? (
-                <div className="text-center text-sm text-muted-foreground py-8">
+                <div className="text-center text-sm text-slate-600 dark:text-slate-400 py-8">
                   No documents found
                 </div>
               ) : (
-                filteredDocuments.map(doc => (
+                filteredDocuments.slice(0, MAX_DOCUMENTS).map(doc => (
                   <DocumentItem
                     key={doc.id}
                     document={doc}
@@ -580,11 +664,11 @@ export function WorkspaceSidebar({
             // Recent or Starred
             <div className="space-y-1">
               {filteredDocuments.length === 0 ? (
-                <div className="text-center text-sm text-muted-foreground py-8">
+                <div className="text-center text-sm text-slate-600 dark:text-slate-400 py-8">
                   {activeSection === 'recent' ? 'No recent documents' : 'No starred documents'}
                 </div>
               ) : (
-                filteredDocuments.map(doc => (
+                filteredDocuments.slice(0, MAX_DOCUMENTS).map(doc => (
                   <DocumentItem
                     key={doc.id}
                     document={doc}
@@ -604,6 +688,11 @@ export function WorkspaceSidebar({
                   />
                 ))
               )}
+              {filteredDocuments.length > MAX_DOCUMENTS && (
+                <div className="text-center text-xs text-slate-500 dark:text-slate-400 py-2 border-t border-slate-200/30 dark:border-slate-700/30 mt-2">
+                  +{filteredDocuments.length - MAX_DOCUMENTS} more documents
+                </div>
+              )}
             </div>
           ) : (
             // All Documents - Folder Tree View
@@ -611,6 +700,7 @@ export function WorkspaceSidebar({
               {/* Root Level Documents + Orphans - 🔥 USE BACKEND DOCUMENTS */}
               {backendDocuments
                 .filter(doc => !doc.folderId || !folderIds.has(doc.folderId)) // Root docs + orphans
+                .slice(0, MAX_DOCUMENTS)
                 .map(doc => (
                 <DocumentItem
                   key={doc.id}
@@ -671,9 +761,9 @@ export function WorkspaceSidebar({
                 // Empty state when no folders
                 backendDocuments.length === 0 && (
                   <div className="text-center py-8 px-4">
-                    <Folder className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
-                    <p className="text-sm text-muted-foreground mb-2">No folders yet</p>
-                    <p className="text-xs text-muted-foreground/60 mb-3">
+                    <Folder className="h-12 w-12 text-slate-600 dark:text-slate-400/30 mx-auto mb-3" />
+                    <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">No folders yet</p>
+                    <p className="text-xs text-slate-600 dark:text-slate-400/60 mb-3">
                       Organize documents with folders
                     </p>
                     <Button
@@ -688,13 +778,21 @@ export function WorkspaceSidebar({
                   </div>
                 )
               )}
+              {(() => {
+                const totalItems = backendDocuments.filter(doc => !doc.folderId || !folderIds.has(doc.folderId)).length + folderTree.length;
+                return totalItems > MAX_DOCUMENTS && (
+                  <div className="text-center text-xs text-slate-500 dark:text-slate-400 py-2 border-t border-slate-200/30 dark:border-slate-700/30 mt-2">
+                    +{totalItems - MAX_DOCUMENTS} more items
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
       </ScrollArea>
 
-      {/* Footer Stats */}
-      <div className="p-3 border-t border-border text-xs text-muted-foreground">
+      {/* Footer Stats - Always visible at bottom */}
+      <div className="flex-shrink-0 p-3 border-t border-border text-xs text-slate-600 dark:text-slate-400 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
         <div className="flex items-center justify-between">
           <span>{backendDocuments.length} documents</span>
           <span>{folderTree.length} folders</span>
@@ -805,7 +903,7 @@ function BackendFolderItem({
         </span>
 
         {/* Document Count */}
-        <span className="text-xs text-muted-foreground flex-shrink-0">
+        <span className="text-xs text-slate-600 dark:text-slate-400 flex-shrink-0">
           ({documentsInFolder.length})
         </span>
 
@@ -958,7 +1056,7 @@ function DocumentItem({
       data-testid={`document-item-${slug}`}
       className={`
         flex items-center gap-2 px-2 py-1.5 rounded group cursor-pointer
-        ${isActive ? 'bg-primary/10 text-primary' : 'hover:bg-accent'}
+        ${isActive ? 'bg-blue-50/80 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300' : 'hover:bg-slate-100/50 dark:hover:bg-slate-700/50'}
         ${isDragging ? 'opacity-50' : ''}
       `}
       style={{ paddingLeft: `${level * 12 + 8}px` }}

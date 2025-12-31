@@ -11,7 +11,7 @@
  * - UI is intent-only
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Sheet,
   SheetContent,
@@ -22,11 +22,15 @@ import {
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Clock, FileText, AlertCircle } from 'lucide-react';
+import { Clock, FileText, AlertCircle, Camera, Eye } from 'lucide-react';
 import { SnapshotsClient, type Snapshot, type RestoreAction } from '@/services/api/snapshotsClient';
 import { useDocumentPermissions, type Role } from '@/hooks/useDocumentPermissions';
 import { RestoreConfirmationDialog } from './RestoreConfirmationDialog';
 import { useToast } from '@/hooks/use-toast';
+import { createManualHistorySnapshot } from '@/services/snapshots/snapshotClient';
+import { yjsDocumentManager } from '@/services/yjs/YjsDocumentManager';
+import { EnhancedVersionPreview } from '../editor/EnhancedVersionPreview';
+import * as Y from 'yjs';
 
 interface VersionHistoryPanelProps {
   documentId: string;
@@ -35,6 +39,16 @@ interface VersionHistoryPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onRestoreComplete?: (newDocumentId?: string) => void;
+  /** Optional: Document sync status to determine if it's local-only */
+  syncStatus?: 'local' | 'synced' | 'syncing' | 'conflict' | 'pending' | 'modified' | 'error';
+  /** Optional: Cloud ID if synced */
+  cloudId?: string | null;
+  /** Optional: Current document content for comparison */
+  currentContent?: string;
+  /** Optional: Callback to replace current version */
+  onReplaceVersion?: (content: string) => void;
+  /** Optional: Editor instance for getting HTML preview */
+  editor?: any;
 }
 
 export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
@@ -44,6 +58,11 @@ export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
   isOpen,
   onClose,
   onRestoreComplete,
+  syncStatus,
+  cloudId,
+  currentContent = '',
+  onReplaceVersion,
+  editor,
 }) => {
   const permissions = useDocumentPermissions(userRole, isAuthenticated);
   const { toast } = useToast();
@@ -52,9 +71,15 @@ export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
   const [selectedSnapshot, setSelectedSnapshot] = useState<Snapshot | null>(null);
   const [restoreAction, setRestoreAction] = useState<RestoreAction>('new_document');
   const [showRestoreDialog, setShowRestoreDialog] = useState(false);
+  const [showEnhancedPreview, setShowEnhancedPreview] = useState(false);
+  const [previewSnapshot, setPreviewSnapshot] = useState<Snapshot | null>(null);
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [creatingSnapshot, setCreatingSnapshot] = useState(false);
+  
+  // Determine if document is local-only (not synced to cloud)
+  const isLocalOnly = !cloudId && syncStatus === 'local';
 
   // Load snapshots when panel opens
   useEffect(() => {
@@ -63,12 +88,118 @@ export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
     }
   }, [isOpen, documentId]);
 
+  // Create manual snapshot
+  const handleCreateSnapshot = useCallback(async () => {
+    const timestamp = new Date().toISOString();
+    console.log(`\n🎬 ========== SNAPSHOT CREATION START [${timestamp}] ==========`);
+    console.log(`📍 [${timestamp}] Document ID:`, documentId);
+    
+    const normalizedId = documentId.startsWith('doc_') 
+      ? documentId.slice(4) 
+      : documentId;
+    
+    console.log(`📍 [${new Date().toISOString()}] Normalized ID:`, normalizedId);
+    console.log(`📍 [${new Date().toISOString()}] Editor available:`, !!editor);
+    
+    setCreatingSnapshot(true);
+    
+    try {
+      // Get binary snapshot from YjsDocumentManager
+      console.log(`🔧 [${new Date().toISOString()}] Getting Yjs binary snapshot...`);
+      const binarySnapshot = yjsDocumentManager.getYjsBinarySnapshot(documentId);
+      
+      if (!binarySnapshot) {
+        console.error(`❌ [${new Date().toISOString()}] No binary snapshot available!`);
+        toast({
+          title: 'Cannot Create Snapshot',
+          description: 'Document not currently loaded. Please open the document first.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      console.log(`✅ [${new Date().toISOString()}] Binary snapshot size:`, binarySnapshot.length, 'bytes');
+      
+      // Convert to base64
+      console.log(`🔧 [${new Date().toISOString()}] Converting to base64...`);
+      const base64State = btoa(String.fromCharCode(...binarySnapshot));
+      console.log(`✅ [${new Date().toISOString()}] Base64 length:`, base64State.length, 'chars');
+      
+      // Get HTML preview from editor if available
+      let htmlPreview: string | undefined;
+      console.log(`🔧 [${new Date().toISOString()}] Getting HTML preview from editor...`);
+      
+      if (editor) {
+        try {
+          htmlPreview = editor.getHTML();
+          console.log(`✅ [${new Date().toISOString()}] ✨ HTML PREVIEW OBTAINED!`);
+          console.log(`📊 [${new Date().toISOString()}] HTML preview length:`, htmlPreview?.length || 0, 'chars');
+          console.log(`📝 [${new Date().toISOString()}] HTML preview sample:`, htmlPreview?.substring(0, 200));
+          console.log(`📝 [${new Date().toISOString()}] HTML preview (full):`, htmlPreview);
+        } catch (err) {
+          console.error(`❌ [${new Date().toISOString()}] Could not get HTML preview from editor:`, err);
+        }
+      } else {
+        console.error(`❌ [${new Date().toISOString()}] ⚠️ NO EDITOR AVAILABLE FOR HTML PREVIEW!`);
+      }
+      
+      console.log(`🚀 [${new Date().toISOString()}] Calling createManualHistorySnapshot...`);
+      console.log(`📦 [${new Date().toISOString()}] Parameters:`, {
+        normalizedId,
+        base64StateLength: base64State.length,
+        note: 'Manual save point',
+        htmlPreviewLength: htmlPreview?.length || 0,
+        hasHtmlPreview: !!htmlPreview
+      });
+      
+      const success = await createManualHistorySnapshot(
+        normalizedId,
+        base64State,
+        'Manual save point',
+        htmlPreview
+      );
+      
+      console.log(`📊 [${new Date().toISOString()}] Snapshot creation result:`, success ? '✅ SUCCESS' : '❌ FAILED');
+      
+      if (success) {
+        toast({
+          title: 'Snapshot Created',
+          description: 'Your document version has been saved.',
+        });
+        console.log(`🔄 [${new Date().toISOString()}] Reloading snapshots list...`);
+        await loadSnapshots();
+        console.log(`✅ [${new Date().toISOString()}] Snapshots reloaded`);
+      } else {
+        toast({
+          title: 'Failed to Create Snapshot',
+          description: 'Please try again.',
+          variant: 'destructive',
+        });
+      }
+    } catch (err) {
+      console.error(`💥 [${new Date().toISOString()}] SNAPSHOT CREATION ERROR:`, err);
+      toast({
+        title: 'Error',
+        description: (err as Error).message,
+        variant: 'destructive',
+      });
+    } finally {
+      setCreatingSnapshot(false);
+      console.log(`🏁 ========== SNAPSHOT CREATION END [${new Date().toISOString()}] ==========\n`);
+    }
+  }, [documentId, toast, editor]);
+
   const loadSnapshots = async () => {
     setLoading(true);
     setError(null);
     
     try {
-      const data = await SnapshotsClient.listSnapshots(documentId, 50, 0);
+      // 🔥 FIX: Normalize document ID - strip doc_ prefix for backend API
+      const normalizedId = documentId.startsWith('doc_') 
+        ? documentId.slice(4) 
+        : documentId;
+      
+      const data = await SnapshotsClient.listSnapshots(normalizedId, 50, 0);
       setSnapshots(data.snapshots);
     } catch (err) {
       setError((err as Error).message);
@@ -86,10 +217,15 @@ export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
   const handleRestoreConfirm = async () => {
     if (!selectedSnapshot) return;
 
+    // 🔥 FIX: Normalize document ID for backend API
+    const normalizedId = documentId.startsWith('doc_') 
+      ? documentId.slice(4) 
+      : documentId;
+
     try {
       // CRITICAL: Just call API - backend handles everything
       const result = await SnapshotsClient.restoreSnapshot(
-        documentId,
+        normalizedId,
         selectedSnapshot.id,
         restoreAction,
         restoreAction === 'new_document' ? `${selectedSnapshot.note || 'Restored'} (Copy)` : undefined,
@@ -138,6 +274,41 @@ export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
             </SheetDescription>
           </SheetHeader>
 
+          {/* Local-Only Document Notice */}
+          {isLocalOnly && (
+            <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 rounded-md border border-amber-200 dark:border-amber-800">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">Local Document</p>
+                  <p className="text-sm mt-1">
+                    This document is stored locally and hasn't been synced to the cloud. 
+                    Version history is only available for cloud-synced documents.
+                  </p>
+                  <p className="text-sm mt-2">
+                    To enable version history, sync this document to the cloud by clicking 
+                    "Save to Cloud" in the menu.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Create Snapshot Button - only show for cloud-synced documents */}
+          {permissions.canEdit && !isLocalOnly && (
+            <div className="mt-4">
+              <Button
+                onClick={handleCreateSnapshot}
+                disabled={creatingSnapshot}
+                className="w-full"
+                variant="outline"
+              >
+                <Camera className="w-4 h-4 mr-2" />
+                {creatingSnapshot ? 'Creating Snapshot...' : 'Create Snapshot Now'}
+              </Button>
+            </div>
+          )}
+
           {error && (
             <div className="mt-4 p-4 bg-destructive/10 text-destructive rounded-md flex items-start gap-2">
               <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
@@ -170,6 +341,10 @@ export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
                     permissions={permissions}
                     onRestoreAsNew={() => handleRestoreClick(snapshot, 'new_document')}
                     onOverwrite={() => handleRestoreClick(snapshot, 'overwrite')}
+                    onPreview={() => {
+                      setPreviewSnapshot(snapshot);
+                      setShowEnhancedPreview(true);
+                    }}
                   />
                 ))}
               </div>
@@ -188,6 +363,52 @@ export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
           onCancel={() => setShowRestoreDialog(false)}
         />
       )}
+
+      {/* Enhanced Preview Modal */}
+      {showEnhancedPreview && previewSnapshot && (() => {
+        const timestamp = new Date().toISOString();
+        console.log(`\n👁️ ========== PREVIEW MODAL OPENED [${timestamp}] ==========`);
+        console.log(`🔍 [${timestamp}] Snapshot ID:`, previewSnapshot.id);
+        console.log(`🔍 [${timestamp}] Snapshot note:`, previewSnapshot.note);
+        console.log(`🔍 [${timestamp}] Snapshot created:`, previewSnapshot.created_at);
+        console.log(`🔍 [${timestamp}] Size bytes:`, previewSnapshot.size_bytes);
+        console.log(`🔍 [${timestamp}] HTML preview length:`, previewSnapshot.html_preview?.length || 0);
+        console.log(`🔍 [${timestamp}] Has HTML preview:`, !!previewSnapshot.html_preview);
+        console.log(`🔍 [${timestamp}] HTML preview sample:`, previewSnapshot.html_preview?.substring(0, 200));
+        console.log(`🔍 [${timestamp}] HTML preview (full):`, previewSnapshot.html_preview);
+        console.log(`👁️ ========== PREVIEW DATA END ==========\n`);
+        
+        return (
+          <EnhancedVersionPreview
+            isOpen={showEnhancedPreview}
+            onClose={() => setShowEnhancedPreview(false)}
+            version={{
+              version_number: snapshots.findIndex(s => s.id === previewSnapshot.id) + 1,
+              title: previewSnapshot.note || 'Snapshot',
+              content: previewSnapshot.html_preview || 'No content available for this snapshot',
+              created_at: previewSnapshot.created_at,
+              change_summary: previewSnapshot.note,
+              word_count: Math.floor((previewSnapshot.size_bytes || 0) / 20),
+              created_by_id: previewSnapshot.created_by || null,
+            }}
+            currentContent={currentContent}
+            currentVersion={snapshots.length}
+            onRestoreAsNew={async () => {
+              setShowEnhancedPreview(false);
+              handleRestoreClick(previewSnapshot, 'new_document');
+            }}
+            onReplaceCurrentVersion={async () => {
+              setShowEnhancedPreview(false);
+              if (onReplaceVersion && previewSnapshot.html_preview) {
+                onReplaceVersion(previewSnapshot.html_preview);
+              } else {
+                handleRestoreClick(previewSnapshot, 'overwrite');
+              }
+            }}
+            isAuthenticated={isAuthenticated}
+          />
+        );
+      })()}
     </>
   );
 };
@@ -201,6 +422,7 @@ interface SnapshotCardProps {
   permissions: ReturnType<typeof useDocumentPermissions>;
   onRestoreAsNew: () => void;
   onOverwrite: () => void;
+  onPreview: () => void;
 }
 
 const SnapshotCard: React.FC<SnapshotCardProps> = ({
@@ -208,7 +430,10 @@ const SnapshotCard: React.FC<SnapshotCardProps> = ({
   permissions,
   onRestoreAsNew,
   onOverwrite,
+  onPreview,
 }) => {
+  const [showQuickPreview, setShowQuickPreview] = useState(false);
+  
   const getTypeBadge = (type: string) => {
     switch (type) {
       case 'manual':
@@ -228,6 +453,15 @@ const SnapshotCard: React.FC<SnapshotCardProps> = ({
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
+  
+  // Get a text preview from HTML (strip tags)
+  const getTextPreview = (html: string | null, maxLength: number = 150) => {
+    if (!html) return null;
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    const text = div.textContent || div.innerText || '';
+    return text.length > maxLength ? text.slice(0, maxLength) + '...' : text;
+  };
 
   return (
     <div className="border rounded-lg p-4 space-y-3 hover:bg-accent/50 transition-colors">
@@ -246,12 +480,30 @@ const SnapshotCard: React.FC<SnapshotCardProps> = ({
           </div>
 
           {snapshot.note && (
-            <p className="text-sm mt-2">{snapshot.note}</p>
+            <p className="text-sm mt-2 font-medium">{snapshot.note}</p>
+          )}
+          
+          {/* Text preview from HTML */}
+          {snapshot.html_preview && (
+            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+              {getTextPreview(snapshot.html_preview, 100)}
+            </p>
           )}
         </div>
       </div>
 
       <div className="flex gap-2 pt-2">
+        {/* Enhanced Preview Button - Icon only for space */}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onPreview}
+          className="px-3"
+          title="Preview Version"
+        >
+          <Eye className="w-4 h-4" />
+        </Button>
+
         {permissions.canRestoreAsNew && (
           <Button
             size="sm"

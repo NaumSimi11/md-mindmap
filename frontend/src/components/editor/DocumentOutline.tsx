@@ -236,10 +236,25 @@ export function DocumentOutline({
             Use <strong>Auto-Format</strong> to add headings and lists automatically!
           </p>
         </div>
-        <div className="mt-4 text-xs text-muted-foreground/60 space-y-1">
-          <p># Heading 1</p>
-          <p>## Heading 2</p>
-          <p>### Heading 3</p>
+        <div className="mt-4 space-y-1">
+          <button
+            onClick={() => onHeadingClick?.('# Heading 1', 0, 0)}
+            className="w-full text-left text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/50 px-2 py-1 rounded transition-colors"
+          >
+            # Heading 1
+          </button>
+          <button
+            onClick={() => onHeadingClick?.('## Heading 2', 1, 1)}
+            className="w-full text-left text-xs text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-950/50 px-2 py-1 rounded transition-colors ml-2"
+          >
+            ## Heading 2
+          </button>
+          <button
+            onClick={() => onHeadingClick?.('### Heading 3', 2, 2)}
+            className="w-full text-left text-xs text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950/50 px-2 py-1 rounded transition-colors ml-4"
+          >
+            ### Heading 3
+          </button>
         </div>
       </div>
     );

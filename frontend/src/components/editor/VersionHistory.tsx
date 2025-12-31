@@ -11,11 +11,13 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Clock, User, RotateCcw, Eye, X } from 'lucide-react';
 import { documentVersionService, type DocumentVersion } from '@/services/api/DocumentVersionService';
 import { guestVersionManager } from '@/services/workspace-legacy/GuestVersionManager';
 import { useAuth } from '@/hooks/useAuth';
+import { EnhancedVersionPreview } from './EnhancedVersionPreview';
+import { toast } from 'sonner';
+
 // Simple time formatter (no external deps)
 const formatTimeAgo = (date: Date): string => {
   const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
@@ -29,21 +31,30 @@ const formatTimeAgo = (date: Date): string => {
   const months = Math.floor(days / 30);
   return `${months}mo ago`;
 };
-import { toast } from 'sonner';
 
 interface VersionHistoryProps {
   documentId: string;
   currentVersion: number;
+  currentContent?: string; // Current document content for comparison
   onRestore: (versionNumber: number) => void;
+  onReplaceVersion?: (content: string) => void; // Replace current version
   onClose: () => void;
 }
 
-export function VersionHistory({ documentId, currentVersion, onRestore, onClose }: VersionHistoryProps) {
+export function VersionHistory({ 
+  documentId, 
+  currentVersion, 
+  currentContent = '',
+  onRestore, 
+  onReplaceVersion,
+  onClose 
+}: VersionHistoryProps) {
   const { isAuthenticated } = useAuth();
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [previewVersion, setPreviewVersion] = useState<DocumentVersion | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [isLoadingContent, setIsLoadingContent] = useState(false);
 
   useEffect(() => {
     loadVersions();
@@ -52,17 +63,23 @@ export function VersionHistory({ documentId, currentVersion, onRestore, onClose 
   const loadVersions = async () => {
     try {
       setIsLoading(true);
-      
+
+      // 🔥 FIX: Normalize document ID - strip doc_ prefix for backend API
+      const normalizedId = documentId.startsWith('doc_')
+        ? documentId.slice(4)
+        : documentId;
+
       if (isAuthenticated) {
         // AUTHENTICATED MODE: Load from backend API
-        console.log('🔐 Loading versions from backend:', documentId);
-        const response = await documentVersionService.getVersions(documentId);
+        console.log('🔐 Loading versions from backend:', normalizedId);
+        const response = await documentVersionService.getVersions(normalizedId);
         setVersions(response.versions);
+        console.log(`✅ Loaded ${response.versions.length} versions from backend`);
       } else {
-        // GUEST MODE: Load from GuestVersionManager
+        // GUEST MODE: Load from GuestVersionManager (uses original ID)
         console.log('👤 Loading versions from guest storage:', documentId);
         const guestVersions = guestVersionManager.getVersions(documentId);
-        
+
         // Convert to DocumentVersion format
         const converted: DocumentVersion[] = guestVersions.versions.map(v => ({
           id: v.yjsDocId,
@@ -75,13 +92,29 @@ export function VersionHistory({ documentId, currentVersion, onRestore, onClose 
           created_by_id: null,
           created_at: v.createdAt
         }));
-        
+
         setVersions(converted);
         console.log(`✅ Loaded ${converted.length} guest versions`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load versions:', error);
-      toast.error('Failed to load version history');
+
+      // Provide specific error messages based on error type
+      let errorMessage = 'Failed to load version history';
+
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        errorMessage = 'Document not found or no version history available';
+      } else if (error.message?.includes('403') || error.message?.includes('forbidden')) {
+        errorMessage = 'You do not have permission to view version history';
+      } else if (error.message?.includes('401') || error.message?.includes('unauthorized')) {
+        errorMessage = 'Please log in to view version history';
+      } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+        errorMessage = 'Network error - please check your connection';
+      } else if (error.response?.status === 429) {
+        errorMessage = 'Too many requests - please try again later';
+      }
+
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -92,46 +125,103 @@ export function VersionHistory({ documentId, currentVersion, onRestore, onClose 
     // Guest mode: Need to load content from Yjs doc
     // Authenticated mode: Content already in version object
     
-    if (!isAuthenticated && !version.content) {
-      console.log('👤 Loading guest version content:', version.version_number);
-      const content = await guestVersionManager.getVersionContent(documentId, version.version_number);
-      
-      if (content) {
-        setPreviewVersion({ ...version, content });
-      } else {
-        toast.error('Failed to load version content');
-        return;
-      }
-    } else {
-      setPreviewVersion(version);
-    }
+    setIsLoadingContent(true);
     
-    setShowPreview(true);
+    try {
+      if (!isAuthenticated && !version.content) {
+        console.log('👤 Loading guest version content:', version.version_number);
+        const content = await guestVersionManager.getVersionContent(documentId, version.version_number);
+        
+        if (content) {
+          setPreviewVersion({ ...version, content });
+        } else {
+          toast.error('Failed to load version content');
+          return;
+        }
+      } else {
+        setPreviewVersion(version);
+      }
+      
+      setShowPreview(true);
+    } finally {
+      setIsLoadingContent(false);
+    }
   };
 
-  const handleRestore = async (versionNumber: number) => {
-    if (!confirm(`Restore to version ${versionNumber}? This will create a new version with the old content.`)) {
-      return;
-    }
+  const handleRestoreAsNew = async () => {
+    if (!previewVersion) return;
 
     try {
       if (isAuthenticated) {
         // AUTHENTICATED MODE: Use backend API
-        await documentVersionService.restoreVersion(documentId, versionNumber);
+        await documentVersionService.restoreVersion(documentId, previewVersion.version_number);
+        toast.success(`Created new document from version ${previewVersion.version_number}`);
       } else {
         // GUEST MODE: Restore from local version
-        // ⚠️ TODO: Implement guest mode restore
-        // For now, just show error
-        toast.error('Guest mode restore not yet implemented');
-        return;
+        const newDocId = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const success = await guestVersionManager.restoreVersionAsNew(
+          documentId,
+          previewVersion.version_number,
+          newDocId
+        );
+        
+        if (!success) {
+          toast.error('Failed to create new document from version');
+          return;
+        }
+        
+        toast.success(`Created new document from version ${previewVersion.version_number}`);
+      }
+
+      onRestore(previewVersion.version_number);
+      setShowPreview(false);
+      onClose();
+    } catch (error: any) {
+      console.error('Failed to restore version:', error);
+
+      // Provide specific error messages
+      let errorMessage = 'Failed to restore version';
+
+      if (error.message?.includes('409') || error.message?.includes('provider_active')) {
+        errorMessage = 'Cannot restore while document is being edited by others';
+      } else if (error.message?.includes('403') || error.message?.includes('forbidden')) {
+        errorMessage = 'You do not have permission to restore versions';
+      } else if (error.message?.includes('404') || error.message?.includes('not found')) {
+        errorMessage = 'Version not found - it may have been deleted';
+      } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+        errorMessage = 'Network error - please check your connection';
+      }
+
+      toast.error(errorMessage);
+    }
+  };
+
+  const handleReplaceCurrentVersion = async () => {
+    if (!previewVersion || !onReplaceVersion) return;
+
+    try {
+      if (isAuthenticated) {
+        // AUTHENTICATED MODE: Use callback to replace content
+        onReplaceVersion(previewVersion.content);
+      } else {
+        // GUEST MODE: Use guest version manager to restore
+        const success = await guestVersionManager.restoreVersion(
+          documentId,
+          previewVersion.version_number
+        );
+        
+        if (!success) {
+          toast.error('Failed to replace current version');
+          return;
+        }
       }
       
-      toast.success(`Restored to version ${versionNumber}`);
-      onRestore(versionNumber);
+      toast.success(`Replaced current version with version ${previewVersion.version_number}`);
+      setShowPreview(false);
       onClose();
-    } catch (error) {
-      console.error('Failed to restore version:', error);
-      toast.error('Failed to restore version');
+    } catch (error: any) {
+      console.error('Failed to replace version:', error);
+      toast.error('Failed to replace current version');
     }
   };
 
@@ -225,21 +315,11 @@ export function VersionHistory({ documentId, currentVersion, onRestore, onClose 
                       size="sm"
                       className="flex-1"
                       onClick={() => handlePreview(version)}
+                      disabled={isLoadingContent}
                     >
                       <Eye className="h-3 w-3 mr-1" />
-                      Preview
+                      {isLoadingContent ? 'Loading...' : 'Preview'}
                     </Button>
-                    {version.version_number !== currentVersion && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => handleRestore(version.version_number)}
-                      >
-                        <RotateCcw className="h-3 w-3 mr-1" />
-                        Restore
-                      </Button>
-                    )}
                   </div>
                 </div>
               ))}
@@ -248,42 +328,18 @@ export function VersionHistory({ documentId, currentVersion, onRestore, onClose 
         </ScrollArea>
       </div>
 
-      {/* Preview Modal */}
+      {/* Enhanced Preview Modal */}
       {showPreview && previewVersion && (
-        <Dialog open={showPreview} onOpenChange={setShowPreview}>
-          <DialogContent className="max-w-4xl max-h-[80vh]">
-            <DialogHeader>
-              <DialogTitle>
-                Version {previewVersion.version_number} - {previewVersion.title}
-              </DialogTitle>
-              <div className="text-sm text-muted-foreground">
-                {formatTimeAgo(new Date(previewVersion.created_at))}
-                {previewVersion.change_summary && ` - "${previewVersion.change_summary}"`}
-              </div>
-            </DialogHeader>
-
-            <ScrollArea className="h-[60vh] border rounded-lg p-4 bg-muted/30">
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                <pre className="whitespace-pre-wrap font-mono text-sm">
-                  {previewVersion.content}
-                </pre>
-              </div>
-            </ScrollArea>
-
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowPreview(false)}>
-                Close
-              </Button>
-              <Button onClick={() => {
-                setShowPreview(false);
-                handleRestore(previewVersion.version_number);
-              }}>
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Restore This Version
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <EnhancedVersionPreview
+          isOpen={showPreview}
+          onClose={() => setShowPreview(false)}
+          version={previewVersion}
+          currentContent={currentContent}
+          currentVersion={currentVersion}
+          onRestoreAsNew={handleRestoreAsNew}
+          onReplaceCurrentVersion={handleReplaceCurrentVersion}
+          isAuthenticated={isAuthenticated}
+        />
       )}
     </>
   );

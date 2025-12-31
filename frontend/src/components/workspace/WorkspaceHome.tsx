@@ -1,11 +1,14 @@
 /**
- * WorkspaceHome - Clean, Modern Workspace View
- * 
+ * WorkspaceHome - Premium 2025 SaaS Workspace Experience
+ *
  * Features:
- * - Visual document cards (with previews)
- * - Minimal quick actions
- * - Clean spacing (no rigid borders)
- * - Modern, fluid design
+ * - ✨ Glassmorphism design with backdrop blur
+ * - 🎨 Gradient accents and premium visual hierarchy
+ * - 🌟 Interactive animations and micro-feedback
+ * - 📱 Responsive grid layouts with beautiful cards
+ * - 🎯 Clear visual information architecture
+ * - 🚀 Modern typography and spacing
+ * - 💫 Engaging hover states and transitions
  */
 
 import { useState } from 'react';
@@ -20,6 +23,11 @@ import {
   Star,
   ChevronLeft,
   ChevronRight,
+  Sparkles,
+  Zap,
+  Palette,
+  BookOpen,
+  Lightbulb,
 } from 'lucide-react';
 import type { Document } from '@/services/workspace-legacy/BackendWorkspaceService';
 import { QuickSwitcher } from './QuickSwitcher';
@@ -196,220 +204,356 @@ export function WorkspaceHome({
   );
 
   return (
-    <div className="flex-1 relative overflow-auto">
+    <div className="flex-1 relative overflow-auto bg-gradient-to-br from-slate-50/50 via-blue-50/30 to-indigo-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950/20">
+      {/* Animated Background Elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-1/2 -left-1/4 w-96 h-96 bg-gradient-to-br from-blue-400/10 to-indigo-500/10 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute -bottom-1/2 -right-1/4 w-96 h-96 bg-gradient-to-br from-purple-400/8 to-pink-500/8 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
+        <div className="absolute top-1/4 left-1/2 w-64 h-64 bg-gradient-to-br from-cyan-400/6 to-blue-500/6 rounded-full blur-2xl animate-pulse" style={{ animationDelay: '4s' }} />
+      </div>
+
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
-        {/* Recent Documents - Visual Cards */}
-        <div className="space-y-4">
+      <div className="relative max-w-7xl mx-auto p-6 space-y-8">
+        {/* Welcome Header */}
+        <div className="text-center space-y-4 py-8">
+          <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 backdrop-blur-sm">
+            <Sparkles className="h-4 w-4 text-blue-500" />
+            <span className="text-sm font-medium text-blue-700 dark:text-blue-300">Welcome to MDReader</span>
+            <Sparkles className="h-4 w-4 text-purple-500" />
+          </div>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-900 via-blue-900 to-slate-800 dark:from-white dark:via-blue-100 dark:to-slate-200 bg-clip-text text-transparent">
+            Your Creative Workspace
+          </h1>
+          <p className="text-lg text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
+            Create, collaborate, and organize your ideas with powerful documents, mindmaps, and presentations.
+          </p>
+        </div>
+
+        {/* Quick Actions Bar */}
+        <div className="flex items-center justify-center gap-4">
+          <Button
+            onClick={onNewDocument}
+            size="lg"
+            className="bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white shadow-[0_10px_30px_rgba(59,130,246,0.3)] hover:shadow-[0_15px_40px_rgba(59,130,246,0.4)] transition-all duration-300 hover:scale-105"
+          >
+            <Plus className="h-5 w-5 mr-2" />
+            Create New
+          </Button>
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={onLoadDemo}
+            className="border-2 border-dashed border-slate-300 dark:border-slate-600 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-all duration-300"
+          >
+            <Zap className="h-4 w-4 mr-2" />
+            Try Demo
+          </Button>
+        </div>
+
+        {/* Recent Documents - Premium Cards */}
+        <div className="space-y-6">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground opacity-70" />
-              <h2 className="text-lg font-semibold">Recent</h2>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-sky-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+                <Clock className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Recent Documents</h2>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Continue where you left off</p>
+              </div>
             </div>
             {recentDocs.length > 0 && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowQuickSwitcher(true)}
-                className="text-xs text-muted-foreground hover:text-foreground"
+                className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
               >
                 View all
-                <ArrowRight className="h-3 w-3 ml-1" />
+                <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             )}
           </div>
 
           {hasAnyDocs ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {recentDocs.map((doc) => (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {recentDocs.map((doc, index) => (
                 <button
                   key={doc.id}
                   onClick={() => onDocumentSelect(doc.id)}
-                  className="group relative p-3 rounded-xl border border-border/40 bg-card/50 hover:border-blue-500/40 hover:bg-card/70 transition-all text-left overflow-hidden backdrop-blur-sm"
+                  className="group relative overflow-hidden rounded-2xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200/50 dark:border-slate-700/50 hover:border-blue-500/50 transition-all duration-300 hover:shadow-[0_20px_40px_rgba(59,130,246,0.15)] hover:-translate-y-1"
+                  style={{ animationDelay: `${index * 100}ms` }}
                 >
                   {/* Gradient overlay on hover */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/0 to-sky-500/0 group-hover:from-blue-500/10 group-hover:to-sky-500/10 transition-all" />
-                  
-                  <div className="relative z-10">
-                    {/* Compact header row: icon + title on one line */}
-                    <div className="flex items-center justify-between gap-3 mb-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-9 h-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/0 via-transparent to-sky-500/0 group-hover:from-blue-500/5 group-hover:via-blue-500/2 group-hover:to-sky-500/5 transition-all duration-500" />
+
+                  {/* Animated border effect */}
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+                  <div className="relative p-7 flex flex-col justify-center min-h-[140px]">
+                    {/* Header: icon + title row */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4 min-w-0">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500/15 to-sky-600/15 flex items-center justify-center group-hover:scale-110 group-hover:bg-blue-500/20 transition-all duration-500 shrink-0">
                           {getDocumentIcon(doc.type)}
                         </div>
-                        <h3 className="font-semibold truncate group-hover:text-blue-400 transition-colors">
-                          {doc.title}
-                        </h3>
+                        <div className="min-w-0 flex flex-col gap-1.5">
+                          <h3 className="font-bold text-base text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
+                            {doc.title || 'Untitled Document'}
+                          </h3>
+                          <div className="flex items-center gap-2.5 text-[11px] text-slate-500 dark:text-slate-400">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800/80 text-[10px] font-semibold text-slate-600 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50">
+                              {getDocumentIcon(doc.type)}
+                              <span className="capitalize tracking-wide">{getDocumentTypeLabel(doc.type)}</span>
+                            </span>
+                            {(doc.lastOpenedAt || doc.updatedAt) && (
+                              <span className="text-[11px] text-slate-500 dark:text-slate-500 font-medium">
+                                {new Date((doc.lastOpenedAt || doc.updatedAt) as any).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
+
                       {doc.starred && (
-                        <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 shrink-0" />
+                        <div className="w-8 h-8 rounded-xl bg-yellow-500/10 flex items-center justify-center shrink-0 border border-yellow-500/20 shadow-sm">
+                          <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                        </div>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground mb-2">
-                      {getDocumentTypeLabel(doc.type)}
-                      {(doc.lastOpenedAt || doc.updatedAt) && (
-                        <>
-                          {' • '}
-                          <span>
-                            {new Date((doc.lastOpenedAt || doc.updatedAt) as any).toLocaleDateString()}
-                          </span>
-                        </>
-                      )}
-                    </p>
-                    {/* Content preview */}
-                    {doc.content && doc.type === 'markdown' && (
-                      <p className="text-xs text-muted-foreground line-clamp-2 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {doc.content.substring(0, 100)}...
-                      </p>
-                    )}
                   </div>
+
+                  {/* Shine effect */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out" />
                 </button>
               ))}
             </div>
           ) : (
-            <div className="rounded-2xl bg-muted/10 backdrop-blur-sm border border-border/30 p-8 text-center">
-              <h3 className="text-lg font-semibold mb-2">No documents yet</h3>
-              <p className="text-sm text-muted-foreground mb-5">
-                Use the templates below or create a blank document.
+            <div className="text-center py-16">
+              <div className="w-24 h-24 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 flex items-center justify-center">
+                <BookOpen className="h-10 w-10 text-slate-400 dark:text-slate-500" />
+              </div>
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-3">Start Your Journey</h3>
+              <p className="text-slate-600 dark:text-slate-400 mb-8 max-w-md mx-auto">
+                Your workspace is ready. Create your first document or explore our beautiful templates to get started.
               </p>
               <Button
                 onClick={onNewDocument}
-                className="bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white"
+                size="lg"
+                className="bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white shadow-[0_15px_35px_rgba(59,130,246,0.4)] hover:shadow-[0_20px_45px_rgba(59,130,246,0.5)] transition-all duration-300 hover:scale-105"
               >
-                <Plus className="h-4 w-4 mr-2" />
-                Create Document
+                <Plus className="h-5 w-5 mr-3" />
+                Create Your First Document
               </Button>
             </div>
           )}
         </div>
 
-        {/* WOW: Template Hero Carousel (always visible) */}
+        {/* ✨ Premium Template Showcase */}
         {featured && (
-          <div className="relative overflow-hidden rounded-3xl border border-border/40 bg-card/30 backdrop-blur-sm">
-            {/* Animated backdrop */}
-            <div className="absolute inset-0">
-              <div className="absolute -inset-24 bg-[radial-gradient(circle_at_20%_20%,rgba(59,130,246,0.18),transparent_45%),radial-gradient(circle_at_80%_30%,rgba(14,165,233,0.14),transparent_40%),radial-gradient(circle_at_50%_80%,rgba(99,102,241,0.12),transparent_45%)] motion-safe:animate-pulse" />
-              <div className="absolute inset-0 bg-gradient-to-br from-background/0 via-background/10 to-background/30" />
+          <div className="relative">
+            {/* Section Header */}
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20 mb-4">
+                <Palette className="h-4 w-4 text-purple-500" />
+                <span className="text-sm font-medium text-purple-700 dark:text-purple-300">Beautiful Templates</span>
+                <Lightbulb className="h-4 w-4 text-pink-500" />
+              </div>
+              <h2 className="text-3xl font-bold bg-gradient-to-r from-slate-900 via-purple-900 to-slate-800 dark:from-white dark:via-purple-100 dark:to-slate-200 bg-clip-text text-transparent mb-2">
+                Start with Inspiration
+              </h2>
+              <p className="text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
+                Choose from professionally designed templates to jumpstart your creativity and productivity.
+              </p>
             </div>
 
-            <div className="relative p-6">
-              <div className="flex items-start justify-between gap-4 flex-wrap">
-                <div className="min-w-[260px]">
-                  <div className="inline-flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground mb-3">
-                    <span className="px-2 py-1 rounded-full bg-blue-500/10 border border-blue-500/20">
-                      Template Carousel
-                    </span>
-                    <span className="opacity-70">Use arrows or thumbnails</span>
+            {/* Featured Template Hero */}
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-white/90 to-slate-50/90 dark:from-slate-900/90 dark:to-slate-800/90 backdrop-blur-xl border border-slate-200/50 dark:border-slate-700/50 shadow-[0_25px_50px_rgba(0,0,0,0.1)] mb-8">
+              {/* Animated background gradients */}
+              <div className="absolute inset-0">
+                <div className="absolute -inset-32 bg-[radial-gradient(circle_at_30%_30%,rgba(59,130,246,0.15),transparent_50%),radial-gradient(circle_at_70%_40%,rgba(168,85,247,0.12),transparent_45%),radial-gradient(circle_at_50%_70%,rgba(236,72,153,0.1),transparent_50%)] animate-pulse" />
+                <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-slate-100/20 dark:from-slate-900/20 dark:to-slate-800/20" />
+              </div>
+
+              <div className="relative p-8 lg:p-12">
+                <div className="flex flex-col lg:flex-row items-start gap-8">
+                  {/* Featured Template Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg shadow-purple-500/30">
+                        <span className="text-xl">{featured.icon}</span>
+                      </div>
+                      <div>
+                        <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+                          {featured.name}
+                        </h3>
+                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                          {formatType(featured.type)} • {featured.category}
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="text-lg text-slate-700 dark:text-slate-300 mb-6 leading-relaxed">
+                      {featured.description}
+                    </p>
+
+                    <div className="flex items-center gap-3 mb-8">
+                      <Button
+                        onClick={handleCreateFromFeatured}
+                        size="lg"
+                        className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-[0_15px_35px_rgba(168,85,247,0.4)] hover:shadow-[0_20px_45px_rgba(168,85,247,0.5)] transition-all duration-300 hover:scale-105"
+                      >
+                        <Sparkles className="h-5 w-5 mr-2" />
+                        Use This Template
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="lg"
+                        onClick={onNewDocument}
+                        className="border-2 border-slate-300 dark:border-slate-600 hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-950/20 transition-all duration-300"
+                      >
+                        Browse All Templates
+                        <ArrowRight className="h-4 w-4 ml-2" />
+                      </Button>
+                    </div>
+
+                    {/* Navigation dots */}
+                    <div className="flex items-center gap-2">
+                      {featuredTemplates.map((_, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setFeaturedIndex(idx)}
+                          className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                            idx === featuredIndex
+                              ? 'bg-purple-500 w-8'
+                              : 'bg-slate-300 dark:bg-slate-600 hover:bg-slate-400 dark:hover:bg-slate-500'
+                          }`}
+                        />
+                      ))}
+                    </div>
                   </div>
 
-                  <div className="flex items-start gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-white/5 border border-border/40 flex items-center justify-center text-2xl">
-                      {featured.icon}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-2xl font-semibold leading-tight">
-                        {featured.name}
+                  {/* Preview Panel */}
+                  <div className="w-full lg:w-96">
+                    <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl border border-slate-200/50 dark:border-slate-700/50 overflow-hidden shadow-[0_15px_35px_rgba(0,0,0,0.1)]">
+                      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200/50 dark:border-slate-700/50">
+                        <h4 className="font-semibold text-slate-900 dark:text-white">Preview</h4>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={handlePrev}
+                            className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex items-center justify-center"
+                            title="Previous template"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={handleNext}
+                            className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex items-center justify-center"
+                            title="Next template"
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="mt-1 text-sm text-muted-foreground max-w-xl">
-                        {featured.description}
-                      </div>
-                      <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                        <span className="px-2 py-1 rounded-full bg-muted/40 border border-border/40">
-                          {formatType(featured.type)}
-                        </span>
-                        <span className="px-2 py-1 rounded-full bg-muted/40 border border-border/40">
-                          {featured.category}
-                        </span>
-                      </div>
-
-                      <div className="mt-5 flex items-center gap-3">
-                        <Button
-                          onClick={handleCreateFromFeatured}
-                          className="bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white shadow-[0_10px_30px_rgba(59,130,246,0.18)]"
-                        >
-                          <Plus className="h-4 w-4 mr-2" />
-                          Create from Featured
-                        </Button>
-                        <button
-                          onClick={onNewDocument}
-                          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          Browse all templates →
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Preview pane */}
-                <div className="flex-1 min-w-[320px] max-w-[560px]">
-                  <div className="rounded-2xl border border-border/40 bg-background/40 overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-border/40">
-                      <div className="text-xs font-semibold text-muted-foreground">Preview</div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={handlePrev}
-                          className="h-9 w-9 rounded-xl border border-border/40 bg-background/30 hover:bg-background/50 transition-colors flex items-center justify-center"
-                          title="Previous"
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={handleNext}
-                          className="h-9 w-9 rounded-xl border border-border/40 bg-background/30 hover:bg-background/50 transition-colors flex items-center justify-center"
-                          title="Next"
-                        >
-                          <ChevronRight className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="p-4">
-                      {/* Fixed-height preview so large templates don't push the layout down */}
-                      <div className="max-h-[240px] overflow-y-auto pr-2">
-                        <pre className="text-xs whitespace-pre-wrap leading-relaxed text-muted-foreground">
-                          {getPreviewSnippet(featured)}
-                        </pre>
+                      <div className="p-6">
+                        <div className="max-h-64 overflow-y-auto">
+                          <pre className="text-sm whitespace-pre-wrap leading-relaxed text-slate-700 dark:text-slate-300 font-mono text-xs">
+                            {getPreviewSnippet(featured)}
+                          </pre>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
-
-              {/* More templates grid (keeps options visible while preview is on-screen) */}
-              {galleryTemplates.length > 0 && (
-                <div className="mt-6">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="text-xs font-semibold text-muted-foreground">
-                      More templates
-                    </div>
-                    <button
-                      onClick={onNewDocument}
-                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Open template gallery →
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {galleryTemplates.map((t) => {
-                      const idx = featuredTemplates.findIndex((ft) => ft.id === t.id);
-                      const isActive = idx === featuredIndex;
-                      return (
-                        <TemplateMini
-                          key={t.id}
-                          template={t}
-                          active={isActive}
-                          onClick={() => {
-                            // if this template is in the featured set, select it; otherwise fall back to opening modal
-                            if (idx >= 0) setFeaturedIndex(idx);
-                            else onNewDocument();
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
             </div>
+
+            {/* Template Grid */}
+            {galleryTemplates.length > 0 && (
+              <div className="space-y-6">
+                <div className="text-center">
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
+                    More Templates
+                  </h3>
+                  <p className="text-slate-600 dark:text-slate-400">
+                    Explore our collection of professionally designed templates
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {galleryTemplates.map((template, index) => {
+                    const idx = featuredTemplates.findIndex((ft) => ft.id === template.id);
+                    const isActive = idx === featuredIndex;
+
+                    return (
+                      <button
+                        key={template.id}
+                        onClick={() => {
+                          if (idx >= 0) setFeaturedIndex(idx);
+                          else onNewDocument();
+                        }}
+                        className={`group relative overflow-hidden rounded-2xl p-6 text-left transition-all duration-300 hover:shadow-[0_20px_40px_rgba(168,85,247,0.15)] hover:-translate-y-1 ${
+                          isActive
+                            ? 'bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-2 border-purple-500/50 shadow-[0_15px_35px_rgba(168,85,247,0.2)]'
+                            : 'bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-slate-200/50 dark:border-slate-700/50 hover:border-purple-500/50'
+                        }`}
+                        style={{ animationDelay: `${index * 50}ms` }}
+                      >
+                        {/* Active indicator */}
+                        {isActive && (
+                          <div className="absolute top-3 right-3 w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
+                            <div className="w-2 h-2 rounded-full bg-white" />
+                          </div>
+                        )}
+
+                        <div className="relative">
+                          {/* Icon */}
+                          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-600/20 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                            <span className="text-2xl">{template.icon}</span>
+                          </div>
+
+                          {/* Title */}
+                          <h4 className="font-bold text-lg text-slate-900 dark:text-white mb-2 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+                            {template.name}
+                          </h4>
+
+                          {/* Description */}
+                          <p className="text-sm text-slate-600 dark:text-slate-400 mb-4 line-clamp-2">
+                            {template.description}
+                          </p>
+
+                          {/* Tags */}
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-600 dark:text-slate-400">
+                              {formatType(template.type)}
+                            </span>
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-600 dark:text-slate-400">
+                              {template.category}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Shine effect */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out" />
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* View All Button */}
+                <div className="text-center pt-4">
+                  <Button
+                    onClick={onNewDocument}
+                    variant="outline"
+                    size="lg"
+                    className="border-2 border-dashed border-slate-300 dark:border-slate-600 hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-950/20 transition-all duration-300"
+                  >
+                    <BookOpen className="h-5 w-5 mr-2" />
+                    View Complete Template Library
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

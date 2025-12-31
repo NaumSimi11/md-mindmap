@@ -348,27 +348,39 @@ Generate 5-20 nodes with a clear hierarchy. Position nodes in a radial layout ar
   // Handle starting a blank document
   const handleStartWriting = async () => {
     console.log('✍️ Start Writing clicked');
-    
+
     try {
-      // Create blank document (no AI, no credits used)
+      // Check if user already has documents in workspace
+      const { offlineDB } = await import('@/services/offline/OfflineDatabase');
+      const existingDocs = await offlineDB.documents.count();
+
+      if (existingDocs > 0) {
+        // User has existing documents - just navigate to workspace without creating new document
+        console.log(`📂 User has ${existingDocs} existing documents, navigating to workspace`);
+        navigate('/workspace');
+        return;
+      }
+
+      // No existing documents - create a blank one
+      console.log('📄 No existing documents, creating blank document');
       const doc = await createDocument('markdown', 'Untitled', '');
-      
+
       // Initialize Yjs document
       const Y = await import('yjs');
       const { IndexeddbPersistence } = await import('y-indexeddb');
       const ydoc = new Y.Doc();
-      
+
       const persistence = new IndexeddbPersistence(`mdreader-${doc.id}`, ydoc);
       await new Promise(resolve => persistence.once('synced', resolve));
       persistence.destroy();
-      
+
       await refreshDocuments();
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+
       navigate(`/workspace/doc/${doc.id}/edit`);
     } catch (error) {
-      console.error('❌ Failed to create document:', error);
-      alert(`Failed to create document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('❌ Failed to start writing:', error);
+      alert(`Failed to start writing: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 

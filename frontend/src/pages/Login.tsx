@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Loader2, Mail, Lock, Sparkles, ArrowRight } from 'lucide-react';
+import { Loader2, Mail, Lock, Sparkles, ArrowRight, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -99,6 +99,18 @@ export default function Login() {
           }}
         />
       </div>
+
+      {/* 🔥 FIX Issue 3: Back button to return to landing/workspace */}
+      <motion.button
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.3 }}
+        onClick={() => navigate('/')}
+        className="absolute top-6 left-6 z-20 flex items-center gap-2 px-4 py-2 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-all shadow-sm hover:shadow-md"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        <span className="text-sm font-medium">Back</span>
+      </motion.button>
 
       {/* Main Content */}
       <motion.div
@@ -298,6 +310,14 @@ export default function Login() {
                   <Sparkles className="w-4 h-4 ml-2 text-blue-500 group-hover:rotate-12 transition-transform duration-200" />
                 </Button>
               </Link>
+              
+              {/* Continue as Guest */}
+              <button
+                onClick={() => navigate('/workspace')}
+                className="w-full text-center text-sm text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors py-2"
+              >
+                Continue as Guest →
+              </button>
             </motion.div>
           </div>
         </div>

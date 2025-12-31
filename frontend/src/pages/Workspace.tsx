@@ -105,8 +105,28 @@ export default function Workspace() {
   const [showCreateWorkspaceModal, setShowCreateWorkspaceModal] = useState(false);
   const [showRenameWorkspaceDialog, setShowRenameWorkspaceDialog] = useState(false);
   const [showWorkspaceMembers, setShowWorkspaceMembers] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    // Auto-collapse sidebar on small screens (< 1024px) on initial load
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 1024;
+    }
+    return false;
+  });
   const [focusMode, setFocusMode] = useState(false);
+  
+  // Auto-collapse sidebar on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      // Auto-collapse on screens smaller than 1024px (lg breakpoint)
+      if (window.innerWidth < 1024) {
+        setSidebarCollapsed(true);
+      }
+      // Don't auto-expand - let user control that manually
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showCollaborationSidebar, setShowCollaborationSidebar] = useState(false);
   const [activityEvents, setActivityEvents] = useState<any[]>([]);
@@ -786,6 +806,8 @@ export default function Workspace() {
             onTitleChange={handleTitleChange}
             onEditorReady={handleEditorReady}
             contextFolders={contextFolders}
+            documentSyncStatus={currentDocument?.syncStatus}
+            documentCloudId={currentDocument?.cloudId}
           />
         </EditorErrorBoundary>
       );
@@ -816,7 +838,7 @@ export default function Workspace() {
   };
 
   return (
-    <div className="flex h-screen bg-background relative">
+    <div className="flex h-screen bg-background relative overflow-hidden">
       {/* Adaptive Sidebar - Hidden in Focus Mode and Presenter Mode */}
       {!focusMode && viewMode !== 'present' && (
         <SidebarErrorBoundary>
@@ -887,152 +909,188 @@ export default function Workspace() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top Bar */}
+        {/* Premium Top Bar - Matching Homepage Style - RESPONSIVE */}
         {!focusMode && (
-          <header className="flex items-center justify-between px-6 py-4 bg-card/30 backdrop-blur-sm mb-2">
-            <div className="flex items-center gap-3">
-              {currentDocument && (
-                <>
-                  <span className="text-muted-foreground">/</span>
-                  <input
-                    type="text"
-                    value={currentDocument.title}
-                    onChange={(e) => {
-                      const newTitle = e.target.value;
-                      setCurrentDocument({ ...currentDocument, title: newTitle });
-                      backendUpdateDocument(currentDocument.id, { title: newTitle });
-                    }}
-                    className="text-sm font-medium bg-transparent border-none outline-none focus:ring-0 min-w-[200px] max-w-[400px] hover:bg-muted/30 px-2 py-1 rounded transition-colors"
-                    placeholder="Untitled Document"
-                  />
+          <div className="relative flex-shrink-0 px-3 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4 bg-white dark:bg-slate-900">
+            {/* Premium background with gradients and glassmorphism */}
+            <div className="absolute inset-0 bg-gradient-to-r from-white via-slate-50/90 to-white dark:from-slate-900 dark:via-slate-800/90 dark:to-slate-900 backdrop-blur-2xl border-b border-slate-200/50 dark:border-slate-700/50 shadow-[0_4px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]" />
 
-                  {/* View Mode Indicator */}
-                  {viewMode && viewMode !== 'home' && (
-                    <>
-                      <span className="text-muted-foreground">/</span>
-                      <span className="text-sm font-medium text-primary px-2 py-1 rounded-md bg-primary/10">
-                        {viewMode === 'edit' && '✍️ Editor'}
-                        {viewMode === 'mindmap' && '🧠 Mindmap'}
-                        {viewMode === 'slides' && '📊 Presentation'}
-                        {viewMode === 'present' && '🎬 Presenting'}
-                      </span>
-                    </>
-                  )}
-                </>
-              )}
+            {/* Subtle animated gradients - only visible in light mode - hidden on small screens for performance */}
+            <div className="absolute inset-0 overflow-hidden dark:opacity-30 hidden sm:block">
+              <div className="absolute -inset-24 bg-[radial-gradient(circle_at_20%_20%,rgba(59,130,246,0.08),transparent_50%),radial-gradient(circle_at_80%_30%,rgba(168,85,247,0.06),transparent_45%),radial-gradient(circle_at_50%_80%,rgba(236,72,153,0.04),transparent_50%)] animate-pulse" />
+              <div className="absolute inset-0 bg-gradient-to-r from-white/10 via-transparent to-slate-100/10 dark:from-transparent dark:via-transparent dark:to-transparent" />
             </div>
 
-            <div className="flex items-center gap-3">
-              {/* Presence List - Show who's online */}
-              <PresenceList provider={websocketProvider} />
-              
-              {/* Sync Status Indicator - Now in WYSIWYGEditor */}
-              
-              {/* Version history moved into the editor header (single source of truth) */}
+            <div className="relative flex items-center justify-between w-full gap-2">
+              {/* Left Section - Document Navigation with Enhanced Title Input */}
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                {currentDocument && (
+                  <>
+                    <div className="relative group min-w-0 flex-1 max-w-[200px] sm:max-w-[300px] lg:max-w-[400px]">
+                      <input
+                        type="text"
+                        value={currentDocument.title}
+                        onChange={(e) => {
+                          const newTitle = e.target.value;
+                          setCurrentDocument({ ...currentDocument, title: newTitle });
+                          backendUpdateDocument(currentDocument.id, { title: newTitle });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            (e.target as HTMLInputElement).blur();
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            (e.target as HTMLInputElement).blur();
+                          }
+                        }}
+                        className="w-full bg-transparent border-0 outline-none font-semibold text-base sm:text-lg text-foreground placeholder:text-muted-foreground/60 hover:bg-muted/30 focus:bg-muted/50 px-2 sm:px-3 py-1 rounded-md transition-colors truncate"
+                        placeholder="Untitled Document"
+                        title="Click to edit document title"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-muted/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-md" />
+                    </div>
 
-              {/* Guest Credits */}
-              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border border-border/40 text-xs text-muted-foreground">
-                <span className="inline-flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-red-500/80" />
-                  <span>Guest</span>
-                </span>
-                <span className="mx-1 text-border">•</span>
-                <span className="inline-flex items-center gap-1">
-                  <span>⚡</span>
-                  <span>{remaining}/{total}</span>
-                </span>
+                    {/* View Mode Indicator - hidden on very small screens */}
+                    {viewMode && viewMode !== 'home' && (
+                      <>
+                        <span className="text-muted-foreground font-medium hidden sm:inline">/</span>
+                        <span className="hidden sm:inline text-xs sm:text-sm font-medium text-primary px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-primary/10 border border-primary/20 shadow-sm whitespace-nowrap">
+                          {viewMode === 'edit' && '✍️ Editor'}
+                          {viewMode === 'mindmap' && '🧠 Mindmap'}
+                          {viewMode === 'slides' && '📊 Slides'}
+                          {viewMode === 'present' && '🎬 Present'}
+                        </span>
+                      </>
+                    )}
+                  </>
+                )}
               </div>
 
-              {/* User Menu */}
-              {user ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="gap-2">
-                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-medium">
-                        {(user.full_name?.[0] || user.username?.[0] || 'U').toUpperCase()}
-                      </div>
-                      <span className="hidden md:inline">{user.full_name || user.username}</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuLabel>
-                      <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium">{user.full_name || user.username}</p>
-                        <p className="text-xs text-muted-foreground">{user.email}</p>
-                      </div>
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => navigate('/profile')}>
-                      <User className="mr-2 h-4 w-4" />
-                      Profile
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => navigate('/settings')}>
-                      <Settings className="mr-2 h-4 w-4" />
-                      Settings
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={async () => {
-                        if (confirm('⚠️ This will delete ALL offline data and refresh the page. Continue?')) {
-                          try {
-                            // Delete IndexedDB
-                            await indexedDB.deleteDatabase('MDReaderOfflineDB');
-                            console.log('✅ Offline database deleted');
-                            
-                            // Reload page
-                            window.location.reload();
-                          } catch (error) {
-                            console.error('❌ Failed to reset offline data:', error);
-                            alert('Failed to reset offline data. Check console for details.');
+              {/* Right Section - Premium Status & Actions */}
+              <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-3 flex-shrink-0">
+                {/* Presence List - Top-right avatars - hidden on very small screens */}
+                <div className="hidden sm:block">
+                  <PresenceList provider={websocketProvider} />
+                </div>
+
+                {/* Guest indicator - premium style - compact on mobile */}
+                {!user && (
+                  <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-full bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border border-orange-200/50 dark:border-orange-800/50 text-xs text-orange-700 dark:text-orange-300 shadow-sm backdrop-blur-sm">
+                    <span className="w-2 h-2 rounded-full bg-gradient-to-r from-orange-400 to-amber-400 shadow-sm" />
+                    <span className="font-medium hidden sm:inline">Guest</span>
+                    <span className="hidden sm:inline mx-1 text-orange-400 dark:text-orange-500">•</span>
+                    <span className="font-mono font-medium">{remaining}/{total}</span>
+                  </div>
+                )}
+
+                {/* User Menu - Premium Style */}
+                {user ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1 sm:gap-2 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm hover:bg-white dark:hover:bg-slate-800 hover:shadow-lg transition-all duration-300 rounded-lg px-2 sm:px-3"
+                      >
+                        <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs sm:text-sm font-medium shadow-sm">
+                          {(user.full_name?.[0] || user.username?.[0] || 'U').toUpperCase()}
+                        </div>
+                        <span className="hidden lg:inline font-medium">{user.full_name || user.username}</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="end"
+                      className="w-72 bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-2xl rounded-2xl p-2"
+                    >
+                      <DropdownMenuLabel>
+                        <div className="flex flex-col space-y-1 px-2">
+                          <p className="text-sm font-bold text-slate-900 dark:text-white">{user.full_name || user.username}</p>
+                          <p className="text-xs text-muted-foreground">{user.email}</p>
+                        </div>
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => navigate('/profile')}
+                        className="rounded-xl px-3 py-3 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-colors"
+                      >
+                        <User className="mr-3 h-4 w-4 text-blue-500" />
+                        <span className="font-medium">Profile</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => navigate('/settings')}
+                        className="rounded-xl px-3 py-3 hover:bg-green-50 dark:hover:bg-green-950/20 transition-colors"
+                      >
+                        <Settings className="mr-3 h-4 w-4 text-green-500" />
+                        <span className="font-medium">Settings</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={async () => {
+                          if (confirm('⚠️ This will delete ALL offline data and refresh the page. Continue?')) {
+                            try {
+                              // Delete IndexedDB
+                              await indexedDB.deleteDatabase('MDReaderOfflineDB');
+                              console.log('✅ Offline database deleted');
+
+                              // Reload page
+                              window.location.reload();
+                            } catch (error) {
+                              console.error('❌ Failed to reset offline data:', error);
+                              alert('Failed to reset offline data. Check console for details.');
+                            }
                           }
-                        }
-                      }}
-                      className="text-orange-600 focus:text-orange-600"
-                    >
-                      <Database className="mr-2 h-4 w-4" />
-                      Reset Offline Data
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={async () => {
-                        await logout();
-                        navigate('/login');
-                      }}
-                      className="text-red-600 focus:text-red-600"
-                    >
-                      <LogOut className="mr-2 h-4 w-4" />
-                      Log out
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => navigate('/login')}
-                  className="hidden md:inline-flex"
-                >
-                  Log in
-                </Button>
-              )}
+                        }}
+                        className="rounded-xl px-3 py-3 hover:bg-orange-50 dark:hover:bg-orange-950/20 transition-colors text-orange-600 focus:text-orange-600"
+                      >
+                        <Database className="mr-3 h-4 w-4" />
+                        <span className="font-medium">Reset Offline Data</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={async () => {
+                          await logout();
+                          // 🔥 FIX: Redirect to landing page, not login (less confusing)
+                          navigate('/');
+                        }}
+                        className="rounded-xl px-3 py-3 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors text-red-600 focus:text-red-600"
+                      >
+                        <LogOut className="mr-3 h-4 w-4" />
+                        <span className="font-medium">Log out</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigate('/login')}
+                    className="hidden md:inline-flex bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm hover:bg-white dark:hover:bg-slate-800 hover:shadow-lg transition-all duration-300 rounded-lg px-4"
+                  >
+                    <span className="font-medium">Log in</span>
+                  </Button>
+                )}
 
               {/* File Watcher Indicator (Desktop only) */}
-              <FileWatcherIndicator />
-              
+              <div className="hidden lg:block">
+                <FileWatcherIndicator />
+              </div>
+
               {/* Collaboration Toggle */}
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowCollaborationSidebar(!showCollaborationSidebar)}
-                className="h-8 w-8 p-0"
+                className="h-7 w-7 sm:h-8 sm:w-8 p-0 hidden sm:flex items-center justify-center"
                 title="Collaboration"
               >
                 <Users className="h-4 w-4" />
               </Button>
-              
+
               {/* Theme Toggle */}
-              <ThemeToggle />
+                <ThemeToggle />
+              </div>
             </div>
-          </header>
+          </div>
         )}
 
         {/* Main Content */}

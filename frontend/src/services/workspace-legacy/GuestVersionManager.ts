@@ -292,6 +292,120 @@ class GuestVersionManager {
   }
 
   /**
+   * Restore a version (replace current document content)
+   * 
+   * 🔴 CRITICAL POINT #10: Guest Mode Restore
+   * - Loads content from version's Yjs doc
+   * - Replaces current document's Yjs doc content
+   * - Updates version tracking
+   * 
+   * @param documentId - The current document ID
+   * @param versionNumber - The version to restore
+   * @returns true if successful, false otherwise
+   */
+  async restoreVersion(documentId: string, versionNumber: number): Promise<boolean> {
+    try {
+      console.log(`🔄 Restoring version ${versionNumber} for ${documentId}`);
+      
+      // Get version content
+      const content = await this.getVersionContent(documentId, versionNumber);
+      
+      if (!content) {
+        console.error('❌ Failed to load version content');
+        return false;
+      }
+      
+      // Get current document's Yjs instance
+      const currentInstance = yjsDocumentManager.getDocument(documentId, {
+        enableWebSocket: false,
+        isAuthenticated: false
+      });
+      
+      // Import markdown initializer
+      const { initializeYjsWithMarkdown } = await import('@/utils/yjs-content-initializer');
+      
+      // Replace current document content with version content
+      initializeYjsWithMarkdown(currentInstance.ydoc, content);
+      
+      // Create a new version entry for this restore
+      const versions = this.getVersions(documentId);
+      const newVersionNumber = versions.currentVersion + 1;
+      const contentHash = await getContentHash(content);
+      
+      const restoreVersion: GuestVersion = {
+        versionNumber: newVersionNumber,
+        yjsDocId: documentId, // Current doc uses main ID
+        contentHash,
+        createdAt: new Date().toISOString(),
+        comment: `Restored from version ${versionNumber}`,
+        wordCount: content.split(/\s+/).filter(w => w.length > 0).length
+      };
+      
+      versions.versions.push(restoreVersion);
+      versions.currentVersion = newVersionNumber;
+      this.saveVersions(versions);
+      
+      console.log(`✅ Restored version ${versionNumber} as new version ${newVersionNumber}`);
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to restore version:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Restore a version as a new document (create copy)
+   * 
+   * @param documentId - The original document ID
+   * @param versionNumber - The version to restore
+   * @param newDocumentId - The ID for the new document
+   * @returns true if successful, false otherwise
+   */
+  async restoreVersionAsNew(
+    documentId: string,
+    versionNumber: number,
+    newDocumentId: string
+  ): Promise<boolean> {
+    try {
+      console.log(`📄 Creating new document ${newDocumentId} from version ${versionNumber}`);
+      
+      // Get version content
+      const content = await this.getVersionContent(documentId, versionNumber);
+      
+      if (!content) {
+        console.error('❌ Failed to load version content');
+        return false;
+      }
+      
+      // Create new Yjs document
+      const { initializeYjsWithMarkdown } = await import('@/utils/yjs-content-initializer');
+      
+      const newInstance = yjsDocumentManager.getDocument(newDocumentId, {
+        enableWebSocket: false,
+        isAuthenticated: false
+      });
+      
+      initializeYjsWithMarkdown(newInstance.ydoc, content);
+      
+      // Initialize version tracking for new document
+      await this.initializeVersionTracking(
+        newDocumentId,
+        content,
+        `Restored from version ${versionNumber}`
+      );
+      
+      // Release the document reference
+      yjsDocumentManager.releaseDocument(newDocumentId);
+      
+      console.log(`✅ Created new document ${newDocumentId} from version ${versionNumber}`);
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to restore version as new:', error);
+      return false;
+    }
+  }
+
+  /**
    * Delete all versions for a document (cleanup)
    * 
    * ⚠️ BREAKABLE POINT: Must be called when deleting document
@@ -303,9 +417,23 @@ class GuestVersionManager {
       
       // Delete all Yjs docs for this document's versions
       for (const version of versions.versions) {
-        // TODO: Delete from IndexedDB
-        // Currently: Yjs docs remain in IndexedDB (minor storage leak)
-        console.log(`🗑️ Should delete Yjs doc: ${version.yjsDocId}`);
+        try {
+          // Use yjsDocumentManager to properly clean up
+          const instance = yjsDocumentManager.getDocument(version.yjsDocId, {
+            enableWebSocket: false,
+            isAuthenticated: false
+          });
+          
+          // Destroy the Yjs document
+          instance.ydoc.destroy();
+          
+          // Release from manager
+          yjsDocumentManager.releaseDocument(version.yjsDocId);
+          
+          console.log(`✅ Deleted Yjs doc: ${version.yjsDocId}`);
+        } catch (error) {
+          console.warn(`⚠️ Failed to delete Yjs doc ${version.yjsDocId}:`, error);
+        }
       }
       
       // Delete version metadata from localStorage

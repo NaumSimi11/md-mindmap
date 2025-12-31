@@ -21,13 +21,15 @@ interface ImportDocumentButtonProps {
   size?: 'default' | 'sm' | 'lg';
   className?: string;
   'data-testid'?: string;
+  compact?: boolean;
 }
 
 export function ImportDocumentButton({ 
   variant = 'outline', 
   size = 'sm',
   className = '',
-  'data-testid': testId
+  'data-testid': testId,
+  compact = false,
 }: ImportDocumentButtonProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [showInfoDialog, setShowInfoDialog] = useState(false);
@@ -221,12 +223,12 @@ export function ImportDocumentButton({
           {isUploading ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Importing...
+              {!compact && 'Importing...'}
             </>
           ) : (
             <>
-              <Upload className="h-4 w-4 mr-2" />
-              Import .md
+              <Upload className={`h-4 w-4 ${compact ? '' : 'mr-2'}`} />
+              {!compact && 'Import .md'}
             </>
           )}
         </Button>

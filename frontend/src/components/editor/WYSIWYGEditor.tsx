@@ -50,6 +50,12 @@ import { autoFormatText, generateAIFormatPrompt, needsFormatting } from '@/utils
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/components/ui/use-toast';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useEditorUIStore } from '@/stores/editorUIStore';
 import { UnifiedAIModal } from '@/components/modals/UnifiedAIModal';
 import UnifiedDiagramModal from '@/components/modals/UnifiedDiagramModal';
@@ -75,6 +81,7 @@ import {
   HardDrive,
   Users,
   Clock,
+  Menu,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -94,6 +101,10 @@ interface WYSIWYGEditorProps {
   // ❌ STEP 1: Removed onContentChange (Yjs handles persistence)
   onTitleChange?: (title: string) => void;
   onEditorReady?: (editor: any) => void;
+  /** Document sync status (for version history) */
+  documentSyncStatus?: 'local' | 'synced' | 'syncing' | 'conflict' | 'pending' | 'modified' | 'error';
+  /** Document cloud ID (for version history) */
+  documentCloudId?: string | null;
   contextFolders?: Array<{
     id: string;
     name: string;
@@ -118,6 +129,8 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
   onTitleChange,
   onEditorReady,
   contextFolders = [],
+  documentSyncStatus,
+  documentCloudId,
 }) => {
   // 🔥 ISSUE 1 FIX: Early return if no documentId
   // Prevents TipTap from ever mounting without ydoc
@@ -773,150 +786,471 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
             });
           }}
           onShare={() => console.log('Share clicked')}
+          onShowShareModal={isAuthenticated && documentId && userRole ? () => setShowShareModal(true) : undefined}
+          onShowVersionHistory={isAuthenticated && documentId && userRole ? () => setShowVersionHistory(true) : undefined}
         />
       )}
 
-      <div className="bg-card/40 backdrop-blur-sm px-6 py-3 flex-shrink-0 mb-2">
-        <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-2">
-            {viewReady && (
-              <FormatDropdown
-                editor={editor}
-                onInsertTable={insertTable}
-                onInsertLink={insertLink}
-                onInsertImage={insertImage}
-                onAutoFormat={handleAutoFormat}
-                onAutoFormatAll={handleAutoFormatAll}
-                onAIFormat={handleAIFormat}
-              />
-            )}
-            <Separator orientation="vertical" className="h-6 mx-1" />
-            <Button size="sm" variant="outline" onClick={() => setShowDiagramMenu(true)} title="Insert Diagram" className="gap-1">
+      {/* Premium Top Bar - Matching Homepage Style - RESPONSIVE */}
+      <div className="relative flex-shrink-0 px-3 sm:px-4 lg:px-6 py-2.5 sm:py-3 lg:py-4 bg-white dark:bg-slate-900">
+        {/* Premium background with gradients and glassmorphism */}
+        <div className="absolute inset-0 bg-gradient-to-r from-white via-slate-50/90 to-white dark:from-slate-900 dark:via-slate-800/90 dark:to-slate-900 backdrop-blur-2xl border-b border-slate-200/50 dark:border-slate-700/50 shadow-[0_4px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]" />
+
+        {/* Subtle animated gradients - only visible in light mode */}
+        <div className="absolute inset-0 overflow-hidden dark:opacity-30">
+          <div className="absolute -inset-24 bg-[radial-gradient(circle_at_20%_20%,rgba(59,130,246,0.08),transparent_50%),radial-gradient(circle_at_80%_30%,rgba(168,85,247,0.06),transparent_45%),radial-gradient(circle_at_50%_80%,rgba(236,72,153,0.04),transparent_50%)] animate-pulse" />
+          <div className="absolute inset-0 bg-gradient-to-r from-white/10 via-transparent to-slate-100/10 dark:from-transparent dark:via-transparent dark:to-transparent" />
+        </div>
+
+        <div className="relative flex items-center justify-between w-full gap-2">
+          {/* Left Section - Premium Tools */}
+          <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-3 min-w-0 overflow-x-auto scrollbar-hide">
+            
+            {/* MOBILE: Collapsed Tools Menu (visible on small screens) */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex lg:hidden gap-1.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border-slate-300/50 dark:border-slate-600/50 hover:bg-white dark:hover:bg-slate-800 hover:shadow-lg transition-all duration-300 rounded-lg px-2.5 sm:px-3"
+                >
+                  <Menu className="h-4 w-4" />
+                  <span className="text-xs font-medium hidden sm:inline">Tools</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64 bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-2xl rounded-2xl p-2">
+                {/* Format Dropdown Entry */}
+                {viewReady && (
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger className="rounded-xl px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                      <FileText className="h-4 w-4 mr-3 text-slate-600 dark:text-slate-400" />
+                      <span className="font-medium">Format</span>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-2xl rounded-2xl p-2 min-w-[200px]">
+                      <DropdownMenuItem onClick={handleAutoFormat} className="rounded-xl px-3 py-2">
+                        Auto Format Selection
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleAutoFormatAll} className="rounded-xl px-3 py-2">
+                        Auto Format All
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleAIFormat} className="rounded-xl px-3 py-2">
+                        AI Format
+                      </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                )}
+                
+                <DropdownMenuItem
+                  onClick={() => setShowDiagramMenu(true)}
+                  className="rounded-xl px-3 py-2.5 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-colors"
+                >
+                  <Library className="h-4 w-4 mr-3 text-blue-500" />
+                  <span className="font-medium">Insert Diagram</span>
+                </DropdownMenuItem>
+                
+                <DropdownMenuItem
+                  onClick={() => setShowMindmapChoiceModal(true)}
+                  className="rounded-xl px-3 py-2.5 hover:bg-orange-50 dark:hover:bg-orange-950/20 transition-colors"
+                >
+                  <Network className="h-4 w-4 mr-3 text-orange-500" />
+                  <span className="font-medium">Mindmap Studio</span>
+                </DropdownMenuItem>
+                
+                <DropdownMenuSeparator className="my-2" />
+                
+                <DropdownMenuItem
+                  onClick={() => setShowKeyboardShortcuts(true)}
+                  className="rounded-xl px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                >
+                  <Keyboard className="h-4 w-4 mr-3 text-slate-500" />
+                  <span className="font-medium">Keyboard Shortcuts</span>
+                </DropdownMenuItem>
+                
+                {isAuthenticated && documentId && userRole && (
+                  <>
+                    <DropdownMenuSeparator className="my-2" />
+                    <DropdownMenuItem
+                      onClick={() => setShowShareModal(true)}
+                      className="rounded-xl px-3 py-2.5 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-colors"
+                    >
+                      <Users className="h-4 w-4 mr-3 text-blue-500" />
+                      <span className="font-medium">Share Document</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setShowVersionHistory(true)}
+                      className="rounded-xl px-3 py-2.5 hover:bg-purple-50 dark:hover:bg-purple-950/20 transition-colors"
+                    >
+                      <Clock className="h-4 w-4 mr-3 text-purple-500" />
+                      <span className="font-medium">Version History</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* DESKTOP: Full toolbar (hidden on small screens) */}
+            {/* Format Dropdown - Desktop Only */}
+            <div className="hidden lg:block">
+              {viewReady && (
+                <FormatDropdown
+                  editor={editor}
+                  onInsertTable={insertTable}
+                  onInsertLink={insertLink}
+                  onInsertImage={insertImage}
+                  onAutoFormat={handleAutoFormat}
+                  onAutoFormatAll={handleAutoFormatAll}
+                  onAIFormat={handleAIFormat}
+                />
+              )}
+            </div>
+
+            <div className="hidden lg:block w-px h-8 bg-slate-300/50 dark:bg-slate-600/50 mx-2" />
+
+            {/* Diagram Button - Desktop Only */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowDiagramMenu(true)}
+              title="Insert Diagram"
+              className="hidden lg:flex gap-2 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border-slate-300/50 dark:border-slate-600/50 hover:bg-white dark:hover:bg-slate-800 hover:shadow-lg hover:shadow-blue-500/20 transition-all duration-300 rounded-lg px-3"
+            >
               <Library className="h-4 w-4" />
-              <span className="text-xs">Diagram</span>
+              <span className="text-xs font-medium">Diagram</span>
             </Button>
-            <Button size="sm" className="gradient-primary border-0 text-white hover:scale-105 transition-transform" onClick={() => setShowAIModal(true)} title="AI Assistant">
-              <Sparkles className="h-4 w-4 mr-1" />
-              AI Assistant
+
+            {/* AI Assistant Dropdown - ALWAYS VISIBLE (priority action) */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  title="AI Assistant"
+                  className="gap-1.5 sm:gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-lg shadow-purple-500/30 hover:shadow-purple-500/40 transition-all duration-300 hover:scale-105 rounded-lg px-2.5 sm:px-3 lg:px-4"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  <span className="text-xs font-medium">AI</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64 bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-2xl rounded-2xl p-2">
+                <DropdownMenuItem
+                  onClick={() => setShowAIModal(true)}
+                  className="rounded-xl px-3 py-3 mb-1 hover:bg-purple-50 dark:hover:bg-purple-950/20 transition-colors"
+                >
+                  <Sparkles className="h-4 w-4 mr-3 text-purple-500" />
+                  <div className="flex flex-col">
+                    <span className="font-medium">Ask AI</span>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">Generate content, rewrite, chat</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="my-2" />
+                <div className="px-3 py-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">AI Autocomplete</span>
+                    <button
+                      onClick={(e) => { e.preventDefault(); setAiAutocompleteEnabled(!aiAutocompleteEnabled); }}
+                      className={`w-10 h-5 rounded-full transition-colors ${aiAutocompleteEnabled ? 'bg-purple-500' : 'bg-slate-300 dark:bg-slate-600'}`}
+                    >
+                      <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${aiAutocompleteEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">AI Hints</span>
+                    <button
+                      onClick={(e) => { e.preventDefault(); setAiSuggestionsEnabled(!aiSuggestionsEnabled); }}
+                      className={`w-10 h-5 rounded-full transition-colors ${aiSuggestionsEnabled ? 'bg-purple-500' : 'bg-slate-300 dark:bg-slate-600'}`}
+                    >
+                      <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${aiSuggestionsEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    </button>
+                  </div>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Mindmap Button - Desktop Only */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowMindmapChoiceModal(true)}
+              title="Open Mindmap Studio"
+              className="hidden lg:flex gap-2 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border-orange-300/50 dark:border-orange-600/50 hover:bg-orange-50 dark:hover:bg-orange-950/20 hover:border-orange-500 hover:shadow-lg hover:shadow-orange-500/20 transition-all duration-300 rounded-lg px-3"
+            >
+              <Network className="h-4 w-4" />
+              <span className="text-xs font-medium">Mindmap</span>
             </Button>
-            <Button size="sm" variant="outline" className="border-primary/50 hover:bg-primary/10" onClick={() => {
-                // ❌ STEP 1: No auto-save before mindmap (Yjs will handle in STEP 3)
-                setShowMindmapChoiceModal(true);
-            }} title="Open Mindmap Studio">
-              <Network className="h-4 w-4 mr-1" />
-              Mindmap
-            </Button>
-            <AISettingsDropdown
-              aiAutocompleteEnabled={aiAutocompleteEnabled}
-              onAIAutocompleteChange={setAiAutocompleteEnabled}
-              aiHintsEnabled={aiSuggestionsEnabled}
-              onAIHintsChange={setAiSuggestionsEnabled}
-            />
-            <Button size="sm" variant="ghost" onClick={() => setShowKeyboardShortcuts(true)} title="Keyboard Shortcuts (?)">
+
+            {/* Keyboard Shortcuts - Desktop Only */}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowKeyboardShortcuts(true)}
+              title="Keyboard Shortcuts (?)"
+              className="hidden xl:flex bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm hover:bg-white dark:hover:bg-slate-800 hover:shadow-lg transition-all duration-300 rounded-lg px-3"
+            >
               <Keyboard className="h-4 w-4" />
             </Button>
-            <Separator orientation="vertical" className="h-6 mx-1" />
-            <Button size="sm" variant={editorMode === 'markdown' ? 'default' : 'outline'} onClick={toggleEditorMode} title="Toggle Mode (Ctrl+M)" className="gap-1">
+
+            <div className="hidden md:block w-px h-8 bg-slate-300/50 dark:bg-slate-600/50 mx-1 lg:mx-2" />
+
+            {/* Mode Toggle - ALWAYS VISIBLE (priority action) */}
+            <Button
+              size="sm"
+              variant={editorMode === 'markdown' ? 'default' : 'outline'}
+              onClick={toggleEditorMode}
+              title="Toggle Mode (Ctrl+M)"
+              className={`gap-1.5 sm:gap-2 transition-all duration-300 rounded-lg px-2 sm:px-3 ${
+                editorMode === 'markdown'
+                  ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-lg shadow-green-500/30 hover:shadow-green-500/40'
+                  : 'bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border-slate-300/50 dark:border-slate-600/50 hover:bg-white dark:hover:bg-slate-800 hover:shadow-lg'
+              }`}
+            >
               <FileText className="h-4 w-4" />
-              <span className="text-xs">{editorMode === 'wysiwyg' ? 'Markdown' : 'WYSIWYG'}</span>
+              <span className="text-xs font-medium hidden sm:inline">{editorMode === 'wysiwyg' ? 'MD' : 'WYSIWYG'}</span>
             </Button>
-            {/* ❌ STEP 3: Undo/Redo buttons disabled - Yjs Collaboration provides undo/redo via keyboard shortcuts (Ctrl+Z/Ctrl+Y) */}
-            {/* Will be re-enabled in STEP 4 with proper Yjs undo/redo commands */}
-            {/* <Separator orientation="vertical" className="h-6 mx-1" /> */}
-            {/* <Button size="sm" variant="ghost" onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()} title="Undo (Ctrl+Z)">
-              <Undo className="h-4 w-4" />
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()} title="Redo (Ctrl+Y)">
-              <Redo className="h-4 w-4" />
-            </Button> */}
             
-            {/* Share & Version History Buttons */}
+            {/* Share & Version History Buttons - Desktop Only */}
             {isAuthenticated && documentId && userRole && (
               <>
-                <Separator orientation="vertical" className="h-6 mx-1" />
+                <Separator orientation="vertical" className="hidden lg:block h-6 mx-1" />
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => setShowShareModal(true)}
                   title="Share Document"
-                  className="gap-1"
+                  className="hidden lg:flex gap-1 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border-slate-300/50 dark:border-slate-600/50 hover:bg-white dark:hover:bg-slate-800 hover:shadow-lg transition-all duration-300 rounded-lg"
                 >
                   <Users className="h-4 w-4" />
-                  <span className="text-xs">Share</span>
+                  <span className="text-xs font-medium">Share</span>
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => setShowVersionHistory(true)}
                   title="Version History"
-                  className="gap-1"
+                  className="hidden lg:flex gap-1 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border-slate-300/50 dark:border-slate-600/50 hover:bg-white dark:hover:bg-slate-800 hover:shadow-lg transition-all duration-300 rounded-lg"
                 >
                   <Clock className="h-4 w-4" />
-                  <span className="text-xs">History</span>
+                  <span className="text-xs font-medium">History</span>
                 </Button>
               </>
             )}
           </div>
-          <div className="flex items-center gap-3">
-            {/* Durability / backup status badge */}
+
+          {/* Center Section - Spacer */}
+          <div className="flex-1 min-w-0" />
+
+          {/* Right Section - Premium Status & Actions */}
+          <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-3 flex-shrink-0">
+            {/* Sync status button with tooltip */}
             {isAuthenticated && documentId && (
-              <SyncStatusBadge
-                lastSyncedAt={syncStatus.lastSyncedAt}
-                lastSyncSuccess={syncStatus.lastSyncSuccess}
-                isBackingUp={syncStatus.isBackingUp}
-                cloudEnabled={syncStatus.cloudEnabled}
-                pendingCount={syncStatus.pendingCount}
-                isOnline={syncStatus.isOnline}
-              />
+              <TooltipProvider delayDuration={100}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className={`relative gap-1 sm:gap-2 backdrop-blur-sm transition-all duration-300 rounded-lg px-2 sm:px-3 ${
+                        syncStatus.isBackingUp 
+                          ? 'bg-yellow-50 dark:bg-yellow-950/30 hover:bg-yellow-100 dark:hover:bg-yellow-950/50 border border-yellow-300/50 dark:border-yellow-700/50' 
+                          : syncStatus.isOnline && syncStatus.lastSyncSuccess 
+                            ? 'bg-green-50 dark:bg-green-950/30 hover:bg-green-100 dark:hover:bg-green-950/50 border border-green-300/50 dark:border-green-700/50' 
+                            : syncStatus.isOnline 
+                              ? 'bg-yellow-50 dark:bg-yellow-950/30 hover:bg-yellow-100 dark:hover:bg-yellow-950/50 border border-yellow-300/50 dark:border-yellow-700/50' 
+                              : 'bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 border border-red-300/50 dark:border-red-700/50'
+                      }`}
+                    >
+                      <div 
+                        className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full transition-all duration-300 ${
+                          syncStatus.isBackingUp 
+                            ? 'bg-yellow-500 animate-pulse' 
+                            : syncStatus.isOnline && syncStatus.lastSyncSuccess 
+                              ? 'bg-green-500' 
+                              : syncStatus.isOnline 
+                                ? 'bg-yellow-500' 
+                                : 'bg-red-500'
+                        }`}
+                      />
+                      <span className={`text-xs font-medium hidden sm:inline ${
+                        syncStatus.isBackingUp 
+                          ? 'text-yellow-700 dark:text-yellow-300' 
+                          : syncStatus.isOnline && syncStatus.lastSyncSuccess 
+                            ? 'text-green-700 dark:text-green-300' 
+                            : syncStatus.isOnline 
+                              ? 'text-yellow-700 dark:text-yellow-300' 
+                              : 'text-red-700 dark:text-red-300'
+                      }`}>
+                        {syncStatus.isBackingUp 
+                          ? 'Syncing...' 
+                          : syncStatus.isOnline && syncStatus.lastSyncSuccess 
+                            ? 'Synced' 
+                            : syncStatus.isOnline 
+                              ? 'Pending' 
+                              : 'Offline'}
+                      </span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="w-64 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/50 dark:border-slate-700/50 shadow-xl">
+                    <div className="space-y-2 p-1">
+                      <div className="font-semibold text-sm">Backup Status</div>
+                      
+                      <div className="space-y-1.5 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Local:</span>
+                          <span className="font-medium text-green-500">Saved ✓</span>
+                        </div>
+                        
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Cloud Backup:</span>
+                          <span className={`font-medium ${
+                            syncStatus.isBackingUp 
+                              ? 'text-yellow-500' 
+                              : syncStatus.isOnline && syncStatus.lastSyncSuccess 
+                                ? 'text-green-500' 
+                                : syncStatus.isOnline 
+                                  ? 'text-yellow-500' 
+                                  : 'text-red-500'
+                          }`}>
+                            {syncStatus.isBackingUp 
+                              ? 'Backing up...' 
+                              : syncStatus.isOnline && syncStatus.lastSyncSuccess 
+                                ? 'Backed up ✓' 
+                                : syncStatus.isOnline 
+                                  ? 'Pending sync' 
+                                  : 'Offline'}
+                          </span>
+                        </div>
+                        
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Network:</span>
+                          <span className="font-medium">
+                            {syncStatus.isOnline ? 'Online ✓' : 'Offline ✗'}
+                          </span>
+                        </div>
+                        
+                        {syncStatus.lastSyncedAt && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Last backed up:</span>
+                            <span className="font-medium">
+                              {new Date(syncStatus.lastSyncedAt).toLocaleTimeString()}
+                            </span>
+                          </div>
+                        )}
+                        
+                        {syncStatus.pendingCount > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Pending retries:</span>
+                            <span className="font-medium text-red-500">{syncStatus.pendingCount}</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {!syncStatus.isOnline && (
+                        <div className="pt-2 border-t border-border">
+                          <p className="text-[10px] text-muted-foreground">
+                            Changes are saved locally. Cloud backup will resume when online.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
 
+            {/* Premium more actions dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="ghost"><MoreVertical className="h-4 w-4" /></Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm hover:bg-white dark:hover:bg-slate-800 hover:shadow-lg transition-all duration-300 rounded-lg px-2 sm:px-3"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Import Document</div>
-                <DropdownMenuItem onClick={() => triggerOpenFile(false)}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  <div className="flex flex-col"><span>Insert from file</span><span className="text-xs text-muted-foreground">Add content after current document</span></div>
+              <DropdownMenuContent
+                align="end"
+                className="w-64 sm:w-72 bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-2xl rounded-2xl p-2"
+              >
+                <div className="px-3 py-2 text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Upload className="h-4 w-4 text-blue-500" />
+                  Import Document
+                </div>
+                <DropdownMenuItem
+                  onClick={() => triggerOpenFile(false)}
+                  className="rounded-xl px-3 py-3 mb-1 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-colors"
+                >
+                  <Upload className="h-4 w-4 mr-3 text-blue-500" />
+                  <div className="flex flex-col">
+                    <span className="font-medium">Insert from file</span>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">Add content after current document</span>
+                  </div>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => triggerOpenFile(true)}>
-                  <FolderOpen className="h-4 w-4 mr-2" />
-                  <div className="flex flex-col"><span>Replace document</span><span className="text-xs text-muted-foreground">Open file and replace all content</span></div>
+                <DropdownMenuItem
+                  onClick={() => triggerOpenFile(true)}
+                  className="rounded-xl px-3 py-3 mb-1 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-colors"
+                >
+                  <FolderOpen className="h-4 w-4 mr-3 text-blue-500" />
+                  <div className="flex flex-col">
+                    <span className="font-medium">Replace document</span>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">Open file and replace all content</span>
+                  </div>
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Export Document</div>
-                <DropdownMenuItem onClick={exportAsMarkdown}>
-                  <Download className="h-4 w-4 mr-2" />
-                  <div className="flex flex-col"><span>Export as Markdown</span><span className="text-xs text-muted-foreground">Download as .md file</span></div>
+
+                <DropdownMenuSeparator className="my-2" />
+
+                <div className="px-3 py-2 text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Download className="h-4 w-4 text-green-500" />
+                  Export Document
+                </div>
+                <DropdownMenuItem
+                  onClick={exportAsMarkdown}
+                  className="rounded-xl px-3 py-3 mb-1 hover:bg-green-50 dark:hover:bg-green-950/20 transition-colors"
+                >
+                  <Download className="h-4 w-4 mr-3 text-green-500" />
+                  <div className="flex flex-col">
+                    <span className="font-medium">Export as Markdown</span>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">Download as .md file</span>
+                  </div>
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
+                <DropdownMenuSeparator className="my-2" />
+
+                {/* Save Options - Section header */}
+                <div className="px-3 py-2 text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Save className="h-4 w-4 text-purple-500" />
+                  Save Options
+                </div>
+
+                {/* Save Submenu */}
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <Save className="h-4 w-4 mr-2" />
-                    <span>Save</span>
-                    <span className="ml-auto text-xs text-muted-foreground">Ctrl+S</span>
+                  <DropdownMenuSubTrigger className="rounded-xl px-3 py-3 mb-1 hover:bg-purple-50 dark:hover:bg-purple-950/20 transition-colors">
+                    <Save className="h-4 w-4 mr-3 text-purple-500" />
+                    <span className="font-medium flex-1">Save Options</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">Ctrl+S</span>
                   </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent>
+                  <DropdownMenuSubContent className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-2xl rounded-2xl p-2 min-w-[220px]">
                     {isAuthenticated && (
-                      <DropdownMenuItem onClick={handleSaveToCloud}>
-                        <Cloud className="h-4 w-4 mr-2" />
+                      <DropdownMenuItem
+                        onClick={handleSaveToCloud}
+                        className="rounded-xl px-3 py-3 mb-1 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-colors"
+                      >
+                        <Cloud className="h-4 w-4 mr-3 text-blue-500" />
                         <div className="flex flex-col">
-                          <span>Save to Cloud</span>
-                          <span className="text-xs text-muted-foreground">Sync to cloud storage</span>
+                          <span className="font-medium">Save to Cloud</span>
+                          <span className="text-xs text-slate-600 dark:text-slate-400">Sync to cloud storage</span>
                         </div>
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuItem onClick={handleSaveAsLocal}>
-                      <HardDrive className="h-4 w-4 mr-2" />
+                    <DropdownMenuItem
+                      onClick={handleSaveAsLocal}
+                      className="rounded-xl px-3 py-3 hover:bg-green-50 dark:hover:bg-green-950/20 transition-colors"
+                    >
+                      <HardDrive className="h-4 w-4 mr-3 text-green-500" />
                       <div className="flex flex-col">
-                        <span>Save Locally</span>
-                        <span className="text-xs text-muted-foreground">Save to computer disk</span>
+                        <span className="font-medium">Save Locally</span>
+                        <span className="text-xs text-slate-600 dark:text-slate-400">Save to computer disk</span>
                       </div>
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
-                <DropdownMenuItem><Share className="h-4 w-4 mr-2" />Share</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -1096,6 +1430,16 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
           isAuthenticated={isAuthenticated}
           isOpen={showVersionHistory}
           onClose={() => setShowVersionHistory(false)}
+          syncStatus={documentSyncStatus}
+          cloudId={documentCloudId}
+          currentContent={editor ? editor.getText() : ''}
+          editor={editor}
+          onReplaceVersion={(content) => {
+            if (editor) {
+              editor.commands.setContent(content);
+              toast({ title: 'Version restored', description: 'Current document has been replaced' });
+            }
+          }}
           onRestoreComplete={(newDocId) => {
             if (newDocId) {
               // Navigate to new document

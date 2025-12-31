@@ -24,24 +24,90 @@ export interface DocumentVersionListResponse {
 
 class DocumentVersionService {
   /**
-   * Get all versions for a document
+   * Get all versions for a document (uses snapshots API)
    */
   async getVersions(documentId: string): Promise<DocumentVersionListResponse> {
-    return apiClient.get<DocumentVersionListResponse>(API_ENDPOINTS.documents.versions(documentId));
+    try {
+      const response = await apiClient.get<any>(`/api/v1/documents/${documentId}/snapshots`);
+      // Transform snapshots to versions format
+      const versions: DocumentVersion[] = response.snapshots.map((snapshot: any, index: number) => ({
+        id: snapshot.id,
+        document_id: documentId,
+        version_number: index + 1, // Convert to version numbers
+        title: `Version ${index + 1}`,
+        content: '', // Content loaded separately if needed
+        change_summary: snapshot.note || null,
+        word_count: Math.floor(snapshot.size_bytes / 20), // Rough estimate
+        created_by_id: snapshot.created_by,
+        created_at: snapshot.created_at
+      }));
+
+      return {
+        versions: versions.reverse(), // Most recent first
+        total: versions.length
+      };
+    } catch (error) {
+      console.error('Failed to load document snapshots:', error);
+      throw error;
+    }
   }
 
   /**
-   * Get specific version
+   * Get specific version (snapshot)
    */
   async getVersion(documentId: string, versionNumber: number): Promise<DocumentVersion> {
-    return apiClient.get<DocumentVersion>(`/api/v1/documents/${documentId}/versions/${versionNumber}`);
+    try {
+      // Get all snapshots and find by version number
+      const response = await this.getVersions(documentId);
+      const version = response.versions.find(v => v.version_number === versionNumber);
+
+      if (!version) {
+        throw new Error(`Version ${versionNumber} not found`);
+      }
+
+      // Try to load content from snapshot download
+      try {
+        const snapshotData = await apiClient.get(`/api/v1/documents/${documentId}/snapshots/${version.id}/download`, {
+          responseType: 'arraybuffer'
+        });
+        // Note: Content would need to be decoded from yjs_state binary
+        // For now, return metadata only
+        return version;
+      } catch (contentError) {
+        console.warn('Could not load snapshot content:', contentError);
+        return version;
+      }
+    } catch (error) {
+      console.error('Failed to get version:', error);
+      throw error;
+    }
   }
 
   /**
-   * Restore a previous version (creates new version with old content)
+   * Restore a previous version (creates new document from snapshot)
    */
   async restoreVersion(documentId: string, versionNumber: number): Promise<any> {
-    return apiClient.post(`/api/v1/documents/${documentId}/restore/${versionNumber}`, {});
+    try {
+      // Get all snapshots and find by version number
+      const response = await this.getVersions(documentId);
+      const version = response.versions.find(v => v.version_number === versionNumber);
+
+      if (!version) {
+        throw new Error(`Version ${versionNumber} not found`);
+      }
+
+      // Use snapshot restore API
+      const restoreResponse = await apiClient.post(`/api/v1/documents/${documentId}/snapshots/${version.id}/restore`, {
+        action: 'new_document',
+        title: `Restored from Version ${versionNumber}`,
+        force: false
+      });
+
+      return restoreResponse;
+    } catch (error) {
+      console.error('Failed to restore version:', error);
+      throw error;
+    }
   }
 }
 

@@ -4,6 +4,10 @@
  * Handles communication with backend snapshot API.
  * Backend is a DUMB STORE - no merging, no conflicts, no decisions.
  * 
+ * TWO TYPES OF SNAPSHOTS:
+ * 1. Live snapshot (POST /snapshot singular) - Updates document's current yjs_state
+ * 2. History snapshot (POST /snapshots plural) - Creates version history entry
+ * 
  * Reliability:
  * - Failed snapshots are queued for retry (FailedSnapshotStore)
  * - Exponential backoff with jitter
@@ -15,6 +19,10 @@ import type { SnapshotPayload } from './serializeYjs';
 import { API_CONFIG } from '@/config/api.config';
 import { FailedSnapshotStore } from './FailedSnapshotStore';
 import { authService } from '@/services/api/AuthService';
+
+// Track last history snapshot time per document to throttle
+const lastHistorySnapshotTime: Map<string, number> = new Map();
+const HISTORY_SNAPSHOT_INTERVAL_MS = 60000; // 1 minute minimum between history snapshots
 
 /**
  * Send snapshot to backend
@@ -78,6 +86,10 @@ export async function pushSnapshot(payload: SnapshotPayload): Promise<boolean> {
     }
     
     console.log('✅ [Snapshot] Pushed successfully:', cloudId);
+    
+    // Also create a history snapshot (throttled to avoid spamming)
+    await maybeCreateHistorySnapshot(cloudId, payload.yjsState, payload.html);
+    
     return true;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -274,5 +286,133 @@ async function pushSnapshotDirect(payload: SnapshotPayload): Promise<boolean> {
 function getAuthToken(): string {
   // Token is stored directly as 'auth_token' (see ApiClient.ts)
   return localStorage.getItem('auth_token') || '';
+}
+
+/**
+ * Create a history snapshot (for version history panel)
+ * Throttled to avoid creating too many entries
+ */
+async function maybeCreateHistorySnapshot(
+  documentId: string,
+  yjsStateBase64: string,
+  htmlPreview?: string
+): Promise<void> {
+  const now = Date.now();
+  const lastTime = lastHistorySnapshotTime.get(documentId) || 0;
+  
+  // Throttle: only create history snapshot every HISTORY_SNAPSHOT_INTERVAL_MS
+  if (now - lastTime < HISTORY_SNAPSHOT_INTERVAL_MS) {
+    console.log(`⏱️ [Snapshot] Skipping history snapshot (throttled): ${documentId}`);
+    return;
+  }
+  
+  try {
+    console.log(`📚 [Snapshot] Creating history snapshot: ${documentId}`);
+    
+    const response = await fetch(`${API_CONFIG.baseUrl}/api/v1/documents/${documentId}/snapshots`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getAuthToken()}`,
+      },
+      body: JSON.stringify({
+        yjs_state_base64: yjsStateBase64,
+        note: null, // Auto-saved snapshot
+        html_preview: htmlPreview || null,
+        type: 'auto', // Auto-generated (not manual)
+      }),
+    });
+    
+    if (response.ok) {
+      lastHistorySnapshotTime.set(documentId, now);
+      console.log(`✅ [Snapshot] History snapshot created: ${documentId}`);
+    } else {
+      // Don't throw - this is a nice-to-have feature
+      console.warn(`⚠️ [Snapshot] History snapshot failed (${response.status}): ${documentId}`);
+    }
+  } catch (error) {
+    // Silently fail - history snapshots are nice-to-have
+    console.warn('⚠️ [Snapshot] History snapshot error:', error);
+  }
+}
+
+/**
+ * Force create a history snapshot (for manual "Save Snapshot" button)
+ */
+export async function createManualHistorySnapshot(
+  documentId: string,
+  yjsStateBase64: string,
+  note?: string,
+  htmlPreview?: string
+): Promise<boolean> {
+  if (!authService.isAuthenticated()) {
+    console.log('📴 [Snapshot] Cannot create manual snapshot - not authenticated');
+    return false;
+  }
+  
+  // Normalize document ID
+  let cloudId = documentId;
+  if (cloudId.startsWith('doc_')) {
+    cloudId = cloudId.slice(4);
+  }
+  
+  try {
+    const timestamp = new Date().toISOString();
+    console.log(`\n📸 ========== API CALL START [${timestamp}] ==========`);
+    console.log(`📸 [${timestamp}] Creating manual history snapshot for: ${cloudId}`);
+    console.log(`📸 [${timestamp}] Note:`, note || 'Manual snapshot');
+    console.log(`📸 [${timestamp}] Yjs state base64 length:`, yjsStateBase64?.length || 0);
+    console.log(`📸 [${timestamp}] HTML preview length:`, htmlPreview?.length || 0);
+    console.log(`📸 [${timestamp}] HTML preview sample:`, htmlPreview?.substring(0, 100));
+    console.log(`📸 [${timestamp}] Has HTML preview:`, !!htmlPreview);
+    
+    const payload = {
+      yjs_state_base64: yjsStateBase64,
+      note: note || 'Manual snapshot',
+      html_preview: htmlPreview || null,
+      type: 'manual',
+    };
+    
+    console.log(`📦 [${new Date().toISOString()}] Payload structure:`, {
+      yjs_state_base64: `[${yjsStateBase64.length} chars]`,
+      note: payload.note,
+      html_preview: htmlPreview ? `[${htmlPreview.length} chars]` : 'NULL',
+      type: payload.type,
+      html_preview_is_null: payload.html_preview === null,
+      html_preview_is_undefined: payload.html_preview === undefined,
+      html_preview_value: htmlPreview
+    });
+    
+    console.log(`🌐 [${new Date().toISOString()}] Making POST request to:`, `${API_CONFIG.baseUrl}/api/v1/documents/${cloudId}/snapshots`);
+    
+    const response = await fetch(`${API_CONFIG.baseUrl}/api/v1/documents/${cloudId}/snapshots`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getAuthToken()}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    
+    console.log(`📡 [${new Date().toISOString()}] Response status:`, response.status, response.statusText);
+    
+    if (response.ok) {
+      const responseData = await response.json();
+      console.log(`✅ [${new Date().toISOString()}] Response data:`, responseData);
+      console.log(`✅ [${new Date().toISOString()}] Manual history snapshot created successfully!`);
+      lastHistorySnapshotTime.set(cloudId, Date.now());
+      console.log(`📸 ========== API CALL END [${new Date().toISOString()}] ==========\n`);
+      return true;
+    } else {
+      const error = await response.text();
+      console.error(`❌ [${new Date().toISOString()}] Manual snapshot failed (${response.status}):`, error);
+      console.log(`📸 ========== API CALL END (FAILED) [${new Date().toISOString()}] ==========\n`);
+      return false;
+    }
+  } catch (error) {
+    console.error(`💥 [${new Date().toISOString()}] Manual snapshot error:`, error);
+    console.log(`📸 ========== API CALL END (ERROR) [${new Date().toISOString()}] ==========\n`);
+    return false;
+  }
 }
 

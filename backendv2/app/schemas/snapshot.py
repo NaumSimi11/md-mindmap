@@ -92,6 +92,7 @@ class SnapshotMetadataResponse(BaseModel):
     created_by: Optional[UUID]
     note: Optional[str]
     size_bytes: Optional[int]
+    html_preview: Optional[str] = None  # Include HTML preview for UI
     
     # Computed/joined fields
     creator_name: Optional[str] = None

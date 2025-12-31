@@ -233,16 +233,22 @@ export function NewDocumentModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl h-[80vh] p-0 gap-0">
-        <DialogHeader className="px-6 py-4 border-b border-border">
+      <DialogContent
+        className="max-w-6xl h-[80vh] p-0 gap-0 overflow-hidden border border-border/60 bg-gradient-to-br from-background via-background/95 to-background/80 shadow-2xl backdrop-blur-xl"
+      >
+        <DialogHeader className="px-6 py-4 border-b border-border/60 bg-gradient-to-r from-background/80 via-background/60 to-background/80">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-                <Sparkles className="h-6 w-6 text-purple-500" />
-                Create New Document
+              <DialogTitle className="text-2xl font-semibold flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-tr from-violet-500 via-fuchsia-500 to-sky-500 shadow-[0_0_24px_rgba(129,140,248,0.55)]">
+                  <Sparkles className="h-5 w-5 text-white" />
+                </div>
+                <span className="bg-gradient-to-r from-slate-50 via-slate-100 to-slate-300 bg-clip-text text-transparent">
+                  Create New Document
+                </span>
               </DialogTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                Choose a template or start from scratch
+                Choose a premium starter, customize the structure, and start writing instantly.
               </p>
             </div>
             <Button variant="ghost" size="sm" onClick={onClose}>
@@ -267,13 +273,37 @@ export function NewDocumentModal({
               Leave empty to use default or template name
             </p>
           </div>
+
+          {/* Primary Type Selector - High level choice */}
+          <div className="mt-4 flex flex-wrap gap-2">
+            {types.map(type => {
+              const Icon = type.icon;
+              return (
+                <button
+                  key={type.value}
+                  onClick={() => setSelectedType(type.value as any)}
+                  className={`
+                    inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs transition-all border
+                    ${
+                      selectedType === type.value
+                        ? 'border-primary/80 bg-gradient-to-r from-primary/90 via-primary to-sky-500 text-primary-foreground shadow-md shadow-primary/40'
+                        : 'border-border/60 bg-background/60 text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                    }
+                  `}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{type.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </DialogHeader>
 
         <div className="flex-1 flex overflow-hidden">
           {/* Left Panel: Template Selection */}
-          <div className="flex-1 flex flex-col border-r border-border">
+          <div className="flex-1 flex flex-col border-r border-border/60 bg-gradient-to-b from-background/80 via-background/60 to-background/40">
             {/* Filters */}
-            <div className="p-4 border-b border-border space-y-3">
+            <div className="p-4 border-b border-border/60 space-y-3">
               {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -281,46 +311,22 @@ export function NewDocumentModal({
                   placeholder="Search templates..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
+                  className="pl-9 bg-background/60 border-border/60"
                 />
               </div>
 
-              {/* Type Filter */}
-              <div className="flex gap-2">
-                {types.map(type => {
-                  const Icon = type.icon;
-                  return (
-                    <button
-                      key={type.value}
-                      onClick={() => setSelectedType(type.value as any)}
-                      className={`
-                        flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all
-                        ${
-                          selectedType === type.value
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted hover:bg-muted/80'
-                        }
-                      `}
-                    >
-                      <Icon className="h-4 w-4" />
-                      <span>{type.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
               {/* Category Filter */}
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {categories.map(cat => (
                   <button
                     key={cat.value}
                     onClick={() => setSelectedCategory(cat.value)}
                     className={`
-                      px-3 py-1.5 rounded-lg text-sm transition-all
+                      px-3 py-1.5 rounded-full text-xs transition-all border
                       ${
                         selectedCategory === cat.value
-                          ? 'bg-secondary text-secondary-foreground'
-                          : 'hover:bg-muted'
+                          ? 'border-primary/70 bg-white/5 text-foreground shadow-sm shadow-black/30'
+                          : 'border-border/40 bg-muted/20 text-muted-foreground hover:border-primary/50 hover:text-foreground'
                       }
                     `}
                   >
@@ -335,41 +341,58 @@ export function NewDocumentModal({
               <div className="p-4">
                 {/* Blank Document Options */}
                 <div className="mb-6">
-                  <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Start from Blank</h3>
+                  <h3 className="text-xs font-semibold mb-3 tracking-wide text-muted-foreground/90 uppercase">
+                    Start from blank
+                  </h3>
                   <div className="grid grid-cols-3 gap-3">
                     <button
                       data-testid="create-blank-markdown"
                       onClick={() => handleCreateBlank('markdown')}
-                      className="p-4 border-2 border-dashed border-border rounded-lg hover:border-blue-500 hover:bg-blue-50/50 transition-all group"
+                      className="relative overflow-hidden p-4 rounded-2xl border border-border/60 bg-gradient-to-br from-background/80 via-background/70 to-background/60 hover:border-blue-400/70 hover:shadow-[0_0_32px_rgba(59,130,246,0.45)] transition-all group"
                     >
-                      <FileText className="h-8 w-8 text-blue-500 mb-2 mx-auto" />
-                      <p className="text-sm font-medium">Blank Document</p>
-                      <p className="text-xs text-muted-foreground mt-1">Markdown editor</p>
+                      <div className="pointer-events-none absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.6),transparent_60%),radial-gradient(circle_at_bottom_right,rgba(109,40,217,0.6),transparent_60%)]" />
+                      <div className="relative flex flex-col items-center text-center">
+                        <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-500/20 text-blue-400 backdrop-blur">
+                          <FileText className="h-6 w-6" />
+                        </div>
+                        <p className="text-sm font-medium text-foreground">Blank Document</p>
+                        <p className="text-xs text-muted-foreground mt-1">Clean markdown canvas</p>
+                      </div>
                     </button>
                     <button
                       data-testid="create-blank-mindmap"
                       onClick={() => handleCreateBlank('mindmap')}
-                      className="p-4 border-2 border-dashed border-border rounded-lg hover:border-purple-500 hover:bg-purple-50/50 transition-all group"
+                      className="relative overflow-hidden p-4 rounded-2xl border border-border/60 bg-gradient-to-br from-background/80 via-background/70 to-background/60 hover:border-purple-400/70 hover:shadow-[0_0_32px_rgba(168,85,247,0.45)] transition-all group"
                     >
-                      <Brain className="h-8 w-8 text-purple-500 mb-2 mx-auto" />
-                      <p className="text-sm font-medium">Blank Mindmap</p>
-                      <p className="text-xs text-muted-foreground mt-1">Visual brainstorming</p>
+                      <div className="pointer-events-none absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_top_left,rgba(168,85,247,0.6),transparent_60%),radial-gradient(circle_at_bottom_right,rgba(56,189,248,0.6),transparent_60%)]" />
+                      <div className="relative flex flex-col items-center text-center">
+                        <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-purple-500/20 text-purple-400 backdrop-blur">
+                          <Brain className="h-6 w-6" />
+                        </div>
+                        <p className="text-sm font-medium text-foreground">Blank Mindmap</p>
+                        <p className="text-xs text-muted-foreground mt-1">Visual brainstorming</p>
+                      </div>
                     </button>
                     <button
                       data-testid="create-blank-presentation"
                       onClick={() => handleCreateBlank('presentation')}
-                      className="p-4 border-2 border-dashed border-border rounded-lg hover:border-pink-500 hover:bg-pink-50/50 transition-all group"
+                      className="relative overflow-hidden p-4 rounded-2xl border border-border/60 bg-gradient-to-br from-background/80 via-background/70 to-background/60 hover:border-pink-400/70 hover:shadow-[0_0_32px_rgba(236,72,153,0.45)] transition-all group"
                     >
-                      <Presentation className="h-8 w-8 text-pink-500 mb-2 mx-auto" />
-                      <p className="text-sm font-medium">Blank Presentation</p>
-                      <p className="text-xs text-muted-foreground mt-1">Slide deck</p>
+                      <div className="pointer-events-none absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_top_left,rgba(236,72,153,0.6),transparent_60%),radial-gradient(circle_at_bottom_right,rgba(244,114,182,0.6),transparent_60%)]" />
+                      <div className="relative flex flex-col items-center text-center">
+                        <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-pink-500/20 text-pink-400 backdrop-blur">
+                          <Presentation className="h-6 w-6" />
+                        </div>
+                        <p className="text-sm font-medium text-foreground">Blank Presentation</p>
+                        <p className="text-xs text-muted-foreground mt-1">Cinematic slide deck</p>
+                      </div>
                     </button>
                   </div>
                 </div>
 
                 {/* Templates */}
                 <div>
-                  <h3 className="text-sm font-semibold mb-3 text-muted-foreground flex items-center gap-2">
+                  <h3 className="text-xs font-semibold mb-3 text-muted-foreground flex items-center gap-2 tracking-wide uppercase">
                     <Sparkles className="h-4 w-4" />
                     Templates ({filteredTemplates.length})
                   </h3>
@@ -385,26 +408,43 @@ export function NewDocumentModal({
                           key={template.id}
                           onClick={() => setPreviewTemplate(template)}
                           className={`
-                            p-4 border rounded-lg text-left transition-all hover:shadow-md
+                            relative overflow-hidden p-4 rounded-2xl text-left transition-all border backdrop-blur-md
                             ${
                               previewTemplate?.id === template.id
-                                ? 'border-primary bg-primary/5'
-                                : 'border-border hover:border-primary/50'
+                                ? 'border-primary/70 bg-gradient-to-br from-primary/15 via-primary/10 to-primary/5 shadow-[0_0_30px_rgba(129,140,248,0.55)]'
+                                : 'border-border/60 bg-background/40 hover:border-primary/50 hover:bg-background/70 hover:shadow-lg'
                             }
                           `}
                         >
-                          <div className="flex items-start gap-3 mb-2">
-                            <div className="text-2xl">{template.icon}</div>
+                          <div className="pointer-events-none absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_top_left,rgba(129,140,248,0.4),transparent_60%),radial-gradient(circle_at_bottom_right,rgba(56,189,248,0.4),transparent_60%)]" />
+                          <div className="relative flex items-start gap-3 mb-2">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-black/30 text-lg">
+                              <span>{template.icon}</span>
+                            </div>
                             <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm truncate">{template.name}</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {getTypeLabel(template.type)}
+                              <p className="font-medium text-sm truncate text-foreground">
+                                {template.name}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground mt-0.5">
+                                {getTypeLabel(template.type)} • {template.category.charAt(0).toUpperCase() + template.category.slice(1)}
                               </p>
                             </div>
                           </div>
-                          <p className="text-xs text-muted-foreground line-clamp-2">
+                          <p className="relative text-xs text-muted-foreground line-clamp-2">
                             {template.description}
                           </p>
+                          {template.tags?.length > 0 && (
+                            <div className="relative mt-2 flex flex-wrap gap-1">
+                              {template.tags.slice(0, 3).map(tag => (
+                                <span
+                                  key={tag}
+                                  className="rounded-full bg-black/30 px-2 py-0.5 text-[10px] text-muted-foreground"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </button>
                       ))}
                     </div>
@@ -415,39 +455,68 @@ export function NewDocumentModal({
           </div>
 
           {/* Right Panel: Preview */}
-          <div className="w-96 flex flex-col bg-muted/30">
+          <div className="w-96 flex flex-col bg-gradient-to-b from-background/90 via-background/80 to-background/70">
             {previewTemplate ? (
               <>
                 {/* Preview Header */}
-                <div className="p-4 border-b border-border">
+                <div className="p-4 border-b border-border/60">
                   <div className="flex items-start gap-3 mb-4">
-                    <div className="text-3xl">{previewTemplate.icon}</div>
+                    <div className="relative">
+                      <div className="absolute inset-0 rounded-3xl bg-gradient-to-tr from-primary/50 via-sky-400/40 to-fuchsia-500/40 blur-xl opacity-60" />
+                      <div className="relative flex h-11 w-11 items-center justify-center rounded-3xl bg-black/60 text-2xl">
+                        {previewTemplate.icon}
+                      </div>
+                    </div>
                     <div className="flex-1">
-                      <h3 className="font-semibold text-lg">{previewTemplate.name}</h3>
-                      <p className="text-sm text-muted-foreground">{previewTemplate.description}</p>
+                      <h3 className="font-semibold text-base text-foreground">
+                        {previewTemplate.name}
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {previewTemplate.description}
+                      </p>
                       <div className="flex items-center gap-2 mt-2">
                         {getTypeIcon(previewTemplate.type)}
                         <span className="text-xs text-muted-foreground">
                           {getTypeLabel(previewTemplate.type)}
                         </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-black/30 text-muted-foreground">
+                          {previewTemplate.category.charAt(0).toUpperCase() + previewTemplate.category.slice(1)}
+                        </span>
                       </div>
+                      {previewTemplate.tags?.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {previewTemplate.tags.slice(0, 4).map(tag => (
+                            <span
+                              key={tag}
+                              className="rounded-full bg-black/30 px-2 py-0.5 text-[10px] text-muted-foreground"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   <Button
-                    className="w-full"
+                    className="w-full relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-primary/90 to-sky-500 text-primary-foreground shadow-[0_10px_30px_rgba(59,130,246,0.55)] hover:shadow-[0_12px_40px_rgba(59,130,246,0.7)] transition-all"
                     onClick={() => handleCreateFromTemplate(previewTemplate)}
                   >
+                    <span className="pointer-events-none absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_10%_0,rgba(255,255,255,0.4),transparent_55%),radial-gradient(circle_at_90%_100%,rgba(59,130,246,0.5),transparent_55%)]" />
+                    <span className="relative flex items-center justify-center">
                     <Plus className="h-4 w-4 mr-2" />
                     Create from Template
+                    </span>
                   </Button>
                 </div>
 
                 {/* Preview Content */}
                 <ScrollArea className="flex-1">
                   <div className="p-4">
-                    <h4 className="text-xs font-semibold text-muted-foreground mb-2">PREVIEW</h4>
-                    <div className="bg-white rounded-lg border border-border p-4">
+                    <h4 className="text-[10px] font-semibold text-muted-foreground mb-2 tracking-[0.18em] uppercase">
+                      Live structure preview
+                    </h4>
+                    <div className="rounded-xl border border-border/60 bg-background/80 p-4 shadow-inner">
                       {previewTemplate.type === 'markdown' ? (
                         <pre className="text-xs whitespace-pre-wrap font-mono text-muted-foreground">
                           {previewTemplate.content.substring(0, 500)}
