@@ -1,5 +1,12 @@
 /**
- * ImportDocumentButton - Button and drag-drop for importing .md/.txt files
+ * ImportDocumentButton - Button and drag-drop for importing documents
+ * 
+ * Supports:
+ * - Markdown (.md)
+ * - Plain Text (.txt)
+ * - Word Documents (.docx) - converted via mammoth
+ * - Excel Spreadsheets (.xlsx, .xls) - converted to markdown tables
+ * - HTML (.html, .htm) - converted via turndown
  * 
  * 🔴 CRITICAL POINT #10: Duplicate Detection Flow
  * - MUST check for duplicates before creating document
@@ -9,12 +16,19 @@
 
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Upload, Loader2, FileText, Info } from 'lucide-react';
+import { Upload, Loader2, Info } from 'lucide-react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useAuth } from '@/hooks/useAuth';
 import { guestVersionManager } from '@/services/workspace-legacy/GuestVersionManager';
 import { ImportInfoDialog } from './ImportInfoDialog';
 import { toast } from 'sonner';
+import { 
+  convertFileToMarkdown, 
+  isFileSupported, 
+  getFileExtension,
+  getFileTypeDescription,
+  SUPPORTED_IMPORT_EXTENSIONS 
+} from '@/utils/documentConverter';
 
 interface ImportDocumentButtonProps {
   variant?: 'default' | 'outline' | 'ghost';
@@ -46,30 +60,76 @@ export function ImportDocumentButton({
     setIsUploading(true);
     let successCount = 0;
     let errorCount = 0;
+    let convertedCount = 0;
 
     try {
       // Process files in parallel
       const uploadPromises = Array.from(files).map(async (file) => {
         // Validate file type
-        if (!file.name.endsWith('.md') && !file.name.endsWith('.txt')) {
-          console.warn(`Skipping unsupported file: ${file.name}`);
+        if (!isFileSupported(file.name)) {
+          const ext = getFileExtension(file.name);
+          toast.error(`Unsupported file type: ${ext || 'unknown'}`, {
+            description: `Supported: ${SUPPORTED_IMPORT_EXTENSIONS.join(', ')}`
+          });
           errorCount++;
           return;
         }
 
-        // Validate file size (max 5MB)
-        if (file.size > 5 * 1024 * 1024) {
-          toast.error(`File too large: ${file.name} (max 5MB)`);
+        // Validate file size (max 10MB for Word/Excel, 5MB for text)
+        const maxSize = file.name.endsWith('.docx') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
+          ? 10 * 1024 * 1024  // 10MB for documents
+          : 5 * 1024 * 1024;   // 5MB for text files
+        
+        if (file.size > maxSize) {
+          toast.error(`File too large: ${file.name}`, {
+            description: `Max size: ${maxSize / (1024 * 1024)}MB`
+          });
           errorCount++;
           return;
         }
 
         try {
-          // Read file content
-          const content = await file.text();
+          // Convert file to markdown
+          const ext = getFileExtension(file.name);
+          const needsConversion = ['.docx', '.xlsx', '.xls', '.html', '.htm'].includes(ext);
+          
+          console.log(`📄 [Import] Processing file: ${file.name} (${ext}, size: ${file.size})`);
+          
+          const conversionResult = await convertFileToMarkdown(file);
+          
+          if (!conversionResult.success) {
+            console.error(`❌ [Import] Conversion failed for ${file.name}:`, conversionResult.error);
+            toast.error(`Failed to convert ${file.name}`, {
+              description: conversionResult.error
+            });
+            errorCount++;
+            return;
+          }
+
+          const content = conversionResult.content;
+          
+          // Validate content is not empty
+          if (!content || content.trim().length === 0) {
+            console.warn(`⚠️ [Import] Empty content after conversion: ${file.name}`);
+            toast.warning(`File appears to be empty: ${file.name}`);
+            errorCount++;
+            return;
+          }
+          
+          console.log(`✅ [Import] Converted ${file.name}: ${content.length} chars`);
+          
+          // Show conversion warnings if any
+          if (conversionResult.warnings && conversionResult.warnings.length > 0) {
+            console.warn(`Conversion warnings for ${file.name}:`, conversionResult.warnings);
+          }
+
+          // Track converted files
+          if (needsConversion) {
+            convertedCount++;
+          }
           
           // Extract title from filename (remove extension)
-          const title = file.name.replace(/\.(md|txt)$/, '');
+          const title = file.name.replace(/\.(md|txt|docx|xlsx|xls|html|htm)$/i, '');
 
           // 🔴 CRITICAL POINT #11: Duplicate Detection
           // Check if document with same title exists
@@ -103,11 +163,6 @@ export function ImportDocumentButton({
               );
               
               if (newVersion) {
-                // Update document content (triggers Yjs sync)
-                // ⚠️ BREAKABLE POINT: updateDocument might not accept content
-                // Current WorkspaceContext.updateDocument filters out content for backend
-                // For guest mode, we need to update the Yjs doc directly
-                // TODO: Verify this works correctly
                 await updateDocument(existingDoc.id, { 
                   updatedAt: new Date()
                 } as any);
@@ -126,8 +181,6 @@ export function ImportDocumentButton({
             // AUTHENTICATED MODE: Use backend versioning
             else {
               console.log(`🔐 Authenticated mode: updating via backend: ${title}`);
-              // Backend automatically creates version on content update
-              // ⚠️ BREAKABLE POINT: Backend must have version creation logic
               await updateDocument(existingDoc.id, { content } as any);
               toast.success(`Updated "${title}" (new version created)`, {
                 duration: 3000
@@ -138,8 +191,9 @@ export function ImportDocumentButton({
           }
 
           // No duplicate - create new document
-          console.log(`✨ Creating new document: ${title}`);
-          await createDocument('markdown', title, content);
+          console.log(`✨ [Import] Creating new document: ${title} (content: ${content.length} chars)`);
+          const newDoc = await createDocument('markdown', title, content);
+          console.log(`✅ [Import] Document created: ${newDoc.id}, content length in DB: ${newDoc.content?.length || 0}`);
           successCount++;
         } catch (error) {
           console.error(`Failed to upload ${file.name}:`, error);
@@ -155,8 +209,11 @@ export function ImportDocumentButton({
 
       // Show results
       if (successCount > 0) {
+        const convertedMsg = convertedCount > 0 
+          ? ` (${convertedCount} converted to Markdown)` 
+          : '';
         toast.success(
-          `Imported ${successCount} document${successCount > 1 ? 's' : ''}`
+          `Imported ${successCount} document${successCount > 1 ? 's' : ''}${convertedMsg}`
         );
       }
       if (errorCount > 0) {
@@ -199,12 +256,15 @@ export function ImportDocumentButton({
     }
   };
 
+  // Build accept string for file input
+  const acceptString = SUPPORTED_IMPORT_EXTENSIONS.join(',');
+
   return (
     <>
       <input
         ref={fileInputRef}
         type="file"
-        accept=".md,.txt"
+        accept={acceptString}
         multiple
         className="hidden"
         onChange={(e) => handleFileSelect(e.target.files)}
@@ -228,7 +288,7 @@ export function ImportDocumentButton({
           ) : (
             <>
               <Upload className={`h-4 w-4 ${compact ? '' : 'mr-2'}`} />
-              {!compact && 'Import .md'}
+              {!compact && 'Import'}
             </>
           )}
         </Button>
@@ -255,4 +315,3 @@ export function ImportDocumentButton({
     </>
   );
 }
-

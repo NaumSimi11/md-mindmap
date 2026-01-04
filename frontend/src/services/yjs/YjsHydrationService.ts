@@ -40,41 +40,70 @@ export class YjsHydrationService {
     isAuthenticated: boolean = false
   ): Promise<void> {
     try {
-      // 1. Get Yjs document from manager
-      const instance = yjsDocumentManager.getDocument(documentId, {
+      // 🔥 FIX: Normalize document ID (same as useYjsDocument.ts)
+      // This ensures hydration uses the SAME Yjs instance as TipTap editor
+      const normalizedDocId = documentId.startsWith('doc_') 
+        ? documentId.slice(4)  // Remove doc_ prefix
+        : documentId;
+      
+      if (normalizedDocId !== documentId) {
+        console.log(`🔄 [YjsHydration] Normalized ID: ${documentId} → ${normalizedDocId}`);
+      }
+      
+      // 1. Get Yjs document from manager (using normalized ID)
+      const instance = yjsDocumentManager.getDocument(normalizedDocId, {
         enableWebSocket: false,
         isAuthenticated,
       });
       
-      const { ydoc } = instance;
+      const { ydoc, indexeddbProvider } = instance as any;
       
       // 2. THE HYDRATION GATE (ONLY ALLOWED CHECK)
-      const fragment = ydoc.getXmlFragment('content');
-      const isFragmentPopulated = fragment.length > 0;
-
+      //    IMPORTANT: Wait for IndexedDB to finish loading BEFORE checking content.
+      //    Otherwise we might think the document is empty and overwrite real CRDT state
+      //    with stale markdown from IndexedDB/guest metadata (which is exactly what
+      //    caused the offline persistence invariant to fail).
+      
       // 🛡️ CRITICAL INVARIANT: Never apply snapshots while HocuspocusProvider is active
       // Applying updates during live sync can corrupt the CRDT state
       if (instance.websocketProvider) {
-        console.warn('⚠️ [YjsHydration] Skipping - provider active:', documentId);
+        console.warn('⚠️ [YjsHydration] Skipping - provider active:', normalizedDocId);
         console.warn('   📖 Rule: Snapshots are WRITE-ONLY during live collaboration');
         return;
       }
 
+      // If there is an IndexedDB provider and it hasn't finished syncing yet,
+      // wait for its "synced" event once before making any decisions about
+      // whether this document is "empty" or not.
+      if (indexeddbProvider && !instance.isInitialized) {
+        await new Promise<void>((resolve) => {
+          const handler = () => {
+            indexeddbProvider.off('synced', handler);
+            resolve();
+          };
+          indexeddbProvider.on('synced', handler);
+        });
+      }
+
+      // After IndexedDB sync, re-check the fragment state
+      const fragment = ydoc.getXmlFragment('content');
+      const isFragmentPopulated = fragment.length > 0;
+      
       // Validate invariants in development
       if (process.env.NODE_ENV === 'development') {
         if (yjsStateB64 && isFragmentPopulated) {
           console.error('❌ [INVARIANT] Attempted to hydrate from binary on non-empty doc!');
         }
       }
-
+      
       if (isFragmentPopulated) {
-        console.log('ℹ️ [YjsHydration] Document already has content, skipping:', documentId);
+        console.log('ℹ️ [YjsHydration] Document already has content after IndexedDB sync, skipping hydrate:', normalizedDocId);
         return;
       }
 
       // 3. APPLY YJS BINARY (AUTHORITATIVE)
       if (yjsStateB64) {
-        console.log('🧬 [YjsHydration] Binary truth:', documentId, `(${yjsStateB64.length} chars b64)`);
+        console.log('🧬 [YjsHydration] Binary truth:', normalizedDocId, `(${yjsStateB64.length} chars b64)`);
         try {
           const binary = buffer.fromBase64(yjsStateB64);
           Y.applyUpdate(ydoc, binary, 'initial-hydration');
@@ -88,7 +117,7 @@ export class YjsHydrationService {
       
       // 4. FALLBACK TO MARKDOWN
       if (!markdown) {
-        console.log('ℹ️ [YjsHydration] No content to hydrate');
+        console.log('ℹ️ [YjsHydration] No content to hydrate:', normalizedDocId);
         return;
       }
       
@@ -99,7 +128,7 @@ export class YjsHydrationService {
         }
       }
 
-      console.log('🧬 [YjsHydration] [LEGACY] From markdown:', documentId);
+      console.log('🧬 [YjsHydration] [LEGACY] From markdown:', normalizedDocId, `(${markdown.length} chars)`);
       
       // Step 1: Convert Markdown → HTML
       const html = markdownToHtml(markdown);

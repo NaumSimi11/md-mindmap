@@ -67,20 +67,87 @@ export function serializeYjsToHtml(ydoc: Y.Doc): string | null {
 }
 
 /**
+ * Map TipTap/ProseMirror node names to HTML tags
+ * TipTap uses semantic node names that need conversion to proper HTML
+ */
+function getHtmlTag(nodeName: string, element?: Y.XmlElement): string {
+  switch (nodeName) {
+    case 'heading': {
+      // TipTap stores heading level as attribute
+      const level = element?.getAttribute('level') || 1;
+      return `h${level}`;
+    }
+    case 'paragraph':
+      return 'p';
+    case 'bulletList':
+      return 'ul';
+    case 'orderedList':
+      return 'ol';
+    case 'listItem':
+      return 'li';
+    case 'codeBlock':
+      return 'pre';
+    case 'blockquote':
+      return 'blockquote';
+    case 'hardBreak':
+      return 'br';
+    case 'horizontalRule':
+      return 'hr';
+    case 'bold':
+    case 'strong':
+      return 'strong';
+    case 'italic':
+    case 'em':
+      return 'em';
+    case 'code':
+      return 'code';
+    case 'link':
+      return 'a';
+    case 'strike':
+      return 's';
+    case 'underline':
+      return 'u';
+    case 'taskList':
+      return 'ul';
+    case 'taskItem':
+      return 'li';
+    case 'table':
+      return 'table';
+    case 'tableRow':
+      return 'tr';
+    case 'tableCell':
+      return 'td';
+    case 'tableHeader':
+      return 'th';
+    default:
+      // If it's already an HTML tag name (like 'p', 'div'), use it directly
+      if (['p', 'div', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'pre', 'code', 'blockquote', 'a', 'strong', 'em', 'br', 'hr'].includes(nodeName)) {
+        return nodeName;
+      }
+      return 'p'; // Default fallback
+  }
+}
+
+/**
  * Helper: Convert Yjs XmlFragment to HTML
- * This is a basic implementation - for production, use TipTap's utilities
+ * Maps TipTap/ProseMirror nodes to proper HTML tags
  */
 function xmlFragmentToHtml(fragment: Y.XmlFragment): string {
-  // For now, we'll extract text content
-  // In production, this would need proper ProseMirror → HTML serialization
   let html = '';
   
   fragment.forEach((item) => {
     if (item instanceof Y.XmlText) {
       html += item.toString();
     } else if (item instanceof Y.XmlElement) {
-      const tagName = item.nodeName || 'p';
-      html += `<${tagName}>${xmlElementToHtml(item)}</${tagName}>`;
+      const nodeName = item.nodeName || 'p';
+      const tagName = getHtmlTag(nodeName, item);
+      
+      // Handle self-closing tags
+      if (tagName === 'br' || tagName === 'hr') {
+        html += `<${tagName}/>`;
+      } else {
+        html += `<${tagName}>${xmlElementToHtml(item)}</${tagName}>`;
+      }
     }
   });
   
@@ -94,8 +161,15 @@ function xmlElementToHtml(element: Y.XmlElement): string {
     if (item instanceof Y.XmlText) {
       html += item.toString();
     } else if (item instanceof Y.XmlElement) {
-      const tagName = item.nodeName || 'span';
-      html += `<${tagName}>${xmlElementToHtml(item)}</${tagName}>`;
+      const nodeName = item.nodeName || 'span';
+      const tagName = getHtmlTag(nodeName, item);
+      
+      // Handle self-closing tags
+      if (tagName === 'br' || tagName === 'hr') {
+        html += `<${tagName}/>`;
+      } else {
+        html += `<${tagName}>${xmlElementToHtml(item)}</${tagName}>`;
+      }
     }
   });
   

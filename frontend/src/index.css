@@ -78,6 +78,10 @@
     --border-subtle: 215 15% 90%;
     --border-accent: 212 100% 48% / 0.3;
     --input: 215 20% 85%;
+
+    /* Font sizes - User configurable via settings */
+    --font-size-base: 16px;
+    --font-size-editor: 16px;
     --ring: 212 100% 48%;
 
     /* Sidebar - Glassmorphism perfection */

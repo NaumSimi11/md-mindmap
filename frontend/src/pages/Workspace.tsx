@@ -37,6 +37,9 @@ import { usePlatform } from '@/contexts/PlatformContext';
 import { MindmapLoadingScreen } from '@/components/mindmap/MindmapLoadingScreen';
 import MindmapGenerator from '@/services/MindmapGenerator';
 import { sessionService } from '@/services/EditorStudioSession';
+import { yjsDocumentManager } from '@/services/yjs/YjsDocumentManager';
+import { serializeYjsToHtml } from '@/services/snapshots/serializeYjs';
+import { htmlToMarkdown } from '@/utils/markdownConversion';
 import { useScrollSpy } from '@/hooks/useScrollSpy';
 import { PresentationWizardModal, type GenerationSettings } from '@/components/presentation/PresentationWizardModal';
 import { PresentationLoadingScreen } from '@/components/presentation/PresentationLoadingScreen';
@@ -67,9 +70,9 @@ export default function Workspace() {
   // Auth state
   const { user, logout } = useAuth();
   const { toast } = useToast();
-  
+
   // 🔥 Backend integration - Multi-Workspace Support
-  const { 
+  const {
     workspaces,
     currentWorkspace,
     createWorkspace,
@@ -93,6 +96,7 @@ export default function Workspace() {
   const pathParts = location.pathname.split('/').filter(Boolean);
   const viewMode: ViewMode = pathParts[3] as ViewMode || 'home';
   const documentId = pathParts[2] || null;
+
 
   // NOTE: This page still straddles legacy + new workspace types. Until the migration is complete,
   // keep the runtime shape flexible here to avoid type-level churn blocking UX fixes.
@@ -190,32 +194,32 @@ export default function Workspace() {
 
   // Load document if ID is in URL
   useEffect(() => {
-    if (documentId) {
-      console.log('🔍 [Workspace] Looking for document:', documentId);
-      console.log('🔍 [Workspace] Available documents:', backendDocuments.length);
-      
-      // 🔥 FIX: getDocument is now async - must await it
-      backendGetDocument(documentId).then(doc => {
+    // 🔥 FIX: Wait for workspace to finish loading before attempting to fetch document
+    if (documentId && workspaceLoading) {
+      return;
+    }
+
+    // 🔥 FIX: Ensure service is initialized before calling
+    if (!backendGetDocument) {
+      return;
+    }
+
+    if (documentId && currentWorkspace) {
+      // 🔥 SAFETY: Small delay to ensure service is fully initialized
+      const timeoutId = setTimeout(() => {
+        // 🔥 FIX: getDocument is now async - must await it
+        backendGetDocument(documentId).then(doc => {
         if (doc) {
           // 🚀 NEW: Check if this is a guest doc with cloud mapping
           const redirectToCloudId = (doc as any).__redirectToCloudId;
           if (redirectToCloudId && redirectToCloudId !== documentId) {
-            console.log(`🔄 [Workspace] Redirecting guest doc to cloud version: ${documentId} → ${redirectToCloudId}`);
             // Redirect to cloud ID (this will enable WebSocket!)
             const currentPath = location.pathname;
             const newPath = currentPath.replace(documentId, redirectToCloudId);
             navigate(newPath, { replace: true });
             return; // Don't set currentDocument, let the redirect handle it
           }
-          
-          console.log('📄 [Workspace] Document found:', {
-            id: doc.id,
-            title: doc.title,
-            hasContent: !!doc.content,
-            contentLength: doc.content?.length || 0,
-            contentPreview: doc.content?.substring(0, 100),
-            fullDoc: doc
-          });
+
           setCurrentDocument(doc);
           // CRITICAL: Clear live editor content when loading new document
           setLiveEditorContent(doc.content || '');
@@ -224,15 +228,18 @@ export default function Workspace() {
           // Document not found, go home
           navigate('/workspace');
         }
-      }).catch(err => {
-        console.error('❌ [Workspace] Error loading document:', err);
-        navigate('/workspace');
-      });
-    } else {
+        }).catch(err => {
+          console.error('❌ [Workspace] Error loading document:', err);
+          navigate('/workspace');
+        });
+      }, 150); // 150ms delay to ensure service is ready
+
+      return () => clearTimeout(timeoutId);
+    } else if (!documentId) {
       setCurrentDocument(null);
       setLiveEditorContent(''); // Clear content when no document
     }
-  }, [documentId, navigate, backendGetDocument, location.pathname]);
+  }, [documentId, workspaceLoading, currentWorkspace?.id]); // FIX: Use .id to prevent infinite loop from object reference changes
 
   // Handle Cmd+K for quick switcher
   useEffect(() => {
@@ -247,7 +254,6 @@ export default function Workspace() {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
         e.preventDefault();
         setFocusMode(prev => !prev);
-        console.log('🎯 Focus Mode toggled:', !focusMode);
       }
     };
 
@@ -261,34 +267,29 @@ export default function Workspace() {
       const customEvent = event as CustomEvent;
       const { documentId: pushedDocId, message } = customEvent.detail;
       
-      console.log(`📤 [Workspace] Document pushed to cloud: ${pushedDocId}`);
-      
       // If this is the document currently being viewed, reload it
       if (documentId === pushedDocId) {
-        console.log(`🔄 [Workspace] Reloading current document after push`);
-        
         // Show success toast
         toast({
           title: "✅ Document synced to cloud!",
           description: "Reloading fresh content...",
           duration: 2000,
         });
-        
+
         // Navigate away briefly then back to force fresh load
         const currentPath = location.pathname;
         navigate('/workspace');
-        
+
         // Navigate back after a short delay to ensure cleanup
         setTimeout(() => {
           navigate(currentPath);
-          console.log(`✅ [Workspace] Document reloaded with fresh cloud content`);
         }, 100);
       }
     };
     
     window.addEventListener('document-pushed-to-cloud', handleDocumentPushed);
     return () => window.removeEventListener('document-pushed-to-cloud', handleDocumentPushed);
-  }, [documentId, location.pathname, navigate, toast]);
+  }, [documentId, toast]);
 
   // Handle mindmap generation from URL params
   useEffect(() => {
@@ -297,16 +298,37 @@ export default function Workspace() {
       const mode = searchParams.get('mode');
       const type = searchParams.get('type') as 'mindmap' | 'flowchart' | 'orgchart';
 
-      // Use LIVE content if available (most recent), otherwise use stored content
-      const contentToUse = liveEditorContent || currentDocument.content;
+      // 🔥 FIX: Get LIVE content directly from Yjs document (source of truth)
+      // The previous approach using `liveEditorContent` state was stale because it wasn't
+      // wired to live Yjs edits. Now we extract directly from Yjs.
+      let contentToUse = '';
+      
+      try {
+        // Normalize document ID (same as useYjsDocument.ts) to find the right Yjs instance
+        const normalizedDocId = currentDocument.id.startsWith('doc_') 
+          ? currentDocument.id.slice(4) 
+          : currentDocument.id;
+        
+        const yjsInstance = yjsDocumentManager.getDocumentInstance(normalizedDocId);
+        if (yjsInstance?.ydoc) {
+          const html = serializeYjsToHtml(yjsInstance.ydoc);
+          if (html) {
+            contentToUse = htmlToMarkdown(html);
+            console.log('✅ [Mindmap] Got live content from Yjs:', contentToUse.length, 'chars');
+          }
+        } else {
+          console.warn('⚠️ [Mindmap] No Yjs instance found for:', normalizedDocId);
+        }
+      } catch (err) {
+        console.warn('⚠️ [Mindmap] Failed to get content from Yjs, falling back:', err);
+      }
+      
+      // Fallback to stored content if Yjs extraction failed
+      if (!contentToUse) {
+        contentToUse = liveEditorContent || currentDocument.content || '';
+      }
 
-      console.log('🧠 Mindmap mode detected:', {
-        mode,
-        type,
-        contentLength: contentToUse.length,
-        hasLiveContent: !!liveEditorContent,
-        preview: contentToUse.substring(0, 200)
-      });
+      // Mindmap mode detected
 
       if (mode === 'generate' && type && contentToUse) {
         // Start AI generation with LIVE content
@@ -317,7 +339,7 @@ export default function Workspace() {
         navigate(location.pathname, { replace: true }); // Clear params
       }
     }
-  }, [viewMode, currentDocument, location.search]);
+  }, [viewMode, currentDocument]);
 
   // Generate mindmap from content
   const generateMindmap = async (content: string, type: 'mindmap' | 'flowchart' | 'orgchart') => {
@@ -332,14 +354,11 @@ export default function Workspace() {
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // Generate mindmap data
-      console.log('🧠 Generating mindmap data...');
       const generator = new MindmapGenerator();
       const mindmapData = generator.generateFromHeadings(content);
 
       setMindmapProgress(60);
       await new Promise(resolve => setTimeout(resolve, 500));
-
-      console.log('✅ Mindmap data generated:', mindmapData);
 
       // Store in session for MindmapStudio2 to pick up
       sessionService.setMindmapData({
@@ -814,6 +833,26 @@ export default function Workspace() {
     }
 
     if (viewMode === 'mindmap') {
+      console.log('🎯 [Workspace] Rendering mindmap mode:', {
+        isGeneratingMindmap,
+        currentDocument: !!currentDocument,
+        documentId,
+        documentTitle: currentDocument?.title
+      });
+
+      // Wait for document to load before showing mindmap
+      if (!currentDocument && documentId) {
+        console.log('⏳ [Workspace] Waiting for document to load before showing mindmap');
+        return (
+          <div className="flex items-center justify-center h-screen">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Loading mindmap...</p>
+            </div>
+          </div>
+        );
+      }
+
       // Show loading screen if generating
       if (isGeneratingMindmap) {
         const searchParams = new URLSearchParams(location.search);
@@ -822,6 +861,7 @@ export default function Workspace() {
       }
 
       // Show MindmapStudio2
+      console.log('🚀 [Workspace] Rendering MindmapStudio2 component');
       return <MindmapStudio2 />;
     }
 
@@ -839,11 +879,11 @@ export default function Workspace() {
 
   return (
     <div className="flex h-screen bg-background relative overflow-hidden">
-      {/* Adaptive Sidebar - Hidden in Focus Mode and Presenter Mode */}
-      {!focusMode && viewMode !== 'present' && (
+      {/* Adaptive Sidebar - Hidden in Focus Mode, Presenter Mode, and Mindmap Mode */}
+      {!focusMode && viewMode !== 'present' && viewMode !== 'mindmap' && (
         <SidebarErrorBoundary>
           <AdaptiveSidebar
-            isEditingDocument={viewMode === 'edit' || viewMode === 'mindmap' || viewMode === 'slides'}
+            isEditingDocument={viewMode === 'edit' || viewMode === 'slides'}
             // Outline reads only heading structure; keep it synced to the live editor doc.
             documentContent={liveOutlineContent || currentDocument?.content || ''}
             onHeadingClick={(text, line, headingIndex) => {

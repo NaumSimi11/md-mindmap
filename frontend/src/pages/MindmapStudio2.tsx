@@ -32,17 +32,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { Sparkles, Plus, FileText, Upload, Layout as LayoutIcon, Folder, ArrowLeft, Presentation, ChevronDown, Palette, Download } from "lucide-react";
+import { Sparkles, Plus, FileText, Upload, Layout as LayoutIcon, Folder, ArrowLeft, Presentation, ChevronDown, Palette, Download, Shapes, RefreshCw } from "lucide-react";
 import { presentationGenerator } from "@/services/presentation/PresentationGenerator";
 import { safePresentationService, type ProgressUpdate } from "@/services/presentation/SafePresentationService";
 import { PresentationWizardModal, type GenerationSettings } from "@/components/presentation/PresentationWizardModal";
 import { PresentationLoadingScreen } from "@/components/presentation/PresentationLoadingScreen";
 import { workspaceService } from "@/services/workspace-legacy/WorkspaceService";
+import { useDocumentData } from "@/contexts/workspace/DocumentDataContext";
+import { useToast } from "@/hooks/use-toast";
 import Studio2MindNode from "@/components/mindmap/Studio2MindNode";
 import Studio2MilestoneNode from "@/components/mindmap/Studio2MilestoneNode";
 import SimpleMindNode from "@/components/mindmap/SimpleMindNode";
 import BorderOnlyMindNode from "@/components/mindmap/BorderOnlyMindNode";
-import Studio2Sidebar from "@/components/mindmap/Studio2Sidebar";
+import StandaloneIconNode from "@/components/mindmap/StandaloneIconNode";
+// import Studio2Sidebar from "@/components/mindmap/Studio2Sidebar"; // Removed - using inline editing only
+import ShapeLibrariesPanel from "@/components/mindmap/ShapeLibrariesPanel";
 import Studio2ExportModal from "@/components/mindmap/Studio2ExportModal";
 import Studio2TemplateModal from "@/components/mindmap/Studio2TemplateModal";
 import Studio2AIToolsModal, { type AIAction } from "@/components/mindmap/Studio2AIToolsModal";
@@ -95,6 +99,8 @@ export default function MindmapStudio2() {
 function MindmapStudio2Content() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { getDocument: backendGetDocument } = useDocumentData();
+  const { toast } = useToast();
 
   // Detect if we're in workspace context
   const isInWorkspace = location.pathname.includes('/workspace/doc/');
@@ -138,6 +144,7 @@ function MindmapStudio2Content() {
       milestone: Studio2MilestoneNode, // Keep milestone as-is for now
       aws: AwsNode,
       icon: IconNode,
+      standaloneIcon: StandaloneIconNode, // Pure icon without wrapper
     } as any; // Type assertion needed for React Flow's strict typing
   }, [nodeStyle]);
 
@@ -151,13 +158,33 @@ function MindmapStudio2Content() {
     setNodes((ns) => [...ns, newNode]);
   };
 
-  // Generic Iconify node insert
+  // Generic Iconify node insert (with box wrapper)
   const addIconifyNode = (title: string, iconId: string, color?: string) => {
     const id = `icon-${Date.now()}`;
     const count = nodes.filter((n) => n.type === 'icon').length;
     const x = 220 + (count % 4) * 240;
     const y = 220 + Math.floor(count / 4) * 160;
     const newNode: Node = { id, type: 'icon', position: { x, y }, data: { title, icon: iconId, color } } as Node;
+    setNodes((ns) => [...ns, newNode]);
+  };
+
+  // Standalone icon insert (pure icon, no wrapper)
+  const addStandaloneIcon = (iconId: string, title?: string, color?: string, size?: number) => {
+    const id = `standalone-${Date.now()}`;
+    const count = nodes.filter((n) => n.type === 'standaloneIcon').length;
+    const x = 250 + (count % 5) * 100;
+    const y = 250 + Math.floor(count / 5) * 100;
+    const newNode: Node = {
+      id,
+      type: 'standaloneIcon',
+      position: { x, y },
+      data: {
+        icon: iconId,
+        title: title || iconId,
+        color,
+        size: size || 48,
+      },
+    } as Node;
     setNodes((ns) => [...ns, newNode]);
   };
 
@@ -207,12 +234,91 @@ function MindmapStudio2Content() {
         setTitle(`Generated Mindmap - ${new Date().toLocaleDateString()}`);
       }
 
+      // 🔥 Apply tree layout automatically on import
+      setCurrentLayout('tree');
+
       // Clear the stored data after import
       sessionService.clearMindmapData();
 
       console.log('✅ Mindmap auto-imported successfully!');
     }
   }, []); // Run only once on mount
+
+  // 🔥 NEW: Load saved mindmap from document metadata (if exists)
+  useEffect(() => {
+    // Only load if we have a documentId and haven't loaded from session already
+    const generatedData = sessionService.getMindmapData();
+    if (documentId && !generatedData && backendGetDocument) {
+      const loadSavedMindmap = async () => {
+        try {
+          // Small delay to ensure service is initialized
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          const doc = await backendGetDocument(documentId);
+          if (doc?.metadata?.mindmapData) {
+            console.log('📂 Loading saved mindmap from document metadata');
+            const { nodes: savedNodes, edges: savedEdges, title: savedTitle } = doc.metadata.mindmapData;
+            
+            if (savedNodes && savedNodes.length > 0) {
+              setNodes(savedNodes);
+              setEdges(savedEdges || []);
+              if (savedTitle) setTitle(savedTitle);
+              
+              // Store original content for smart merge
+              if (doc.content) {
+                setOriginalContent(doc.content);
+              }
+              
+              console.log(`✅ Loaded ${savedNodes.length} nodes from saved mindmap`);
+            }
+          } else {
+            console.log('📝 No saved mindmap found, starting fresh');
+          }
+        } catch (error) {
+          console.error('❌ Failed to load saved mindmap:', error);
+          // Fail silently - not critical
+        }
+      };
+      
+      loadSavedMindmap();
+    }
+  }, [documentId]); // Load when documentId changes
+
+  // 🔥 NEW: Auto-save mindmap to document metadata when nodes/edges change
+  useEffect(() => {
+    if (!documentId || nodes.length === 0) return;
+    
+    // Debounce: save 2 seconds after last change
+    const timeoutId = setTimeout(async () => {
+      try {
+        console.log('💾 Auto-saving mindmap...');
+        
+        const mindmapData = {
+          nodes,
+          edges,
+          title,
+          savedAt: new Date().toISOString(),
+        };
+        
+        // Update document metadata
+        const doc = await backendGetDocument(documentId);
+        if (doc) {
+          await workspaceService.updateDocument(documentId, {
+            metadata: {
+              ...doc.metadata,
+              mindmapData,
+            } as any,
+          });
+        }
+        
+        console.log(`✅ Mindmap auto-saved (${nodes.length} nodes, ${edges.length} edges)`);
+      } catch (error) {
+        console.error('❌ Failed to auto-save mindmap:', error);
+      }
+    }, 2000); // 2 second debounce
+    
+    return () => clearTimeout(timeoutId);
+  }, [nodes, edges, title, documentId]); // Save when these change
 
   // Map UI edge type to React Flow edge type
   const getReactFlowEdgeType = (type: typeof edgeType): string => {
@@ -222,10 +328,11 @@ function MindmapStudio2Content() {
   const [aiLoading, setAILoading] = useState(false);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
-  const [sidebarNode, setSidebarNode] = useState<Node | null>(null);
+  // const [sidebarNode, setSidebarNode] = useState<Node | null>(null); // Removed - using inline editing only
   const [showExportModal, setShowExportModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showAIToolsModal, setShowAIToolsModal] = useState(false);
+  const [showShapeLibraries, setShowShapeLibraries] = useState(false);
 
   // Presentation wizard & progress
   const [showPresentationWizard, setShowPresentationWizard] = useState(false);
@@ -235,6 +342,7 @@ function MindmapStudio2Content() {
   const [showIconPickerModal, setShowIconPickerModal] = useState(false);
   const [showChatPanel, setShowChatPanel] = useState(false);
   const [chatMode, setChatMode] = useState<'brainstorm' | 'command'>('brainstorm');
+  const [hasEditorSession, setHasEditorSession] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'ai'; content: string }>>([]);
   const [chatInput, setChatInput] = useState('');
   const [showNodeDropdown, setShowNodeDropdown] = useState(false);
@@ -409,14 +517,155 @@ function MindmapStudio2Content() {
     console.log('🚫 Suggestion dismissed:', suggestionId);
   }, []);
 
-  // Add new node (callbacks will be injected by useEffect)
-  const addNode = useCallback(() => {
+  // Add new nodes in different SHAPES so users can visually build the map
+  // Pill / main node
+  const addPillNode = useCallback(() => {
+    const newNode: Node = {
+      id: `node-main-${Date.now()}`,
+      type: 'mindNode',
+      position: { x: 200 + Math.random() * 200, y: 120 + Math.random() * 120 },
+      data: {
+        label: 'New node',
+        shape: 'rounded-full',
+        color: 'indigo',
+      },
+    };
+    setNodes((nds) => [...nds, newNode]);
+  }, [setNodes]);
+
+  // Rounded rectangle node
+  const addRectangleNode = useCallback(() => {
+    const newNode: Node = {
+      id: `node-sub-${Date.now()}`,
+      type: 'mindNode',
+      position: { x: 260 + Math.random() * 260, y: 220 + Math.random() * 200 },
+      data: {
+        label: 'New node',
+        shape: 'rounded-xl',
+        color: 'blue',
+      },
+    };
+    setNodes((nds) => [...nds, newNode]);
+  }, [setNodes]);
+
+  // Circle node – compact status/metric bubble
+  const addCircleNode = useCallback(() => {
+    const newNode: Node = {
+      id: `node-circle-${Date.now()}`,
+      type: 'mindNode',
+      position: { x: 220 + Math.random() * 260, y: 160 + Math.random() * 220 },
+      data: {
+        label: 'Circle',
+        shape: 'circle',
+        color: 'pink',
+      },
+    };
+    setNodes((nds) => [...nds, newNode]);
+  }, [setNodes]);
+
+  // Diamond node (decision / highlight)
+  const addDiamondNode = useCallback(() => {
+    const newNode: Node = {
+      id: `node-diamond-${Date.now()}`,
+      type: 'mindNode',
+      position: { x: 220 + Math.random() * 260, y: 160 + Math.random() * 220 },
+      data: {
+        label: 'Decision',
+        shape: 'diamond',
+        color: 'purple',
+      },
+    };
+    setNodes((nds) => [...nds, newNode]);
+  }, [setNodes]);
+
+  // Sticky note – quick idea card
+  const addStickyNoteNode = useCallback(() => {
+    const newNode: Node = {
+      id: `node-sticky-${Date.now()}`,
+      type: 'mindNode',
+      position: { x: 240 + Math.random() * 260, y: 220 + Math.random() * 220 },
+      data: {
+        label: 'Sticky note',
+        shape: 'rounded-md',
+        color: 'yellow',
+        description: 'Quick thought',
+      },
+    };
+    setNodes((nds) => [...nds, newNode]);
+  }, [setNodes]);
+
+  // Callout card – emphasis / highlight block
+  const addCalloutNode = useCallback(() => {
+    const newNode: Node = {
+      id: `node-callout-${Date.now()}`,
+      type: 'mindNode',
+      position: { x: 260 + Math.random() * 260, y: 260 + Math.random() * 220 },
+      data: {
+        label: 'Callout',
+        shape: 'rounded-2xl',
+        color: 'orange',
+      },
+    };
+    setNodes((nds) => [...nds, newNode]);
+  }, [setNodes]);
+
+  // Hexagon node (system / component)
+  const addHexagonNode = useCallback(() => {
+    const newNode: Node = {
+      id: `node-hex-${Date.now()}`,
+      type: 'mindNode',
+      position: { x: 260 + Math.random() * 260, y: 200 + Math.random() * 220 },
+      data: {
+        label: 'Component',
+        shape: 'hexagon',
+        color: 'teal',
+      },
+    };
+    setNodes((nds) => [...nds, newNode]);
+  }, [setNodes]);
+
+  // Milestone container: visual group for nodes
+  const addMilestoneNode = useCallback(() => {
+    const milestoneId = `milestone-${Date.now()}`;
+    const milestoneNode: Node = {
+      id: milestoneId,
+      type: 'milestone',
+      position: { x: 180 + Math.random() * 240, y: 260 + Math.random() * 200 },
+      data: {
+        label: 'Milestone / phase',
+        description: 'Drag nodes inside to group them',
+        groupedNodeIds: [],
+      },
+    } as any;
+    setNodes((nds) => [...nds, milestoneNode]);
+  }, [setNodes]);
+
+  // Simple icon card node: rectangular node with icon + labels
+  const addIconNodeQuick = useCallback(() => {
+    const newNode: Node = {
+      id: `icon-${Date.now()}`,
+      type: 'icon',
+      position: { x: 240 + Math.random() * 260, y: 180 + Math.random() * 220 },
+      data: {
+        title: 'System / Service',
+        subtitle: 'Describe responsibility',
+        icon: 'tabler:brand-abstract',
+        color: '#4f46e5',
+      },
+    } as any;
+    setNodes((nds) => [...nds, newNode]);
+  }, [setNodes]);
+
+  // Generic custom node for shape libraries
+  const addCustomNode = useCallback((name: string) => {
     const newNode: Node = {
       id: `node-${Date.now()}`,
       type: 'mindNode',
-      position: { x: Math.random() * 400 + 200, y: Math.random() * 400 + 100 },
+      position: { x: 200 + Math.random() * 200, y: 120 + Math.random() * 120 },
       data: {
-        label: 'New Idea',
+        label: name,
+        shape: 'rounded-xl',
+        color: 'blue',
       },
     };
     setNodes((nds) => [...nds, newNode]);
@@ -547,8 +796,8 @@ function MindmapStudio2Content() {
         title,
         nodes: nodes.map(n => ({
           id: n.id,
-          label: n.data.label || '',
-          description: n.data.description,
+          label: (n.data.label as string) || '',
+          description: n.data.description as string,
         })),
         edges: edges.map(e => ({
           source: e.source,
@@ -935,24 +1184,10 @@ function MindmapStudio2Content() {
     console.log(`🗑️ Deleted milestone: ${milestoneId}`);
   }, [nodes, edges, setNodes, setEdges]);
 
-  // Open sidebar for node - only for icon/aws nodes (mindNodes have inline editing)
-  const onNodeDoubleClick = useCallback((_event: React.MouseEvent, node: Node) => {
-    // Open sidebar for ALL node types
-    // This provides access to full node details, description, status, etc.
-    setSidebarNode(node);
-  }, []);
+  // Removed onNodeDoubleClick - using inline editing only for mindmap nodes
+  // Mindmap nodes have inline label editing via double-click
 
-  // Update node data from sidebar
-  const handleSidebarUpdate = useCallback((nodeId: string, data: Partial<any>) => {
-    setNodes((nds) =>
-      nds.map((node) =>
-        node.id === nodeId
-          ? { ...node, data: { ...node.data, ...data } }
-          : node
-      )
-    );
-    console.log(`✅ Updated node: ${nodeId}`, data);
-  }, [setNodes]);
+  // Removed handleSidebarUpdate - using inline editing only
 
   // Smart merge: Update headings while preserving content
   const smartMergeNodesWithContent = useCallback((originalContent: string) => {
@@ -970,7 +1205,7 @@ function MindmapStudio2Content() {
 
     lines.forEach((line, index) => {
       const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
-      if (headingMatch) {
+      if (headingMatch && headingMatch[2]) {
         const level = headingMatch[1].length;
         const text = headingMatch[2].trim();
         headingMap.set(text, { lineIndex: index, level, text });
@@ -980,7 +1215,7 @@ function MindmapStudio2Content() {
     console.log(`📋 Found ${headingMap.size} headings in original content`);
 
     // Build node map
-    const nodeMap = new Map(nodes.map(n => [n.data.label, n]));
+    const nodeMap = new Map(nodes.map(n => [n.data.label as string, n]));
     const updatedLines = [...lines];
     const processedNodes = new Set<string>();
 
@@ -989,7 +1224,7 @@ function MindmapStudio2Content() {
       const node = nodeMap.get(originalText);
       if (node) {
         // Heading still exists, mark as processed
-        processedNodes.add(node.data.label);
+        processedNodes.add(node.data.label as string);
         console.log(`✅ Preserved: ${originalText}`);
       } else {
         // Heading was deleted in mindmap, remove it
@@ -1001,10 +1236,10 @@ function MindmapStudio2Content() {
     // Add new nodes that weren't in original
     let newNodesMarkdown = '';
     nodes.forEach(node => {
-      if (!processedNodes.has(node.data.label)) {
-        const level = node.data.level || 1;
+      if (!processedNodes.has(node.data.label as string)) {
+        const level = (node.data.level as number) || 1;
         const heading = '#'.repeat(Math.min(level, 6));
-        newNodesMarkdown += `\n${heading} ${node.data.label}\n\n`;
+        newNodesMarkdown += `\n${heading} ${node.data.label as string}\n\n`;
         console.log(`➕ Added: ${node.data.label}`);
       }
     });
@@ -1198,8 +1433,8 @@ function MindmapStudio2Content() {
       title,
       nodes: nodes.map(n => ({
         id: n.id,
-        label: n.data.label,
-        description: n.data.description,
+        label: n.data.label as string,
+        description: n.data.description as string,
         level: 0, // Could calculate from edges
       })),
       edges: edges.map(e => ({
@@ -1692,7 +1927,7 @@ Note: Auto-apply coming soon! For now, use these suggestions manually.
     }
 
     // Extract pattern from "pattern:keyword" format
-    const keyword = targetString.startsWith('pattern:')
+    const keyword = typeof targetString === 'string' && targetString.startsWith('pattern:')
       ? targetString.replace('pattern:', '')
       : pattern || targetString;
 
@@ -1703,7 +1938,7 @@ Note: Auto-apply coming soon! For now, use these suggestions manually.
 
     // Find nodes whose labels include the keyword (case-insensitive)
     const matchedNodes = nodes.filter(node =>
-      node.data.label.toLowerCase().includes(keyword.toLowerCase())
+      typeof node.data.label === 'string' && node.data.label.toLowerCase().includes(keyword.toLowerCase())
     );
 
     console.log(`✅ Found ${matchedNodes.length} nodes matching "${keyword}":`, matchedNodes.map(n => n.data.label));
@@ -1785,7 +2020,7 @@ Extract the main topics/ideas that should become mindmap nodes. Respond with JSO
             if (discussionTargetNode) {
               // Find the node we were discussing
               targetNode = nodes.find(n =>
-                n.data.label.toLowerCase() === discussionTargetNode.toLowerCase()
+                typeof n.data.label === 'string' && n.data.label.toLowerCase() === discussionTargetNode.toLowerCase()
               );
               console.log(`🎯 Found discussion target: "${targetNode?.data.label}"`);
             }
@@ -1836,7 +2071,7 @@ Extract the main topics/ideas that should become mindmap nodes. Respond with JSO
           console.log('💬 Continuing brainstorm conversation...');
 
           // Detect if user mentioned a specific node (track discussion target)
-          const nodeList = nodes.map(n => n.data.label);
+          const nodeList = nodes.map(n => n.data.label).filter(label => typeof label === 'string') as string[];
           const mentionedNode = nodeList.find(label =>
             prompt.toLowerCase().includes(label.toLowerCase())
           );
@@ -1907,7 +2142,7 @@ IMPORTANT: Do NOT include JSON or commands. Just have a natural conversation.`;
 
       // Get conversation context
       const contextSummary = chatContextManager.getContextSummary(
-        nodes.map(n => ({ id: n.id, label: n.data.label }))
+        nodes.map(n => ({ id: n.id, label: n.data.label as string }))
       );
 
       // Check if command contains pronouns
@@ -2013,7 +2248,7 @@ Examples:
           // Find target node - be smart about it!
           let targetNode = exactNodeName
             ? nodes.find(n => n.data.label === exactNodeName) // Exact match from slash command
-            : nodes.find(n => n.data.label.toLowerCase().includes(parsed.target.toLowerCase())); // Fuzzy match
+            : nodes.find(n => typeof n.data.label === 'string' && typeof parsed.target === 'string' && n.data.label.toLowerCase().includes(parsed.target.toLowerCase())); // Fuzzy match
 
           // If no specific target, use root or first node
           if (!targetNode && (parsed.target === 'all' || parsed.target === 'none' || parsed.target === 'root' || !parsed.target)) {
@@ -2119,12 +2354,9 @@ Examples:
                 const enhanced = await mindmapAIService.enhanceNode(
                   node.id,
                   context,
-                  {
-                    type: parsed.details.changes?.includes('creative') || parsed.details.changes?.includes('creativity')
-                      ? 'description'
-                      : 'both',
-                    style: 'creative'
-                  }
+                  parsed.details.changes?.includes('creative') || parsed.details.changes?.includes('creativity')
+                    ? 'description'
+                    : 'both'
                 );
                 return { nodeId: node.id, enhanced, success: true };
               } catch (error) {
@@ -2192,12 +2424,9 @@ Examples:
                 const enhanced = await mindmapAIService.enhanceNode(
                   node.id,
                   context,
-                  {
-                    type: parsed.details.changes?.includes('creative') || parsed.details.changes?.includes('creativity')
-                      ? 'description'
-                      : 'both',
-                    style: 'creative'
-                  }
+                  parsed.details.changes?.includes('creative') || parsed.details.changes?.includes('creativity')
+                    ? 'description'
+                    : 'both'
                 );
                 return { nodeId: node.id, enhanced, success: true };
               } catch (error) {
@@ -2248,7 +2477,7 @@ Examples:
           // Find target node
           let targetNode = exactNodeName
             ? nodes.find(n => n.data.label === exactNodeName)
-            : nodes.find(n => n.data.label.toLowerCase().includes(parsed.target.toLowerCase()));
+            : nodes.find(n => typeof n.data.label === 'string' && typeof parsed.target === 'string' && n.data.label.toLowerCase().includes(parsed.target.toLowerCase()));
 
           if (!targetNode) {
             const errorMsg = `❌ Couldn't find node "${parsed.target || exactNodeName}". Try using / to select a node precisely.`;
@@ -2270,12 +2499,9 @@ Examples:
           const enhanced = await mindmapAIService.enhanceNode(
             targetNode.id,
             context,
-            {
-              type: parsed.details.changes?.includes('creative') || parsed.details.changes?.includes('creativity')
-                ? 'description'
-                : 'both',
-              style: 'creative'
-            }
+            parsed.details.changes?.includes('creative') || parsed.details.changes?.includes('creativity')
+              ? 'description'
+              : 'both'
           );
 
           // Update the node with enhanced content
@@ -2369,7 +2595,7 @@ Examples:
     if (lastSlashIndex !== -1) {
       const searchTerm = value.slice(lastSlashIndex + 1).toLowerCase();
       const filtered = nodes.filter(n =>
-        n.data.label.toLowerCase().includes(searchTerm)
+        typeof n.data.label === 'string' && n.data.label.toLowerCase().includes(searchTerm)
       );
       setFilteredNodes(filtered);
       setShowNodeDropdown(true);
@@ -2601,6 +2827,64 @@ Examples:
             </>
           )}
 
+          {/* 🔥 NEW: Regenerate from Editor Button */}
+          {isInWorkspace && documentId && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  if (!confirm('This will replace your current mindmap with a fresh one generated from the editor content. Continue?')) return;
+                  
+                  try {
+                    console.log('🔄 Regenerating mindmap from editor...');
+                    const doc = await backendGetDocument(documentId);
+                    if (doc?.content) {
+                      // Generate new mindmap from current editor content
+                      const generator = new MindmapGenerator();
+                      const mindmapData = generator.generateFromHeadings(doc.content);
+                      
+                      // Convert to React Flow format
+                      const newNodes: Node[] = mindmapData.nodes.map((node: any, index: number) => ({
+                        id: node.id,
+                        type: 'mindNode',
+                        position: { x: 100 + (index % 5) * 200, y: 100 + Math.floor(index / 5) * 150 },
+                        data: {
+                          label: node.text,
+                          level: node.level,
+                          lineNumber: node.lineNumber,
+                        },
+                      }));
+                      
+                      const newEdges: Edge[] = mindmapData.connections.map((conn: any) => ({
+                        id: `${conn.from}-${conn.to}`,
+                        source: conn.from,
+                        target: conn.to,
+                        type: 'default',
+                      }));
+                      
+                      setNodes(newNodes);
+                      setEdges(newEdges);
+                      setOriginalContent(doc.content);
+                      setCurrentLayout('tree');
+                      
+                      console.log('✅ Mindmap regenerated from editor');
+                      toast({ title: '✅ Regenerated', description: `Created ${newNodes.length} nodes from editor content` });
+                    }
+                  } catch (error) {
+                    console.error('❌ Failed to regenerate:', error);
+                    alert('Failed to regenerate mindmap. Please try again.');
+                  }
+                }}
+                className="text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950"
+                title="Regenerate mindmap from current editor content"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />Regenerate
+              </Button>
+              <Separator orientation="vertical" className="h-6" />
+            </>
+          )}
+
           {/* File Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -2626,7 +2910,7 @@ Examples:
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Add Dropdown */}
+          {/* Add Dropdown - shape-first palette */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="sm" className="gradient-primary text-white hover:opacity-90">
@@ -2635,13 +2919,56 @@ Examples:
                 <ChevronDown className="h-3 w-3 ml-2" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48">
-              <DropdownMenuItem onClick={addNode}>
-                <Plus className="h-4 w-4 mr-2" />
-                New Node
+            <DropdownMenuContent align="start" className="w-72">
+              <DropdownMenuLabel>Insert shape</DropdownMenuLabel>
+
+              {/* Basic shapes */}
+              <DropdownMenuItem onClick={addPillNode} className="flex items-center gap-3">
+                <div className="h-4 w-12 rounded-full bg-gradient-to-r from-indigo-500 to-indigo-600 shadow-sm" />
+                <span>Pill node</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowIconPickerModal(true)}>
-                🎨 Browse Icons...
+              <DropdownMenuItem onClick={addRectangleNode} className="flex items-center gap-3">
+                <div className="h-4 w-12 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 shadow-sm" />
+                <span>Rectangle node</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={addCircleNode} className="flex items-center gap-3">
+                <div className="h-5 w-5 rounded-full bg-gradient-to-br from-pink-500 to-pink-600 shadow-sm" />
+                <span>Circle node</span>
+              </DropdownMenuItem>
+
+              {/* Geometric shapes */}
+              <DropdownMenuItem onClick={addDiamondNode} className="flex items-center gap-3">
+                <div className="h-4 w-4 bg-gradient-to-br from-purple-500 to-purple-600 rotate-45 shadow-sm rounded-sm" />
+                <span>Diamond node</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={addHexagonNode} className="flex items-center gap-3">
+                <div
+                  className="h-4 w-6 bg-gradient-to-br from-teal-500 to-teal-600 shadow-sm"
+                  style={{ clipPath: 'polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%)' }}
+                />
+                <span>Hexagon node</span>
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+
+              {/* Variants, containers & icon cards */}
+              <DropdownMenuItem onClick={addStickyNoteNode} className="flex items-center gap-3">
+                <div className="h-5 w-6 rounded-md bg-gradient-to-br from-yellow-300 to-amber-300 shadow-sm" />
+                <span>Sticky note</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={addCalloutNode} className="flex items-center gap-3">
+                <div className="h-5 w-8 rounded-2xl bg-gradient-to-r from-orange-400 to-red-400 shadow-sm" />
+                <span>Callout block</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={addMilestoneNode} className="flex items-center gap-3">
+                <div className="h-4 w-10 rounded-lg border border-dashed border-indigo-400 bg-indigo-500/20" />
+                <span>Milestone / group</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={addIconNodeQuick} className="flex items-center gap-3">
+                <div className="h-5 w-10 rounded-md bg-white border border-slate-300 flex items-center justify-center text-xs">
+                  🎯
+                </div>
+                <span>Icon card</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -2712,6 +3039,18 @@ Examples:
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Shape Libraries Toggle */}
+          <Button
+            size="sm"
+            variant={showShapeLibraries ? "default" : "outline"}
+            onClick={() => setShowShapeLibraries(!showShapeLibraries)}
+            className="hover:bg-muted"
+            title="Shape Libraries"
+          >
+            <Shapes className="h-4 w-4 mr-2" />
+            Shapes
+          </Button>
 
           {/* Layout Dropdown */}
           <DropdownMenu>
@@ -2801,20 +3140,53 @@ Examples:
         </div>
       </div>
 
-      {/* React Flow Canvas */}
-      <div className="flex-1 min-h-0" ref={reactFlowWrapper}>
-        <ReactFlow
+      {/* Main Content Area - Flex container for Shapes Panel + Canvas */}
+      <div className="flex-1 flex min-h-0">
+        {/* Shape Libraries Panel */}
+        <ShapeLibrariesPanel
+          isOpen={showShapeLibraries}
+          onToggle={() => setShowShapeLibraries(!showShapeLibraries)}
+          onAddShape={(shape) => {
+            if (shape.nodeType === 'mind') {
+              addCustomNode(shape.name);
+            } else if (shape.nodeType === 'milestone') {
+              addMilestoneNode();
+            } else if (shape.nodeType === 'icon') {
+              addIconifyNode(shape.name, shape.data?.icon || '', shape.data?.color);
+            } else if (shape.nodeType === 'aws') {
+              addAwsNode(shape.data?.title || shape.name, shape.data?.icon || '');
+            } else if (shape.nodeType === 'standaloneIcon') {
+              addStandaloneIcon(
+                shape.data?.icon || shape.icon,
+                shape.name,
+                shape.data?.color,
+                shape.data?.size || 48
+              );
+            } else if (shape.nodeType === 'flowchart') {
+              addCustomNode(shape.name);
+            } else if (shape.nodeType === 'uml') {
+              addCustomNode(shape.name);
+            }
+          }}
+        />
+
+        {/* React Flow Canvas */}
+        <div className="flex-1 min-h-0" ref={reactFlowWrapper}>
+          <ReactFlow
           nodes={nodes}
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onSelectionChange={onSelectionChange}
-          onNodeDoubleClick={onNodeDoubleClick}
+          // onNodeDoubleClick removed - using inline editing only
           onNodeDrag={onNodeDrag}
           onNodeDragStop={onNodeDragStop}
           nodeTypes={nodeTypes as any}
           fitView
+          minZoom={0.05}
+          maxZoom={2}
+          fitViewOptions={{ padding: 0.2 }}
           multiSelectionKeyCode="Shift"
           proOptions={{ hideAttribution: true }}
           defaultEdgeOptions={{
@@ -2863,41 +3235,13 @@ Examples:
               backgroundColor: 'hsl(var(--card))',
             }}
           />
-
-          {/* Top-left Panel for Stats */}
-          <Panel position="top-left" className="bg-card/95 border border-border rounded-lg px-4 py-2 shadow-lg">
-            <div className="text-xs text-muted-foreground">
-              <span className="font-semibold">{nodes.length}</span> nodes ·
-              <span className="font-semibold ml-1">{edges.length}</span> connections
-            </div>
-          </Panel>
         </ReactFlow>
+        </div>
+        {/* End of React Flow Canvas */}
       </div>
+      {/* End of Main Content Area */}
 
-      {/* PM Fields Sidebar */}
-      <Studio2Sidebar
-        selectedNode={sidebarNode}
-        selectedEdge={selectedEdge}
-        onClose={() => {
-          setSidebarNode(null);
-          setSelectedEdge(null);
-        }}
-        onUpdate={handleSidebarUpdate}
-        onUpdateEdge={(edgeId, data) => {
-          setEdges((eds) =>
-            eds.map((edge) => {
-              if (edge.id === edgeId) {
-                const updatedEdge = { ...edge, ...data };
-                // Also update selectedEdge so sidebar shows current values
-                setSelectedEdge(updatedEdge);
-                return updatedEdge;
-              }
-              return edge;
-            })
-          );
-        }}
-        onAddIconNode={addIconifyNode}
-      />
+      {/* Removed PM Fields Sidebar - using inline editing only */}
 
       {/* Export Modal */}
       <Studio2ExportModal
@@ -3189,9 +3533,9 @@ Examples:
                         ? 'bg-purple-100 text-purple-900 font-medium'
                         : 'hover:bg-purple-50'
                         }`}
-                      onClick={() => handleNodeSelect(node.data.label)}
+                      onClick={() => handleNodeSelect(node.data.label as string)}
                     >
-                      {node.data.label}
+                      {node.data.label as string}
                     </div>
                   ))}
                 </div>
@@ -3217,7 +3561,7 @@ Examples:
                     setSelectedNodeIndex(prev => Math.max(prev - 1, 0));
                   } else if (e.key === 'Enter' && showNodeDropdown) {
                     e.preventDefault();
-                    handleNodeSelect(filteredNodes[selectedNodeIndex]?.data.label);
+                    handleNodeSelect(filteredNodes[selectedNodeIndex]?.data.label as string);
                   } else if (e.key === 'Enter' && chatInput.trim()) {
                     const command = chatInput;
                     setChatInput('');

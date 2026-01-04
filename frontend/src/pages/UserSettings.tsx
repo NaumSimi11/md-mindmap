@@ -65,53 +65,22 @@ import {
   Brain,
   CreditCard,
 } from 'lucide-react';
-
-// Types
-interface UserPreferences {
-  // UI Settings
-  toolbarStyle: 'floating' | 'fixed';
-  theme: 'light' | 'dark' | 'system';
-  fontSize: 'small' | 'medium' | 'large';
-  showLineNumbers: boolean;
-  autoSave: boolean;
-  autoSaveInterval: number;
-  
-  // AI Settings
-  aiProvider: 'none' | 'openai' | 'anthropic' | 'google' | 'mdreader';
-  openaiApiKey: string;
-  anthropicApiKey: string;
-  googleApiKey: string;
-  defaultModel: string;
-  
-  // Editor Settings
-  spellCheck: boolean;
-  autoComplete: boolean;
-  aiHints: boolean;
-}
-
-const defaultPreferences: UserPreferences = {
-  toolbarStyle: 'fixed',
-  theme: 'system',
-  fontSize: 'medium',
-  showLineNumbers: false,
-  autoSave: true,
-  autoSaveInterval: 30,
-  aiProvider: 'none',
-  openaiApiKey: '',
-  anthropicApiKey: '',
-  googleApiKey: '',
-  defaultModel: 'gpt-4',
-  spellCheck: true,
-  autoComplete: true,
-  aiHints: true,
-};
+import { 
+  useUserPreferencesStore,
+  type ThemeMode,
+  type FontSize,
+  type ToolbarStyle,
+  type AIProvider,
+} from '@/stores/userPreferencesStore';
 
 export function UserSettings() {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
   
+  // Use the global preferences store
+  const preferences = useUserPreferencesStore();
+  
   const [activeTab, setActiveTab] = useState('profile');
-  const [preferences, setPreferences] = useState<UserPreferences>(defaultPreferences);
   const [saving, setSaving] = useState(false);
   const [showApiKey, setShowApiKey] = useState<Record<string, boolean>>({});
   
@@ -124,18 +93,8 @@ export function UserSettings() {
     confirmPassword: '',
   });
 
-  // Load preferences from localStorage on mount
+  // Load profile data on mount
   useEffect(() => {
-    const savedPrefs = localStorage.getItem('mdreader_user_preferences');
-    if (savedPrefs) {
-      try {
-        setPreferences({ ...defaultPreferences, ...JSON.parse(savedPrefs) });
-      } catch (e) {
-        console.error('Failed to parse preferences:', e);
-      }
-    }
-    
-    // Load profile data
     if (user) {
       setProfileForm(prev => ({
         ...prev,
@@ -145,20 +104,12 @@ export function UserSettings() {
     }
   }, [user]);
 
-  // Save preferences
+  // Save preferences - the store auto-persists, so we just show a toast
   const handleSavePreferences = async () => {
     setSaving(true);
     try {
-      // Save to localStorage (in real app, would also sync to backend)
-      localStorage.setItem('mdreader_user_preferences', JSON.stringify(preferences));
-      
-      // Apply theme immediately
-      if (preferences.theme === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else if (preferences.theme === 'light') {
-        document.documentElement.classList.remove('dark');
-      }
-      
+      // The Zustand store with persist middleware already saves to localStorage
+      // and applies changes immediately, so we just show confirmation
       toast.success('Settings saved successfully');
     } catch (error) {
       toast.error('Failed to save settings');
@@ -443,8 +394,8 @@ export function UserSettings() {
                     <Label>Toolbar Style</Label>
                     <RadioGroup
                       value={preferences.toolbarStyle}
-                      onValueChange={(value: 'floating' | 'fixed') => 
-                        setPreferences(prev => ({ ...prev, toolbarStyle: value }))
+                      onValueChange={(value: ToolbarStyle) => 
+                        preferences.setToolbarStyle(value)
                       }
                       className="grid grid-cols-2 gap-4"
                     >
@@ -487,8 +438,8 @@ export function UserSettings() {
                     <Label>Theme</Label>
                     <RadioGroup
                       value={preferences.theme}
-                      onValueChange={(value: 'light' | 'dark' | 'system') => 
-                        setPreferences(prev => ({ ...prev, theme: value }))
+                      onValueChange={(value: ThemeMode) => 
+                        preferences.setTheme(value)
                       }
                       className="flex gap-4"
                     >
@@ -538,8 +489,8 @@ export function UserSettings() {
                     <Label>Editor Font Size</Label>
                     <Select
                       value={preferences.fontSize}
-                      onValueChange={(value: 'small' | 'medium' | 'large') => 
-                        setPreferences(prev => ({ ...prev, fontSize: value }))
+                      onValueChange={(value: FontSize) => 
+                        preferences.setFontSize(value)
                       }
                     >
                       <SelectTrigger className="w-48">
@@ -567,7 +518,7 @@ export function UserSettings() {
                       <Switch
                         checked={preferences.autoSave}
                         onCheckedChange={(checked) => 
-                          setPreferences(prev => ({ ...prev, autoSave: checked }))
+                          preferences.setAutoSave(checked)
                         }
                       />
                     </div>
@@ -582,7 +533,7 @@ export function UserSettings() {
                       <Switch
                         checked={preferences.spellCheck}
                         onCheckedChange={(checked) => 
-                          setPreferences(prev => ({ ...prev, spellCheck: checked }))
+                          preferences.setSpellCheck(checked)
                         }
                       />
                     </div>
@@ -597,10 +548,73 @@ export function UserSettings() {
                       <Switch
                         checked={preferences.showLineNumbers}
                         onCheckedChange={(checked) => 
-                          setPreferences(prev => ({ ...prev, showLineNumbers: checked }))
+                          preferences.setShowLineNumbers(checked)
                         }
                       />
                     </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Toolbar Visibility Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Settings className="h-5 w-5" />
+                    Toolbar Visibility
+                  </CardTitle>
+                  <CardDescription>
+                    Choose which toolbars to show in the editor
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Action Bar</Label>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Top bar with Format, Diagram, AI Assistant, Share, History
+                      </p>
+                    </div>
+                    <Switch
+                      checked={preferences.showActionBar}
+                      onCheckedChange={(checked) => 
+                        preferences.setShowActionBar(checked)
+                      }
+                    />
+                  </div>
+                  
+                  <Separator />
+                  
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Formatting Toolbar</Label>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Shortcuts bar with Bold, Italic, Headings, Lists, etc.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={preferences.showFormattingToolbar}
+                      onCheckedChange={(checked) => 
+                        preferences.setShowFormattingToolbar(checked)
+                      }
+                    />
+                  </div>
+                  
+                  <Separator />
+                  
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Side Toolbar</Label>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Floating right bar with quick action icons
+                      </p>
+                    </div>
+                    <Switch
+                      checked={preferences.showSideToolbar}
+                      onCheckedChange={(checked) => 
+                        preferences.setShowSideToolbar(checked)
+                      }
+                    />
                   </div>
                 </CardContent>
               </Card>
@@ -624,8 +638,8 @@ export function UserSettings() {
                     <Label>Select AI Provider</Label>
                     <RadioGroup
                       value={preferences.aiProvider}
-                      onValueChange={(value: 'none' | 'openai' | 'anthropic' | 'google' | 'mdreader') => 
-                        setPreferences(prev => ({ ...prev, aiProvider: value }))
+                      onValueChange={(value: AIProvider) => 
+                        preferences.setAIProvider(value)
                       }
                       className="grid grid-cols-2 lg:grid-cols-3 gap-4"
                     >
@@ -752,12 +766,13 @@ export function UserSettings() {
                                 }
                                 onChange={(e) => {
                                   const key = e.target.value;
-                                  setPreferences(prev => ({
-                                    ...prev,
-                                    ...(preferences.aiProvider === 'openai' && { openaiApiKey: key }),
-                                    ...(preferences.aiProvider === 'anthropic' && { anthropicApiKey: key }),
-                                    ...(preferences.aiProvider === 'google' && { googleApiKey: key }),
-                                  }));
+                                  if (preferences.aiProvider === 'openai') {
+                                    preferences.setAPIKey('openai', key);
+                                  } else if (preferences.aiProvider === 'anthropic') {
+                                    preferences.setAPIKey('anthropic', key);
+                                  } else if (preferences.aiProvider === 'google') {
+                                    preferences.setAPIKey('google', key);
+                                  }
                                 }}
                                 placeholder={`sk-...`}
                                 className="pr-10"
@@ -788,7 +803,7 @@ export function UserSettings() {
                           <Select
                             value={preferences.defaultModel}
                             onValueChange={(value) => 
-                              setPreferences(prev => ({ ...prev, defaultModel: value }))
+                              preferences.setDefaultModel(value)
                             }
                           >
                             <SelectTrigger className="w-64">
@@ -846,7 +861,7 @@ export function UserSettings() {
                       <Switch
                         checked={preferences.autoComplete}
                         onCheckedChange={(checked) => 
-                          setPreferences(prev => ({ ...prev, autoComplete: checked }))
+                          preferences.setAutoComplete(checked)
                         }
                         disabled={preferences.aiProvider === 'none'}
                       />
@@ -861,7 +876,7 @@ export function UserSettings() {
                       <Switch
                         checked={preferences.aiHints}
                         onCheckedChange={(checked) => 
-                          setPreferences(prev => ({ ...prev, aiHints: checked }))
+                          preferences.setAIHints(checked)
                         }
                         disabled={preferences.aiProvider === 'none'}
                       />

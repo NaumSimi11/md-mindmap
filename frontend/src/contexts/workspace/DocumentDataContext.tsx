@@ -494,9 +494,24 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
         shouldUseBackendService
       );
     }
-    
+
+    // 🔥 OPTIMIZATION: Return existing document from array for object reference stability
+    // This prevents WYSIWYGEditor from re-rendering when document data hasn't actually changed
+    if (document) {
+      const existingDoc = documents.find(d => d.id === document.id);
+      if (existingDoc) {
+        // Check if the key properties are the same (avoid expensive deep comparison)
+        const keyPropsSame = existingDoc.title === document.title &&
+                            existingDoc.content === document.content &&
+                            existingDoc.syncStatus === document.syncStatus;
+        if (keyPropsSame) {
+          return existingDoc; // Return stable reference from documents array
+        }
+      }
+    }
+
     return document;
-  }, [shouldUseBackendService]);
+  }, [shouldUseBackendService, documents]);
 
   // Create document
   const createDocument = useCallback(async (

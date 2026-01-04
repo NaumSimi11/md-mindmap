@@ -8,11 +8,12 @@ things tha tneed to be done :
 
 - ✅ DONE: added X button next to document title to close and go back to workspace home 
 
-- import more type of documents : this means we need soem librar tha twill let us import ( upload ) docs, exel and so on   
+- ✅ DONE: import more document types - added mammoth for Word (.docx) and xlsx for Excel (.xlsx/.xls) conversion to Markdown   
 - export more types of documents ( maybe )
 - organize the export - export or save - now we have export to md, and that is, we shoyld think how can we organize that better, it it's ok as it is :) 
 
- - the settings page of the user - setting the ui from the settings page of the user -there we have control on the ui ( we dont have jet, but we have settings on that ) . we shuuld wire that
+ - ✅ DONE: wired settings page to global Zustand store (userPreferencesStore) - theme, font size, toolbar style, spellcheck, auto-save, AI settings now apply globally and persist
+ - ✅ DONE: added toolbar visibility controls in Settings > Appearance - can now show/hide Action Bar, Formatting Toolbar, and Side Toolbar
 
  - the createion document dialog to be redesigned - now it's nice ui, but bad UX i think. 
  - ✅ DONE: updated UnifiedAIModal with premium glassmorphism styling (tabs, quick actions, buttons)

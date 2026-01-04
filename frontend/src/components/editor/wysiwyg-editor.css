@@ -17,7 +17,7 @@
   outline: none;
   padding: 1.5rem 1.5rem 4rem 1.5rem; /* Reduced padding, more bottom space */
   min-height: calc(100vh - 200px);
-  font-size: 16px; /* Increased base font size for better readability */
+  font-size: var(--font-size-editor, 16px); /* User-configurable via Settings */
   line-height: 1.6; /* Improved line spacing */
   background: hsl(var(--background));
   color: hsl(var(--foreground));

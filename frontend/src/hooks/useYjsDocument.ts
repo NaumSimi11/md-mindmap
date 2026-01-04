@@ -107,7 +107,7 @@ export function useYjsDocument(documentId: string): UseYjsDocumentReturn {
   
   // 🔥 NEW: Generate user info for presence/awareness
   const currentUser = user ? {
-    name: user.display_name || user.email?.split('@')[0] || 'Anonymous',
+    name: user.full_name || user.username || user.email?.split('@')[0] || 'Anonymous',
     color: generateUserColor(user.id || user.email || 'anonymous'),
   } : undefined;
   

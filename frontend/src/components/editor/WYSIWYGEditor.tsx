@@ -57,12 +57,14 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useEditorUIStore } from '@/stores/editorUIStore';
+import { useSpellCheck, useFontSize, useShowActionBar, useShowFormattingToolbar, useShowSideToolbar } from '@/stores/userPreferencesStore';
 import { UnifiedAIModal } from '@/components/modals/UnifiedAIModal';
 import UnifiedDiagramModal from '@/components/modals/UnifiedDiagramModal';
 import { useAuth } from '@/hooks/useAuth';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { selectiveSyncService } from '@/services/sync/SelectiveSyncService';
 import { documentExportService } from '@/services/export/DocumentExportService';
+import { documentService } from '@/services/api/DocumentService';
 import {
   Undo,
   Redo,
@@ -163,6 +165,13 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
     showImageModal, setShowImageModal
   } = useEditorUIStore();
 
+  // User Preferences
+  const spellCheckEnabled = useSpellCheck();
+  const editorFontSize = useFontSize();
+  const showActionBar = useShowActionBar();
+  const showFormattingToolbar = useShowFormattingToolbar();
+  const showSideToolbar = useShowSideToolbar();
+
   // Local State
   const [aiSuggestionsEnabled, setAiSuggestionsEnabled] = useState(false);
   const [aiAutocompleteEnabled, setAiAutocompleteEnabled] = useState(true);
@@ -225,7 +234,7 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
       hash = ((hash << 5) - hash) + seed.charCodeAt(i);
     }
     return {
-      name: user.display_name || user.email?.split('@')[0] || 'Anonymous',
+      name: user.full_name || user.username || user.email?.split('@')[0] || 'Anonymous',
       color: colors[Math.abs(hash) % colors.length],
     };
   }, [user]);
@@ -354,7 +363,7 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
       try {
         // Try to get document details to check ownership
         const doc = await documentService.getDocument(documentId);
-        if (doc && user && doc.created_by_id === user.id) {
+        if (doc && user && doc.created_by === user.id) {
           setUserRole('owner');
         } else {
           // Default to editor for authenticated users (backend will enforce actual permissions)
@@ -751,7 +760,8 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
       {/* 🔥 Collaboration Presence List - Shows other users editing */}
       <PresenceList provider={websocketProvider as any} />
       
-      {viewReady && (
+      {/* Side Toolbar - Controlled by user preferences */}
+      {viewReady && showSideToolbar && (
         <FloatingSideToolbar
           editor={editor}
           onInsertTable={insertTable}
@@ -791,7 +801,8 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
         />
       )}
 
-      {/* Premium Top Bar - Matching Homepage Style - RESPONSIVE */}
+      {/* Premium Top Bar - Matching Homepage Style - RESPONSIVE - Controlled by user preferences */}
+      {showActionBar && (
       <div className="relative flex-shrink-0 px-3 sm:px-4 lg:px-6 py-2.5 sm:py-3 lg:py-4 bg-white dark:bg-slate-900">
         {/* Premium background with gradients and glassmorphism */}
         <div className="absolute inset-0 bg-gradient-to-r from-white via-slate-50/90 to-white dark:from-slate-900 dark:via-slate-800/90 dark:to-slate-900 backdrop-blur-2xl border-b border-slate-200/50 dark:border-slate-700/50 shadow-[0_4px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]" />
@@ -1256,11 +1267,13 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
           </div>
         </div>
       </div>
+      )}
 
       <div className="flex-1 overflow-y-auto bg-background" data-testid="editor-container">
         {editorMode === 'wysiwyg' ? (
           <>
-            {viewReady && <FixedToolbar editor={editor} />}
+            {/* Formatting Toolbar - Controlled by user preferences */}
+            {viewReady && showFormattingToolbar && <FixedToolbar editor={editor} />}
             <EditorContent editor={editor} data-testid="wysiwyg-editor" />
             {viewReady && editor && <FloatingToolbar editor={editor} />}
             {viewReady && editor && <LinkHoverToolbar editor={editor} />}
@@ -1270,9 +1283,10 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
             ref={markdownTextareaRef}
             value={markdownContent}
             onChange={handleMarkdownChange}
-            className="w-full h-full p-6 resize-none border-0 focus:outline-none font-mono text-sm leading-relaxed bg-background"
+            className="w-full h-full p-6 resize-none border-0 focus:outline-none font-mono leading-relaxed bg-background"
+            style={{ fontSize: `var(--font-size-editor)` }}
             placeholder="# Start writing in Markdown..."
-            spellCheck="true"
+            spellCheck={spellCheckEnabled}
             data-testid="markdown-editor"
           />
         )}

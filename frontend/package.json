@@ -103,6 +103,7 @@
     "input-otp": "^1.4.2",
     "lib0": "^0.2.114",
     "lucide-react": "^0.462.0",
+    "mammoth": "^1.11.0",
     "markdown-it": "^14.1.0",
     "markmap-lib": "^0.18.12",
     "markmap-view": "^0.18.12",
