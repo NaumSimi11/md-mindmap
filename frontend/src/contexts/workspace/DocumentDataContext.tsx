@@ -627,15 +627,43 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
 
   // Delete document
   const deleteDocument = useCallback(async (documentId: string) => {
-    if (!shouldUseBackendService) {
-      await guestWorkspaceService.deleteDocument(documentId);
-      setDocuments(prev => prev.filter(d => d.id !== documentId));
+    // 🔥 FIX: Route deletion based on document properties, not just auth status
+    // Find the document to check its properties
+    const existingDoc = documents.find(d => d.id === documentId);
+    
+    // Determine if this is a local-only document:
+    // 1. Has 'doc_' prefix (guest document ID format)
+    // 2. OR sync.status is 'local' or 'pending'
+    const isLocalOnlyDoc = documentId.startsWith('doc_') || 
+                          existingDoc?.sync?.status === 'local' || 
+                          existingDoc?.sync?.status === 'pending';
+    
+    // Guest mode OR local-only document → use guest service (hard delete)
+    if (!shouldUseBackendService || isLocalOnlyDoc) {
+      console.log(`🗑️ [DocumentData] Deleting local document: ${documentId}`);
+      try {
+        await guestWorkspaceService.deleteDocument(documentId);
+        setDocuments(prev => prev.filter(d => d.id !== documentId));
+        console.log(`✅ [DocumentData] Local document deleted: ${documentId}`);
+      } catch (error) {
+        console.error(`❌ [DocumentData] Failed to delete local document:`, error);
+        throw error;
+      }
       return;
     }
     
-    await backendWorkspaceService.deleteDocument(documentId);
-    setDocuments(prev => prev.filter(d => d.id !== documentId));
-  }, [shouldUseBackendService]);
+    // Backend document → use backend service (soft delete)
+    console.log(`🗑️ [DocumentData] Deleting backend document: ${documentId}`);
+    try {
+      await backendWorkspaceService.deleteDocument(documentId);
+      setDocuments(prev => prev.filter(d => d.id !== documentId));
+      console.log(`✅ [DocumentData] Backend document deleted: ${documentId}`);
+    } catch (error) {
+      console.error(`❌ [DocumentData] Failed to delete backend document:`, error);
+      // 🔥 FIX: Don't update UI if backend deletion failed
+      throw error;
+    }
+  }, [shouldUseBackendService, documents]);
 
   // Auto-save document
   const autoSaveDocument = useCallback(async (documentId: string, content: string) => {

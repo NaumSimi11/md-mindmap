@@ -164,6 +164,13 @@ export class SnapshotManager {
   private async executeSnapshot() {
     if (this.isDestroyed || !this.isAuthenticated) return;
     
+    // Skip snapshots for local-only documents (doc_ prefix)
+    // These don't exist on the backend yet
+    if (this.documentId.startsWith('doc_')) {
+      console.log(`ℹ️ [Snapshot] Skipping local-only document: ${this.documentId}`);
+      return;
+    }
+    
     try {
       console.log(`📸 [Snapshot] Creating durability snapshot for ${this.documentId}`);
       

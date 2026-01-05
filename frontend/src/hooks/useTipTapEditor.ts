@@ -108,8 +108,7 @@ export const useTipTapEditor = ({
     }, [ydoc]);
     
     useEffect(() => {
-        // 🔥 FIX: Wait for IndexedDB to sync BEFORE checking _init_markdown
-        // Without this, we check before the content is loaded from IndexedDB
+        // 🔥 FIX: Wait for IndexedDB to sync BEFORE checking content
         if (!ydoc || !editor || hasLoadedInitialRef.current || !localSynced) {
             if (!localSynced && ydoc && editor) {
                 console.log('⏳ [STEP 4] Waiting for IndexedDB sync before loading content...');
@@ -117,34 +116,98 @@ export const useTipTapEditor = ({
             return;
         }
         
-        // Check if WorkspaceContext wrote initial content to _init_markdown
-        const tempText = ydoc.getText('_init_markdown');
-        const htmlContent = tempText.toString();
-        
-        if (!htmlContent) {
-            // No initial content to load
-            console.log('ℹ️ [STEP 4] No _init_markdown content found (blank document or already loaded)');
+        // Check if XmlFragment already has content (loaded from IndexedDB or WebSocket)
+        const fragment = ydoc.getXmlFragment('content');
+        if (fragment.length > 0) {
+            console.log('✅ [STEP 4] XmlFragment already has content, skipping initial load');
             hasLoadedInitialRef.current = true;
             return;
         }
         
-        console.log('🔧 [STEP 4] Loading hydrated content from Yjs:', htmlContent.length, 'chars');
+        // Check _init_markdown for content to load
+        const tempText = ydoc.getText('_init_markdown');
+        const htmlContent = tempText.toString();
         
-        // Load into editor (one-time only)
-        isProgrammaticUpdateRef.current = true;
-        editor.commands.setContent(htmlContent);
+        if (!htmlContent) {
+            console.log('ℹ️ [STEP 4] No _init_markdown content found (blank document)');
+            hasLoadedInitialRef.current = true;
+            return;
+        }
         
-        // Clear the temp field (content now in XmlFragment via Collaboration extension)
-        ydoc.transact(() => {
-            tempText.delete(0, tempText.length);
-        });
+        console.log('🔧 [STEP 4] Loading _init_markdown into editor:', htmlContent.length, 'chars');
         
-        requestAnimationFrame(() => {
-            isProgrammaticUpdateRef.current = false;
-        });
+        // 🔥 FIX: Robust retry mechanism with cleanup
+        let attempts = 0;
+        const maxAttempts = 15;
+        const retryDelay = 100; // ms
+        let timeoutId: NodeJS.Timeout | null = null;
+        let cancelled = false;
         
-        console.log('✅ [STEP 4] Initial content loaded and temp field cleared');
-        hasLoadedInitialRef.current = true;
+        const trySetContent = () => {
+            // Check if effect was cleaned up
+            if (cancelled || hasLoadedInitialRef.current) {
+                return;
+            }
+            
+            attempts++;
+            
+            // Check if editor and view are fully ready
+            if (!editor.view || editor.isDestroyed) {
+                if (attempts < maxAttempts) {
+                    timeoutId = setTimeout(trySetContent, retryDelay);
+                    return;
+                }
+                // Don't log error - content might have loaded from another effect
+                return;
+            }
+            
+            try {
+                console.log(`🔧 [STEP 4] Attempt ${attempts}: Setting content...`);
+                isProgrammaticUpdateRef.current = true;
+                
+                editor.commands.setContent(htmlContent, false, { 
+                    preserveWhitespace: 'full' 
+                });
+                
+                // Verify content was set
+                const newFragment = ydoc.getXmlFragment('content');
+                if (newFragment.length > 0) {
+                    console.log('✅ [STEP 4] Content set successfully, XmlFragment has', newFragment.length, 'nodes');
+                    
+                    // Clear _init_markdown (content now in XmlFragment)
+                    ydoc.transact(() => {
+                        if (tempText.length > 0) {
+                            tempText.delete(0, tempText.length);
+                        }
+                    });
+                    
+                    hasLoadedInitialRef.current = true;
+                } else if (attempts < maxAttempts && !cancelled) {
+                    timeoutId = setTimeout(trySetContent, retryDelay);
+                    return;
+                }
+                
+                requestAnimationFrame(() => {
+                    isProgrammaticUpdateRef.current = false;
+                });
+            } catch (error) {
+                console.error(`❌ [STEP 4] Attempt ${attempts} failed:`, error);
+                if (attempts < maxAttempts && !cancelled) {
+                    timeoutId = setTimeout(trySetContent, retryDelay);
+                }
+            }
+        };
+        
+        // Small delay to ensure editor is mounted
+        timeoutId = setTimeout(trySetContent, 50);
+        
+        // Cleanup function - cancel pending retries
+        return () => {
+            cancelled = true;
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
+        };
     }, [ydoc, editor, isProgrammaticUpdateRef, localSynced]);
 
     return {

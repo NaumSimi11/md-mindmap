@@ -256,9 +256,17 @@ export function WorkspaceSidebar({
   const confirmDeleteDocument = async () => {
     if (!documentToDelete) return;
     
+    const deletedDocId = documentToDelete.id;
+    
     try {
-      await contextDeleteDocument(documentToDelete.id);
+      await contextDeleteDocument(deletedDocId);
       console.log('✅ Document deleted successfully');
+      
+      // 🔥 FIX: If we deleted the currently viewed document, navigate away
+      if (currentDocumentId === deletedDocId) {
+        console.log('📍 Navigating away from deleted document');
+        navigate('/workspace');
+      }
     } catch (error) {
       console.error('❌ Failed to delete document:', error);
       alert('Failed to delete document. Please try again.');

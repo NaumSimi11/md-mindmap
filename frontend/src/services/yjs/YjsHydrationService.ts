@@ -58,12 +58,6 @@ export class YjsHydrationService {
       
       const { ydoc, indexeddbProvider } = instance as any;
       
-      // 2. THE HYDRATION GATE (ONLY ALLOWED CHECK)
-      //    IMPORTANT: Wait for IndexedDB to finish loading BEFORE checking content.
-      //    Otherwise we might think the document is empty and overwrite real CRDT state
-      //    with stale markdown from IndexedDB/guest metadata (which is exactly what
-      //    caused the offline persistence invariant to fail).
-      
       // 🛡️ CRITICAL INVARIANT: Never apply snapshots while HocuspocusProvider is active
       // Applying updates during live sync can corrupt the CRDT state
       if (instance.websocketProvider) {
@@ -72,35 +66,51 @@ export class YjsHydrationService {
         return;
       }
 
-      // If there is an IndexedDB provider and it hasn't finished syncing yet,
-      // wait for its "synced" event once before making any decisions about
-      // whether this document is "empty" or not.
+      // 2. THE HYDRATION GATE
+      //    CRITICAL: Always wait for IndexedDB to sync BEFORE checking fragment state.
+      //    Otherwise we might think the doc is empty when it actually has content in IndexedDB.
+      //    This is essential for:
+      //    - Paste persistence (content in IndexedDB, not yjsStateB64)
+      //    - Import (content written to _init_markdown before navigation)
+      //    - Refresh (content already persisted to IndexedDB)
+      
+      // Wait for IndexedDB sync FIRST (with timeout for new docs)
       if (indexeddbProvider && !instance.isInitialized) {
+        console.log('⏳ [YjsHydration] Waiting for IndexedDB sync...');
         await new Promise<void>((resolve) => {
           const handler = () => {
             indexeddbProvider.off('synced', handler);
             resolve();
           };
           indexeddbProvider.on('synced', handler);
+          
+          // Short timeout for new documents (IndexedDB might be empty)
+          setTimeout(() => {
+            indexeddbProvider.off('synced', handler);
+            console.log('⏱️ [YjsHydration] IndexedDB sync timeout (500ms), proceeding');
+            resolve();
+          }, 500);
         });
+        console.log('✅ [YjsHydration] IndexedDB sync complete');
       }
-
-      // After IndexedDB sync, re-check the fragment state
+      
+      // NOW check fragment state (after IndexedDB has loaded)
       const fragment = ydoc.getXmlFragment('content');
       const isFragmentPopulated = fragment.length > 0;
       
-      // Validate invariants in development
-      if (process.env.NODE_ENV === 'development') {
-        if (yjsStateB64 && isFragmentPopulated) {
-          console.error('❌ [INVARIANT] Attempted to hydrate from binary on non-empty doc!');
-        }
-      }
-      
+      // If fragment has content, skip hydration (content already loaded from IndexedDB)
       if (isFragmentPopulated) {
-        console.log('ℹ️ [YjsHydration] Document already has content after IndexedDB sync, skipping hydrate:', normalizedDocId);
+        console.log('ℹ️ [YjsHydration] Document has content from IndexedDB, skipping hydrate:', normalizedDocId);
         return;
       }
-
+      
+      // Also check _init_markdown (might have been written by import)
+      const initMarkdown = ydoc.getText('_init_markdown');
+      if (initMarkdown.length > 0) {
+        console.log('ℹ️ [YjsHydration] Document has _init_markdown, skipping hydrate:', normalizedDocId);
+        return;
+      }
+      
       // 3. APPLY YJS BINARY (AUTHORITATIVE)
       if (yjsStateB64) {
         console.log('🧬 [YjsHydration] Binary truth:', normalizedDocId, `(${yjsStateB64.length} chars b64)`);
@@ -128,21 +138,26 @@ export class YjsHydrationService {
         }
       }
 
-      console.log('🧬 [YjsHydration] [LEGACY] From markdown:', normalizedDocId, `(${markdown.length} chars)`);
+      console.log('🧬 [YjsHydration] Hydrating from markdown:', normalizedDocId, `(${markdown.length} chars)`);
       
       // Step 1: Convert Markdown → HTML
       const html = markdownToHtml(markdown);
+      console.log('📝 [YjsHydration] Converted to HTML:', html.length, 'chars');
+      console.log('📝 [YjsHydration] HTML preview:', html.substring(0, 200) + '...');
       
-      // Step 2: Store in temporary field for TipTap to pick up
+      // Step 2: Store in _init_markdown for TipTap to pick up
       ydoc.transact(() => {
         const tempText = ydoc.getText('_init_markdown');
         if (tempText.length > 0) {
           tempText.delete(0, tempText.length);
         }
         tempText.insert(0, html);
+        console.log('📝 [YjsHydration] Wrote to _init_markdown:', tempText.length, 'chars');
       });
       
-      console.log('✅ [YjsHydration] Markdown applied successfully');
+      // Verify the write
+      const verifyText = ydoc.getText('_init_markdown');
+      console.log('✅ [YjsHydration] Verified _init_markdown has:', verifyText.length, 'chars');
     } catch (error) {
       console.error('❌ [YjsHydration] Failed:', error);
     }

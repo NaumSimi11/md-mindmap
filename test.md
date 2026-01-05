@@ -41,3 +41,35 @@ things tha tneed to be done :
  - we should fix the tauri , and test on tauri from now on 
  - ✅ DONE: updated startup scripts (start-services.sh + start-services.ps1) to ask for Web or Tauri mode interactively
 
+
+
+Close the dialog and create the document by clicking on "Enter" button
+"Rename Folder" feature inside application is not working (Empty folder, no documents)
+"localhost:5173 says" label to be replaced with "Rename Folder" label
+"Rename Folder" label to be replaced with "New Name" label
+"Import md" inside application is not working. Presents empty document
+"Don't have a file? Try a sample" hyperlink is not working
+ 
+rename na folder
+kreiranje nov dokument mora da e na top of lista
+ 
+md sidebar - node sidebar - single node sidebar
+ 
+kreiranje vo offline / online mode da se proveri 
+ 
+tabot so alatki, na hover - explanation ostanuva pod main board. da se digne gore so z index. 
+ 
+da se dodadat most used tools na isitot bar - so moznost za expand ili whatever 
+ 
+editor label to be removed 
+ 
+ // menu
+ 
+prva najava na tauri - ostanat e refresh token odosno korisnikot e logiran 
+levo se loadiraat dokumenti ( local only shown ) 
+ 
+kopce za najava od landing page
+ 
+limit na document length vo sidebar  - +3 more items are not in the preview
+ 
+ 

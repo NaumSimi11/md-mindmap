@@ -357,8 +357,15 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
     }
 
     // Determine user's role for this document
-    // For documents the user created, they are the owner
-    // Otherwise, we'd need to fetch from backend (TODO: add GET /documents/{id}/my-role)
+    // For local-only documents (doc_ prefix), skip backend call
+    const isLocalOnly = documentId.startsWith('doc_');
+    
+    if (isLocalOnly) {
+      // Local documents are always owned by the current user
+      setUserRole('owner');
+      return;
+    }
+    
     const determineRole = async () => {
       try {
         // Try to get document details to check ownership
@@ -367,7 +374,6 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
           setUserRole('owner');
         } else {
           // Default to editor for authenticated users (backend will enforce actual permissions)
-          // This allows the UI to show sharing options, backend validates
           setUserRole('owner'); // Temporary: treat all authenticated users as owners for UI
         }
       } catch {

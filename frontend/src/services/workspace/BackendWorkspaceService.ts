@@ -973,21 +973,48 @@ export class BackendWorkspaceService {
 
   /**
    * Delete document
+   * 
+   * 🔥 FIX: Backend-first deletion with proper ID handling
+   * - Local-only documents (doc_ prefix): Delete from cache only
+   * - Backend documents: Delete from backend FIRST, then cache
    */
   async deleteDocument(id: string): Promise<void> {
     this.assertInitialized('deleteDocument');
     
-    // Delete from cache immediately
-    await cacheDb.documents.delete(id);
+    // Check if this is a local-only document (doc_ prefix)
+    const isLocalOnly = id.startsWith('doc_');
     
-    // Try to sync with backend (if online)
+    if (isLocalOnly) {
+      // Local-only document: Just delete from cache (no backend call needed)
+      console.log(`🗑️ [BackendService] Deleting local-only document: ${id}`);
+      await cacheDb.documents.delete(id);
+      console.log(`✅ [BackendService] Local document deleted from cache: ${id}`);
+      return;
+    }
+    
+    // Backend document: Delete from backend FIRST, then cache
     if (this.isOnline) {
       try {
-        await documentService.deleteDocument(id);
-        console.log('✅ Document deleted from backend');
+        // 🔥 FIX: Backend expects bare UUID, strip any prefix if present
+        const backendId = id.startsWith('doc_') ? id.slice(4) : id;
+        
+        console.log(`🗑️ [BackendService] Deleting from backend: ${backendId}`);
+        await documentService.deleteDocument(backendId);
+        console.log(`✅ [BackendService] Document deleted from backend: ${backendId}`);
+        
+        // Only delete from cache AFTER successful backend deletion
+        await cacheDb.documents.delete(id);
+        console.log(`✅ [BackendService] Document deleted from cache: ${id}`);
       } catch (error) {
-        console.error('❌ Failed to delete document on backend:', error);
+        console.error(`❌ [BackendService] Failed to delete document on backend:`, error);
+        // 🔥 FIX: Don't delete from cache if backend fails - throw error to caller
+        throw error;
       }
+    } else {
+      // Offline: Queue for later sync (for now, just delete from cache)
+      // TODO: Implement offline deletion queue
+      console.warn(`⚠️ [BackendService] Offline - document will be deleted from cache only: ${id}`);
+      await cacheDb.documents.delete(id);
     }
   }
 

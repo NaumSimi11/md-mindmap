@@ -29,6 +29,8 @@ import {
   getFileTypeDescription,
   SUPPORTED_IMPORT_EXTENSIONS 
 } from '@/utils/documentConverter';
+import { yjsHydrationService } from '@/services/yjs/YjsHydrationService';
+import { useNavigate } from 'react-router-dom';
 
 interface ImportDocumentButtonProps {
   variant?: 'default' | 'outline' | 'ghost';
@@ -50,6 +52,7 @@ export function ImportDocumentButton({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { createDocument, updateDocument, documents, refreshDocuments } = useWorkspace();
   const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
 
   // Show info dialog on first import (check localStorage)
   const hasSeenInfo = localStorage.getItem('mdreader:import-info-seen') === 'true';
@@ -61,6 +64,7 @@ export function ImportDocumentButton({
     let successCount = 0;
     let errorCount = 0;
     let convertedCount = 0;
+    let firstImportedDocId: string | null = null;
 
     try {
       // Process files in parallel
@@ -194,6 +198,28 @@ export function ImportDocumentButton({
           console.log(`✨ [Import] Creating new document: ${title} (content: ${content.length} chars)`);
           const newDoc = await createDocument('markdown', title, content);
           console.log(`✅ [Import] Document created: ${newDoc.id}, content length in DB: ${newDoc.content?.length || 0}`);
+          
+          // 🔥 CRITICAL: Hydrate Yjs document IMMEDIATELY after creation
+          // This ensures content is in Yjs BEFORE editor loads
+          try {
+            console.log(`🔄 [Import] Hydrating document: ${newDoc.id}`);
+            await yjsHydrationService.hydrateDocument(
+              newDoc.id,
+              content,
+              undefined, // No binary state for new imports
+              isAuthenticated
+            );
+            console.log(`✅ [Import] Document hydrated: ${newDoc.id}`);
+          } catch (hydrationError) {
+            console.error(`⚠️ [Import] Hydration failed (non-critical):`, hydrationError);
+            // Non-critical - editor will retry hydration when loading
+          }
+          
+          // Track first imported doc for auto-navigation
+          if (!firstImportedDocId) {
+            firstImportedDocId = newDoc.id;
+          }
+          
           successCount++;
         } catch (error) {
           console.error(`Failed to upload ${file.name}:`, error);
@@ -204,8 +230,14 @@ export function ImportDocumentButton({
       await Promise.all(uploadPromises);
 
       // Small delay then refresh
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => setTimeout(resolve, 100));
       await refreshDocuments();
+
+      // 🔥 AUTO-NAVIGATE: Open first imported document in editor
+      if (firstImportedDocId && successCount > 0) {
+        console.log(`🚀 [Import] Auto-navigating to: ${firstImportedDocId}`);
+        navigate(`/workspace/doc/${firstImportedDocId}/edit`);
+      }
 
       // Show results
       if (successCount > 0) {
