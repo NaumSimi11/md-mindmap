@@ -28,11 +28,9 @@ interface AppDataProviderProps {
  */
 function AutoSyncInitializer({ children }: { children: ReactNode }) {
   useEffect(() => {
-    console.log('🔄 [AutoSync] Initializing auto-sync system...');
     autoSyncManager.init();
     
     return () => {
-      console.log('🔄 [AutoSync] Cleaning up auto-sync system...');
       autoSyncManager.destroy();
     };
   }, []);

@@ -101,7 +101,6 @@ export const useTipTapEditor = ({
     // 🔥 BUG FIX: Reset hasLoadedInitialRef when ydoc changes (document switch)
     useEffect(() => {
         if (ydoc !== lastYdocRef.current) {
-            console.log('🔄 [STEP 4] ydoc changed, resetting initial content flag');
             hasLoadedInitialRef.current = false;
             lastYdocRef.current = ydoc;
         }
@@ -119,7 +118,6 @@ export const useTipTapEditor = ({
         // Check if XmlFragment already has content (loaded from IndexedDB or WebSocket)
         const fragment = ydoc.getXmlFragment('content');
         if (fragment.length > 0) {
-            console.log('✅ [STEP 4] XmlFragment already has content, skipping initial load');
             hasLoadedInitialRef.current = true;
             return;
         }
@@ -129,12 +127,10 @@ export const useTipTapEditor = ({
         const htmlContent = tempText.toString();
         
         if (!htmlContent) {
-            console.log('ℹ️ [STEP 4] No _init_markdown content found (blank document)');
             hasLoadedInitialRef.current = true;
             return;
         }
         
-        console.log('🔧 [STEP 4] Loading _init_markdown into editor:', htmlContent.length, 'chars');
         
         // 🔥 FIX: Robust retry mechanism with cleanup
         let attempts = 0;
@@ -162,17 +158,13 @@ export const useTipTapEditor = ({
             }
             
             try {
-                console.log(`🔧 [STEP 4] Attempt ${attempts}: Setting content...`);
                 isProgrammaticUpdateRef.current = true;
                 
-                editor.commands.setContent(htmlContent, false, { 
-                    preserveWhitespace: 'full' 
-                });
+                editor.commands.setContent(htmlContent, { emitUpdate: false });
                 
                 // Verify content was set
                 const newFragment = ydoc.getXmlFragment('content');
                 if (newFragment.length > 0) {
-                    console.log('✅ [STEP 4] Content set successfully, XmlFragment has', newFragment.length, 'nodes');
                     
                     // Clear _init_markdown (content now in XmlFragment)
                     ydoc.transact(() => {

@@ -44,13 +44,10 @@ export function getFileExtension(filename: string): string {
  */
 export async function convertDocxToMarkdown(file: File): Promise<ConversionResult> {
   try {
-    console.log(`📝 [Converter] Starting DOCX conversion: ${file.name}`);
     const arrayBuffer = await file.arrayBuffer();
-    console.log(`📝 [Converter] ArrayBuffer size: ${arrayBuffer.byteLength} bytes`);
     
     // Convert DOCX to HTML using mammoth
     const result = await mammoth.convertToHtml({ arrayBuffer });
-    console.log(`📝 [Converter] Mammoth HTML output: ${result.value?.length || 0} chars`);
     
     if (!result.value || result.value.trim().length === 0) {
       console.warn(`⚠️ [Converter] DOCX appears empty: ${file.name}`);
@@ -63,7 +60,6 @@ export async function convertDocxToMarkdown(file: File): Promise<ConversionResul
 
     // Convert HTML to Markdown using turndown
     const markdown = turndownService.turndown(result.value);
-    console.log(`📝 [Converter] Turndown markdown output: ${markdown.length} chars`);
     
     // Collect warnings
     const warnings = result.messages
@@ -210,7 +206,6 @@ export function convertHtmlToMarkdown(html: string): ConversionResult {
  */
 export async function convertFileToMarkdown(file: File): Promise<ConversionResult> {
   const extension = getFileExtension(file.name);
-  console.log(`📄 [Converter] convertFileToMarkdown called for: ${file.name} (ext: ${extension})`);
   
   switch (extension) {
     case '.docx':
@@ -223,14 +218,12 @@ export async function convertFileToMarkdown(file: File): Promise<ConversionResul
     case '.html':
     case '.htm':
       const htmlContent = await file.text();
-      console.log(`📄 [Converter] HTML file read: ${htmlContent.length} chars`);
       return convertHtmlToMarkdown(htmlContent);
     
     case '.md':
     case '.txt':
       // Plain text files - read directly
       const textContent = await file.text();
-      console.log(`📄 [Converter] Text file read: ${textContent.length} chars`);
       return {
         success: true,
         content: textContent,

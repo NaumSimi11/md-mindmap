@@ -287,12 +287,7 @@ export const useUserPreferencesStore = create<UserPreferencesState>()(
             });
           }
           
-          console.log('✅ [Preferences] Initialized:', {
-            theme: state.theme,
-            resolvedTheme,
-            fontSize: state.fontSize,
-            toolbarStyle: state.toolbarStyle,
-          });
+        
         },
       }),
       {

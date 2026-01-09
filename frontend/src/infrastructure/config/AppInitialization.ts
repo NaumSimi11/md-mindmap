@@ -20,15 +20,12 @@ import { isDesktop } from '@/utils/platform';
  * Call this once at app startup (in main.tsx or App.tsx)
  */
 export async function initializeApp(): Promise<void> {
-    console.log('🚀 Initializing application...');
     
     // 1. Initialize Tauri workspace (Desktop only)
     if (isDesktop()) {
-        console.log('🖥️ Desktop mode detected');
         try {
             const workspacePath = await workspaceInitializer.initialize();
             if (workspacePath) {
-                console.log('📁 Workspace initialized:', workspacePath);
                 // Store workspace path globally for easy access
                 (window as any).WORKSPACE_PATH = workspacePath;
             }
@@ -49,9 +46,4 @@ export async function initializeApp(): Promise<void> {
     // 4. Initialize guest workspace (will create default structure if needed)
     await guestWorkspaceService.init();
 
-    console.log('✅ Application initialized');
-    console.log('   - Platform:', isDesktop() ? 'Desktop (Tauri)' : 'Web (Browser)');
-    console.log('   - Storage: IndexedDB (migrated from localStorage)');
-    console.log('   - Guest Workspace: Ready');
-    console.log('   - Backend Services: Ready');
 }

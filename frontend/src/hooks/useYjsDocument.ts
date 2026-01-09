@@ -20,13 +20,12 @@
  *    ↓
  * YjsDocumentManager (global singleton)
  *    ↓
- * Y.Doc + IndexeddbPersistence + WebsocketProvider
+ * Y.Doc + IndexeddbPersistence + HocuspocusProvider
  * ```
  */
 
 import * as Y from 'yjs';
-import { IndexeddbPersistence } from 'y-indexeddb';
-import { WebsocketProvider } from 'y-websocket';
+import { HocuspocusProvider } from '@hocuspocus/provider';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from './useAuth';
 import { useSyncMode } from './useSyncMode';
@@ -77,7 +76,7 @@ export interface UseYjsDocumentReturn {
   ydoc: Y.Doc | null;
   status: SyncStatus;
   online: boolean;
-  websocketProvider: WebsocketProvider | null;
+  websocketProvider: HocuspocusProvider | null;
   syncStatus: {
     local: boolean;
     cloud: boolean;
@@ -117,7 +116,7 @@ export function useYjsDocument(documentId: string): UseYjsDocumentReturn {
   const [localSynced, setLocalSynced] = useState(false);
   const [cloudSynced, setCloudSynced] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
-  const [websocketProvider, setWebsocketProvider] = useState<WebsocketProvider | null>(null);
+  const [websocketProvider, setWebsocketProvider] = useState<HocuspocusProvider | null>(null);
   const [error, setError] = useState<Error | null>(null);
   
   // Refs for cleanup and retry logic
@@ -140,7 +139,6 @@ export function useYjsDocument(documentId: string): UseYjsDocumentReturn {
    * Manual retry function
    */
   const retry = useCallback(() => {
-    console.log('🔄 Manual retry initiated');
     retryCountRef.current = 0;
     setError(null);
     
@@ -172,12 +170,9 @@ export function useYjsDocument(documentId: string): UseYjsDocumentReturn {
       ? documentId.slice(4)  // Remove doc_ prefix
       : documentId;
     
-    console.log(`🚀 Requesting Yjs document from manager: ${documentId}`);
     if (normalizedDocId !== documentId) {
       console.log(`   🔄 Normalized: ${documentId} → ${normalizedDocId}`);
     }
-    console.log(`   Mode: ${isAuthenticated ? 'Authenticated' : 'Guest'}`);
-    console.log(`   Online: ${online}`);
     
     try {
       // Get document instance from global manager (using normalized ID)
@@ -207,7 +202,6 @@ export function useYjsDocument(documentId: string): UseYjsDocumentReturn {
         } else {
           setStatus('local-only');
         }
-        console.log(`✅ Yjs document ready (already synced): ${documentId}`);
       } else {
         // Wait for IndexedDB to sync
         setStatus('initializing');
@@ -221,7 +215,6 @@ export function useYjsDocument(documentId: string): UseYjsDocumentReturn {
             } else {
               setStatus('local-only');
             }
-            console.log(`✅ Yjs document synced from IndexedDB: ${documentId}`);
           }
         };
         
@@ -233,7 +226,6 @@ export function useYjsDocument(documentId: string): UseYjsDocumentReturn {
         };
       }
 
-      console.log(`✅ Yjs document instance acquired: ${documentId}`);
 
     } catch (err) {
       console.error(`❌ Failed to get Yjs document for ${documentId}:`, err);
@@ -257,7 +249,6 @@ export function useYjsDocument(documentId: string): UseYjsDocumentReturn {
       const normalizedDocId = documentId.startsWith('doc_') 
         ? documentId.slice(4) 
         : documentId;
-      console.log(`🧹 Releasing Yjs document: ${normalizedDocId}`);
       mountedRef.current = false;
       
       // Clear retry timeout
@@ -284,13 +275,11 @@ export function useYjsDocument(documentId: string): UseYjsDocumentReturn {
    */
   useEffect(() => {
     const handleOnline = () => {
-      console.log('🌐 Network online');
       setOnline(true);
       retryCountRef.current = 0; // Reset retry counter
     };
     
     const handleOffline = () => {
-      console.log('📴 Network offline');
       setOnline(false);
       setStatus('offline');
       setCloudSynced(false);

@@ -31,7 +31,6 @@ const loadPrismLanguage = async (lang: string) => {
     try {
         // Dynamic import for other languages could go here if we wanted to code-split
         // For now we just rely on the static imports above
-        console.log(`Language ${lang} not loaded statically`);
     } catch (e) {
         console.warn(`Failed to load language: ${lang}`, e);
     }

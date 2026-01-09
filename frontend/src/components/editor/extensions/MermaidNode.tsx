@@ -42,11 +42,7 @@ const MermaidComponent: React.FC<MermaidComponentProps> = ({
   deleteNode,
   selected
 }) => {
-  console.log('🎨 MermaidComponent MOUNTED/UPDATED');
-  console.log('  Node attrs:', node.attrs);
-  console.log('  Code length:', node.attrs.code?.length || 0);
-  console.log('  Code:', node.attrs.code);
-  console.log('  Selected:', selected);
+
 
   const [isEditing, setIsEditing] = useState(false);
   const [editCode, setEditCode] = useState(node.attrs.code);
@@ -61,30 +57,23 @@ const MermaidComponent: React.FC<MermaidComponentProps> = ({
 
   // Render diagram whenever code changes
   useEffect(() => {
-    console.log('🔄 MermaidComponent useEffect TRIGGERED');
-    console.log('  Code:', node.attrs.code);
 
     const renderDiagram = async () => {
-      console.log('  🎨 Starting mermaid.render()...');
       try {
         // Generate valid CSS ID (no dots, use integers only)
         const id = `mermaid-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
-        console.log('  🆔 Generated ID:', id);
 
         const { svg } = await mermaid.render(id, node.attrs.code);
-        console.log('  ✅ Mermaid rendered successfully! SVG length:', svg.length);
 
         setSvgContent(svg);
         setError(null);
       } catch (err: any) {
-        console.log('  ❌ Mermaid render FAILED:', err);
         setError(err?.message || 'Failed to render diagram');
         setSvgContent('');
       }
     };
 
     if (node.attrs.code) {
-      console.log('  ✅ Code exists, calling renderDiagram()');
       renderDiagram();
     } else {
       console.log('  ⚠️  NO CODE! Skipping render');
@@ -157,10 +146,7 @@ const MermaidComponent: React.FC<MermaidComponentProps> = ({
     updateAttributes({ width: '100%', scale: 1 });
   };
 
-  console.log('🖼️  MermaidComponent RENDER');
-  console.log('  svgContent length:', svgContent.length);
-  console.log('  error:', error);
-  console.log('  isEditing:', isEditing);
+
 
   // Apply scale to rendered SVG element
   useEffect(() => {

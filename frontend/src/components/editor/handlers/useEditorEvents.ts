@@ -103,7 +103,6 @@ export const useEditorEvents = ({
                 if (!mdLike) return false;
                 
                 event.preventDefault();
-                console.log(`📋 PASTE: ${text.length} chars`);
 
                 if (!editor) {
                     console.error('❌ No editor');
@@ -112,7 +111,6 @@ export const useEditorEvents = ({
 
                 // Convert to HTML
                 const html = markdownToHtml(text);
-                console.log(`✅ HTML: ${html.length} chars`);
                 
                 // 🔥 FIX: Pass { parseOptions: { preserveWhitespace: false } } to parse HTML
                 editor.chain().focus().insertContent(html, {
@@ -120,11 +118,9 @@ export const useEditorEvents = ({
                         preserveWhitespace: false,
                     }
                 }).run();
-                console.log('✅ Inserted with HTML parsing');
                 
                 return true;
             } catch (e) {
-                console.error('❌ Paste error:', e);
                 return false;
             }
         }

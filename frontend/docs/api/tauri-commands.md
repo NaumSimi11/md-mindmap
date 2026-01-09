@@ -24,7 +24,6 @@ import { invoke } from '@tauri-apps/api/tauri'
 
 try {
   const folderPath = await invoke('select_workspace_folder')
-  console.log('Selected workspace:', folderPath)
   // Example: "/Users/john/Documents/my-notes"
 } catch (error) {
   console.error('No folder selected:', error)
@@ -69,13 +68,6 @@ try {
     workspacePath: '/Users/john/Documents/notes'
   })
   
-  files.forEach(file => {
-    if (file.is_directory) {
-      console.log('📁 Directory:', file.name)
-    } else {
-      console.log('📄 File:', file.name, `(${file.size} bytes)`)
-    }
-  })
 } catch (error) {
   console.error('Failed to list files:', error)
 }
@@ -114,7 +106,6 @@ try {
     filePath: document.path,
     content: document.content
   })
-  console.log('✅ Document saved successfully')
   // File saved as: /Users/john/Documents/notes/project-plan.md
 } catch (error) {
   console.error('❌ Save failed:', error)
@@ -153,7 +144,6 @@ try {
     filePath: '/Users/john/Documents/notes/project-plan.md'
   })
   
-  console.log('Loaded content:', content.substring(0, 100) + '...')
 } catch (error) {
   console.error('❌ Load failed:', error)
 }
@@ -187,7 +177,6 @@ try {
     fileName: 'new-idea'
   })
   
-  console.log('✅ Created file:', filePath)
   // Returns: "/Users/john/Documents/notes/new-idea.md"
   // Initial content: "# new-idea\n\nStart writing..."
 } catch (error) {
@@ -221,7 +210,6 @@ try {
   await invoke('delete_file', {
     filePath: '/Users/john/Documents/notes/old-file.md'
   })
-  console.log('✅ File deleted successfully')
 } catch (error) {
   console.error('❌ Delete failed:', error)
 }
@@ -262,7 +250,6 @@ const config = {
 
 try {
   await invoke('save_workspace_config', { config })
-  console.log('✅ Workspace config saved')
 } catch (error) {
   console.error('❌ Config save failed:', error)
 }
@@ -296,8 +283,6 @@ try {
   const config = await invoke('load_workspace_config')
   
   if (config) {
-    console.log('Workspace:', config.workspace_path)
-    console.log('Recent files:', config.recent_files.length)
     
     if (config.last_opened) {
       // Auto-open last file

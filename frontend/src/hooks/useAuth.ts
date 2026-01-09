@@ -53,32 +53,23 @@ export function useAuth(): UseAuthReturn {
 
   const login = useCallback(async (credentials: LoginRequest) => {
     try {
-      console.log('🔐 useAuth.login() called');
       setIsLoading(true);
       setError(null);
       
-      console.log('📞 Calling authService.login()...');
       const response = await authService.login(credentials);
       
-      console.log('✅ authService.login() completed, response:', {
-        hasUser: !!response.user,
-        hasToken: !!response.access_token
-      });
+    
       
       if (!response.user) {
         console.error('❌ No user in response!', response);
         throw new Error('Login response missing user data');
       }
       
-      console.log('📝 Setting user state...');
       setUser(response.user);
-      console.log('✅ User state set');
       
       // Dispatch login event for WorkspaceContext to react
       window.dispatchEvent(new CustomEvent('auth:login', { detail: { user: response.user } }));
-      console.log('✅ Login successful, user set:', response.user.username || response.user.email);
       
-      console.log('✅ useAuth.login() completed successfully');
     } catch (err: any) {
       console.error('❌ useAuth.login() failed:', err);
       // Extract error message from ApiError or generic Error
@@ -88,7 +79,6 @@ export function useAuth(): UseAuthReturn {
       throw err;
     } finally {
       setIsLoading(false);
-      console.log('✅ useAuth.login() finally block - isLoading set to false');
     }
   }, []);
 

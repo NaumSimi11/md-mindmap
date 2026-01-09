@@ -90,11 +90,9 @@ export class WorkspaceService {
     const existing = this.loadFromStorage();
     if (existing) {
       this.currentWorkspace = existing;
-      console.log('✅ Workspace loaded:', existing.name);
     } else {
       this.currentWorkspace = this.createDefaultWorkspace();
       this.saveToStorage();
-      console.log('✅ Default workspace created');
     }
   }
 
@@ -213,7 +211,6 @@ export class WorkspaceService {
     this.currentWorkspace.folders.push(folder);
     this.saveToStorage();
 
-    console.log('✅ Folder created:', name);
     return folder;
   }
 
@@ -237,7 +234,6 @@ export class WorkspaceService {
     );
 
     this.saveToStorage();
-    console.log('✅ Folder deleted:', folderId);
   }
 
   renameFolder(folderId: string, newName: string): void {
@@ -247,7 +243,6 @@ export class WorkspaceService {
     if (folder) {
       folder.name = newName;
       this.saveToStorage();
-      console.log('✅ Folder renamed:', newName);
     }
   }
 
@@ -285,7 +280,6 @@ export class WorkspaceService {
     if (folder) {
       folder.parentId = newParentId;
       this.saveToStorage();
-      console.log('✅ Folder moved');
     }
   }
 
@@ -355,7 +349,6 @@ export class WorkspaceService {
     this.currentWorkspace.documents.push(document);
     this.saveToStorage();
 
-    console.log('✅ Document created:', title);
     return document;
   }
 
@@ -426,7 +419,6 @@ export class WorkspaceService {
       d => d.id !== documentId
     );
     this.saveToStorage();
-    console.log('✅ Document deleted');
   }
 
   moveDocument(documentId: string, folderId: string | null): void {
@@ -436,7 +428,6 @@ export class WorkspaceService {
     if (doc) {
       doc.folderId = folderId;
       this.saveToStorage();
-      console.log('✅ Document moved');
     }
   }
 
@@ -447,7 +438,6 @@ export class WorkspaceService {
     if (doc) {
       doc.starred = !doc.starred;
       this.saveToStorage();
-      console.log('✅ Document star toggled:', doc.starred);
     }
   }
 
@@ -595,7 +585,6 @@ export class WorkspaceService {
     this.currentWorkspace.documents.push(document);
     this.saveToStorage();
 
-    console.log('✅ Document imported:', document.title);
     return document;
   }
 
@@ -618,7 +607,6 @@ export class WorkspaceService {
 
     const path = await storageService.selectWorkspaceFolder();
     if (path) {
-      console.log('✅ Desktop workspace folder selected:', path);
       // Automatically sync after selecting
       await this.syncDesktopFolder();
     }
@@ -640,7 +628,6 @@ export class WorkspaceService {
       return 0;
     }
 
-    console.log('🔄 Syncing desktop folder...');
 
     try {
       // Get all files from workspace folder
@@ -670,12 +657,10 @@ export class WorkspaceService {
             // Import the file
             await this.importExternalFile(title, content, file.path);
             importedCount++;
-            console.log(`✅ Imported: ${title}`);
           }
         }
       }
 
-      console.log(`🎉 Sync complete! Imported ${importedCount} new files`);
       return importedCount;
     } catch (error) {
       console.error('❌ Failed to sync desktop folder:', error);
@@ -736,7 +721,6 @@ export class WorkspaceService {
     localStorage.removeItem(this.storageKey);
     this.currentWorkspace = this.createDefaultWorkspace();
     this.saveToStorage();
-    console.log('✅ Workspace cleared and reset');
   }
 }
 

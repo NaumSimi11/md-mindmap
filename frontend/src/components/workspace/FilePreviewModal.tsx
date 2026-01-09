@@ -149,7 +149,6 @@ export function FilePreviewModal({
       const end = start + selection.toString().length;
       
       setSelectedTextRange({ start, end });
-      console.log('✂️ Text selected:', { start, end, length: end - start });
     } else {
       setSelectedTextRange(null);
     }

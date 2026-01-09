@@ -195,12 +195,9 @@ function MindmapStudio2Content() {
   useEffect(() => {
     const generatedData = sessionService.getMindmapData();
     if (generatedData) {
-      console.log('🎉 Auto-importing generated mindmap:', generatedData);
-
       // IMPORTANT: Store original content for smart merge when going back
       if (generatedData.metadata?.originalContent) {
         setOriginalContent(generatedData.metadata.originalContent);
-        console.log('💾 Stored original content for merge');
       }
 
       // Convert mindmap data to React Flow nodes and edges
@@ -240,7 +237,6 @@ function MindmapStudio2Content() {
       // Clear the stored data after import
       sessionService.clearMindmapData();
 
-      console.log('✅ Mindmap auto-imported successfully!');
     }
   }, []); // Run only once on mount
 
@@ -256,7 +252,6 @@ function MindmapStudio2Content() {
           
           const doc = await backendGetDocument(documentId);
           if (doc?.metadata?.mindmapData) {
-            console.log('📂 Loading saved mindmap from document metadata');
             const { nodes: savedNodes, edges: savedEdges, title: savedTitle } = doc.metadata.mindmapData;
             
             if (savedNodes && savedNodes.length > 0) {
@@ -269,7 +264,6 @@ function MindmapStudio2Content() {
                 setOriginalContent(doc.content);
               }
               
-              console.log(`✅ Loaded ${savedNodes.length} nodes from saved mindmap`);
             }
           } else {
             console.log('📝 No saved mindmap found, starting fresh');
@@ -291,7 +285,6 @@ function MindmapStudio2Content() {
     // Debounce: save 2 seconds after last change
     const timeoutId = setTimeout(async () => {
       try {
-        console.log('💾 Auto-saving mindmap...');
         
         const mindmapData = {
           nodes,
@@ -311,7 +304,6 @@ function MindmapStudio2Content() {
           });
         }
         
-        console.log(`✅ Mindmap auto-saved (${nodes.length} nodes, ${edges.length} edges)`);
       } catch (error) {
         console.error('❌ Failed to auto-save mindmap:', error);
       }
@@ -453,7 +445,6 @@ function MindmapStudio2Content() {
 
   // Handle AI Enhance button click (show proactive suggestion)
   const handleAIEnhanceClick = useCallback((nodeId: string, executeCommand: (cmd: string) => void) => {
-    console.log('⭐ handleAIEnhanceClick called for:', nodeId);
 
     const node = nodes.find(n => n.id === nodeId);
     if (!node) {
@@ -461,23 +452,19 @@ function MindmapStudio2Content() {
       return;
     }
 
-    console.log('✨ AI Enhance clicked for:', node.data.label);
 
     // Detect suggestions for this node
-    console.log('🔍 Detecting suggestions...');
     const suggestion = suggestionDetector.detectForNode(
       node,
       nodes,
       edges,
       (command) => {
         // Execute the suggestion command through chat
-        console.log('🎬 Suggestion accepted, executing command:', command);
         executeCommand(command);
         setActiveSuggestion(null);
       }
     );
 
-    console.log('💡 Suggestion detected:', suggestion);
 
     if (suggestion) {
       // Position suggestion above the node
@@ -499,7 +486,6 @@ function MindmapStudio2Content() {
       }
 
       setActiveSuggestion(suggestion);
-      console.log('💡 Showing suggestion:', suggestion.message);
     } else {
       // No suggestions available - show message
       setChatMessages(prev => [...prev, {
@@ -514,7 +500,6 @@ function MindmapStudio2Content() {
   const handleDismissSuggestion = useCallback((suggestionId: string) => {
     suggestionDetector.dismissSuggestion(suggestionId);
     setActiveSuggestion(null);
-    console.log('🚫 Suggestion dismissed:', suggestionId);
   }, []);
 
   // Add new nodes in different SHAPES so users can visually build the map
@@ -682,12 +667,10 @@ function MindmapStudio2Content() {
       const existingChildren = currentEdges.filter(e => e.source === parentId).length;
       const childNumber = existingChildren + 1;
 
-      console.log(`🔍 CURRENT EDGES: ${currentEdges.length}, CHILDREN OF ${parentId}: ${existingChildren}`);
 
       // Spread children in a radial/grid pattern (8 directions)
       const angle = (existingChildren * 45); // 0°, 45°, 90°, 135°, 180°, 225°, 270°, 315°
 
-      console.log(`🔍 ANGLE: child #${childNumber} → ${existingChildren} × 45° = ${angle}°`);
 
       // For top-down tree: always use bottom → top
       const sourceHandle = 'bottom'; // Parent connects from bottom
@@ -715,7 +698,6 @@ function MindmapStudio2Content() {
         },
       };
 
-      console.log(`🔗 EDGE: ${sourceHandle}→${targetHandle}, target=${childId}`);
 
       // Also update nodes
       setNodes((currentNodes) => {
@@ -738,7 +720,6 @@ function MindmapStudio2Content() {
           },
         };
 
-        console.log(`🎯 NODE: id=${childId}, position=(${Math.round(newNode.position.x)}, ${Math.round(newNode.position.y)})`);
 
         return [...currentNodes, newNode];
       });
@@ -768,18 +749,15 @@ function MindmapStudio2Content() {
 
   // AI Enhancement
   const handleAIEnhance = useCallback(async (nodeId: string) => {
-    console.log('🎯 handleAIEnhance called for:', nodeId);
 
     // Trigger proactive suggestion instead of direct enhancement
     // Pass handleChatCommand as a parameter to avoid circular dependency
     handleAIEnhanceClick(nodeId, (command) => {
-      console.log('📤 Executing command from suggestion:', command);
       // Will be defined later, so we need to access it dynamically
       // Use a small delay to ensure handleChatCommand is available
       setTimeout(() => {
         const chatCommand = (window as any)._handleChatCommand;
         if (chatCommand) {
-          console.log('✅ Calling handleChatCommand via window');
           chatCommand(command);
         } else {
           console.error('❌ handleChatCommand not found on window!');
@@ -822,7 +800,6 @@ function MindmapStudio2Content() {
         )
       );
 
-      console.log(`✨ AI enhanced node: ${nodeId}`);
     } catch (error) {
       console.error('❌ AI enhancement failed:', error);
       alert('AI enhancement failed. Please try again.');
@@ -878,12 +855,7 @@ function MindmapStudio2Content() {
   // Track selected nodes for grouping
   const onSelectionChange = useCallback((params: { nodes: Node[], edges: Edge[] }) => {
     const ids = params.nodes.map(n => n.id);
-    console.log('🔵 SELECTION CHANGED:', {
-      selectedCount: ids.length,
-      selectedIds: ids,
-      selectedTypes: params.nodes.map(n => n.type),
-      selectedEdges: params.edges.length,
-    });
+
     setSelectedNodeIds(ids);
 
     // Track selected edge for label editing
@@ -946,10 +918,7 @@ function MindmapStudio2Content() {
 
   // Create milestone from selected nodes (supports nested milestones!)
   const createMilestone = useCallback(() => {
-    console.log('🟢 CREATE MILESTONE CALLED:', {
-      selectedNodeIds,
-      selectedCount: selectedNodeIds.length,
-    });
+  
 
     if (selectedNodeIds.length < 2) {
       alert('Please select at least 2 nodes/milestones to create a milestone');
@@ -970,21 +939,14 @@ function MindmapStudio2Content() {
         processedMilestones.add(node.id);
         const childNodes = getAllChildNodes(node.id, nodes);
         allNodesToGroup.push(...childNodes);
-        console.log(`🟢 Milestone ${node.id} has ${childNodes.length} children`);
       }
     });
 
     // Remove duplicates
     const uniqueNodesToGroup = Array.from(new Map(allNodesToGroup.map(n => [n.id, n])).values());
 
-    console.log('🟢 SELECTED NODES:', selectedNodes.map(n => ({
-      id: n.id,
-      type: n.type,
-      position: n.position,
-      hasParent: !!(n as any).parentId,
-    })));
+   
 
-    console.log('🟢 ALL NODES TO GROUP (including children):', uniqueNodesToGroup.length);
 
     // Calculate bounding box using absolute positions
     const absolutePositions = uniqueNodesToGroup.map(node => {
@@ -1003,7 +965,6 @@ function MindmapStudio2Content() {
     const maxX = Math.max(...absolutePositions.map(p => p.absX + p.width)) + 30;
     const maxY = Math.max(...absolutePositions.map(p => p.absY + p.height)) + 30;
 
-    console.log('🟢 BOUNDING BOX:', { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY });
 
     const milestoneId = `milestone-${Date.now()}`;
 
@@ -1032,14 +993,7 @@ function MindmapStudio2Content() {
       },
     };
 
-    console.log('🟢 MILESTONE NODE CREATED:', {
-      id: milestoneId,
-      position: milestoneNode.position,
-      size: milestoneNode.style,
-      groupedNodeIds: uniqueNodesToGroup.map(n => n.id),
-      selectedCount: selectedNodeIds.length,
-      totalGroupedCount: uniqueNodesToGroup.length,
-    });
+   
 
     // Set selected nodes AND milestones as children of new milestone
     // Also update z-index for nested milestones
@@ -1064,13 +1018,7 @@ function MindmapStudio2Content() {
           updatedZIndex = -(childDepth + 2); // Child milestone should be above parent
         }
 
-        console.log(`🟢 CONVERTING NODE ${node.id} (${node.type}):`, {
-          oldAbsolutePosition: absPos,
-          newRelativePosition: newPosition,
-          milestonePosition: { x: minX, y: minY },
-          oldZIndex: node.zIndex,
-          newZIndex: updatedZIndex,
-        });
+    
 
         return {
           ...node,
@@ -1085,27 +1033,13 @@ function MindmapStudio2Content() {
       return node;
     });
 
-    console.log('🟢 FINAL NODES:', {
-      totalNodes: updatedNodes.length + 1,
-      milestoneChildren: updatedNodes.filter(n => (n as any).parentId === milestoneId).length,
-      milestone: milestoneNode,
-    });
+  
 
     // CRITICAL: Add milestone FIRST, then children!
     // React Flow needs parent to exist before rendering children
     const finalNodesArray = [milestoneNode, ...updatedNodes];
 
-    console.log('🟢 FINAL NODES ARRAY ORDER:');
-    finalNodesArray.forEach((n, idx) => {
-      console.log(`  [${idx}] ${n.type} "${n.data.label || n.id}"`, {
-        id: n.id,
-        position: n.position,
-        parentId: (n as any).parentId || 'none',
-        extent: n.extent || 'none',
-        size: n.style || 'none',
-        zIndex: n.zIndex || 0,
-      });
-    });
+
 
     // CRITICAL: Set nodes in React Flow
     // The milestone must be rendered BEFORE children can reference it as parent
@@ -1122,7 +1056,6 @@ function MindmapStudio2Content() {
       }
     });
 
-    console.log(`✅ Milestone created! Nodes: ${finalNodesArray.length}, Children: ${updatedNodes.filter(n => (n as any).parentId === milestoneId).length}`);
   }, [selectedNodeIds, nodes, setNodes, getAllChildNodes, getAbsolutePosition, getMilestoneDepth]);
 
   // Initialize position tracking for all milestones when nodes change
@@ -1164,7 +1097,6 @@ function MindmapStudio2Content() {
       });
 
     setNodes(updatedNodes);
-    console.log(`✅ Ungrouped milestone: ${milestoneId}`);
   }, [nodes, setNodes]);
 
   // Delete milestone
@@ -1181,7 +1113,6 @@ function MindmapStudio2Content() {
 
     setNodes(updatedNodes);
     setEdges(updatedEdges);
-    console.log(`🗑️ Deleted milestone: ${milestoneId}`);
   }, [nodes, edges, setNodes, setEdges]);
 
   // Removed onNodeDoubleClick - using inline editing only for mindmap nodes
@@ -1191,11 +1122,9 @@ function MindmapStudio2Content() {
 
   // Smart merge: Update headings while preserving content
   const smartMergeNodesWithContent = useCallback((originalContent: string) => {
-    console.log('🔄 Smart merging nodes with original content...');
 
     if (!originalContent) {
       // No original content, fallback to simple conversion
-      console.log('⚠️ No original content, using simple conversion');
       return convertNodesToMarkdownSimple();
     }
 
@@ -1212,7 +1141,6 @@ function MindmapStudio2Content() {
       }
     });
 
-    console.log(`📋 Found ${headingMap.size} headings in original content`);
 
     // Build node map
     const nodeMap = new Map(nodes.map(n => [n.data.label as string, n]));
@@ -1225,11 +1153,9 @@ function MindmapStudio2Content() {
       if (node) {
         // Heading still exists, mark as processed
         processedNodes.add(node.data.label as string);
-        console.log(`✅ Preserved: ${originalText}`);
       } else {
         // Heading was deleted in mindmap, remove it
         updatedLines[heading.lineIndex] = ''; // Mark for removal
-        console.log(`🗑️ Removed: ${originalText}`);
       }
     });
 
@@ -1240,7 +1166,6 @@ function MindmapStudio2Content() {
         const level = (node.data.level as number) || 1;
         const heading = '#'.repeat(Math.min(level, 6));
         newNodesMarkdown += `\n${heading} ${node.data.label as string}\n\n`;
-        console.log(`➕ Added: ${node.data.label}`);
       }
     });
 
@@ -1249,13 +1174,11 @@ function MindmapStudio2Content() {
       .filter(line => line !== '') // Remove deleted headings
       .join('\n') + newNodesMarkdown;
 
-    console.log('✅ Smart merge complete!');
     return finalContent.trim();
   }, [nodes]);
 
   // Simple conversion (fallback when no original content)
   const convertNodesToMarkdownSimple = useCallback(() => {
-    console.log('📝 Converting nodes to markdown (simple)...');
 
     // Build a map of node connections for hierarchy
     const nodeMap = new Map(nodes.map(n => [n.id, n]));
@@ -1317,13 +1240,11 @@ function MindmapStudio2Content() {
       });
     }
 
-    console.log('✅ Markdown generated:', markdown.substring(0, 200) + '...');
     return markdown;
   }, [nodes, edges]);
 
   // Back to Editor handler
   const handleBackToEditor = useCallback(() => {
-    console.log('⬅️ Returning to Editor with updates');
 
     if (!isInWorkspace || !documentId) {
       console.warn('Not in workspace context, navigating to editor anyway');
@@ -1340,7 +1261,6 @@ function MindmapStudio2Content() {
     const document = workspaceService.getDocument(documentId);
     if (document) {
       workspaceService.updateDocument(documentId, { content: markdown });
-      console.log('💾 Document updated with mindmap content');
     }
 
     // Navigate back to editor
@@ -1358,7 +1278,6 @@ function MindmapStudio2Content() {
 
   // Generate presentation with settings from wizard
   const handleGeneratePresentation = useCallback(async (settings: GenerationSettings) => {
-    console.log('🎬 Generating presentation with settings:', settings);
 
     // 🔧 CLEAR OLD SESSION KEYS (from old Editor.tsx flow)
     localStorage.removeItem('presentation-session');
@@ -1367,7 +1286,6 @@ function MindmapStudio2Content() {
       key.startsWith('mindmap-pres-session-')
     );
     oldKeys.forEach(key => localStorage.removeItem(key));
-    console.log('🧹 Cleared old session keys:', oldKeys.length);
 
     // Close wizard, show progress
     setShowPresentationWizard(false);
@@ -1376,32 +1294,26 @@ function MindmapStudio2Content() {
     setPresentationError(null);
 
     try {
-      console.log('📊 Converting mindmap to markdown...');
       const markdown = convertNodesToMarkdownSimple();
 
-      console.log('🤖 Calling safe presentation service...');
       const presentation = await safePresentationService.generateSafely(
         markdown,
         { nodes, edges },
         settings,
         documentId, // ✅ Pass source document ID
         (progress: ProgressUpdate) => {
-          console.log('📊 Progress:', progress);
           setPresentationProgress(progress);
         }
       );
 
-      console.log('✅ Presentation generated:', presentation);
 
       // Save presentation and navigate
       if (isInWorkspace && documentId) {
-        console.log('💾 Saving presentation to workspace...');
         const doc = await workspaceService.createDocument(
           'presentation',
           `${title} - Presentation`,
           JSON.stringify(presentation)
         );
-        console.log('✅ Presentation saved:', doc.id);
 
         // Wait a moment to show success, then navigate
         setTimeout(() => {
@@ -1409,7 +1321,6 @@ function MindmapStudio2Content() {
           navigate(`/workspace/doc/${doc.id}/slides`);
         }, 1500);
       } else {
-        console.log('🔀 Navigating to standalone presentation editor...');
         setTimeout(() => {
           setShowPresentationProgress(false);
           navigate(`/presentation/${presentation.id}/edit`);
@@ -1456,12 +1367,10 @@ function MindmapStudio2Content() {
       // Skip if node already has 3+ children
       const childCount = edges.filter(e => e.source === node.id).length;
       if (childCount >= 3) {
-        console.log(`⏭️ Skipping "${node.data.label}" (already has ${childCount} children)`);
         continue;
       }
 
       try {
-        console.log(`🧠 Expanding "${node.data.label}"...`);
 
         // Generate children with AI
         const children = await mindmapAIService.generateChildNodes(
@@ -1501,7 +1410,6 @@ function MindmapStudio2Content() {
         newNodesAndEdges.edges.push(...childEdges);
 
         successCount++;
-        console.log(`✅ Expanded "${node.data.label}" with ${children.length} children`);
       } catch (error) {
         console.error(`❌ Failed to expand "${node.data.label}":`, error);
         failCount++;
@@ -1513,7 +1421,6 @@ function MindmapStudio2Content() {
       setNodes(nds => [...nds, ...newNodesAndEdges.nodes]);
       setEdges(eds => [...eds, ...newNodesAndEdges.edges]);
 
-      console.log(`🎉 Smart Expand Complete! ✅ ${successCount} nodes expanded, 🆕 ${newNodesAndEdges.nodes.length} new nodes created${failCount > 0 ? `, ❌ ${failCount} failed` : ''}`);
     } else {
       console.log('All nodes already have sufficient children! 🎯');
     }
@@ -1529,13 +1436,11 @@ function MindmapStudio2Content() {
     const context = buildMindmapContext();
 
     try {
-      console.log('🔗 Finding smart connections...');
 
       // Get AI suggestions
       const suggestions = await mindmapAIService.suggestConnections(context, 5);
 
       if (suggestions.length === 0) {
-        console.log('✅ Your mindmap is already well-connected! No new connections needed.');
         throw new Error('Your mindmap is already well-connected');
       }
 
@@ -1543,7 +1448,6 @@ function MindmapStudio2Content() {
       suggestions.forEach((s, idx) => {
         const sourceNode = nodes.find(n => n.id === s.source);
         const targetNode = nodes.find(n => n.id === s.target);
-        console.log(`${idx + 1}. "${sourceNode?.data.label}" → "${targetNode?.data.label}" - ${s.reason}`);
       });
 
       // Create new edges (no confirmation needed - AI Response panel will show results)
@@ -1565,7 +1469,6 @@ function MindmapStudio2Content() {
       }));
 
       setEdges(eds => [...eds, ...newEdges]);
-      console.log(`✨ Added ${newEdges.length} smart connections!`);
 
     } catch (error) {
       console.error('❌ Auto-connect failed:', error);
@@ -1583,7 +1486,6 @@ function MindmapStudio2Content() {
     const context = buildMindmapContext();
 
     try {
-      console.log('📊 Running quality audit...');
 
       // Rule-based checks
       const orphanedNodes = nodes.filter(n =>
@@ -1646,8 +1548,7 @@ ${analysis.issues?.map((i: any) => `  • [${i.severity.toUpperCase()}] ${i.desc
 ${analysis.suggestions?.map((s: string) => `  • ${s}`).join('\n') || '  • Keep up the good work!'}
 `;
 
-      console.log('📊 Quality Audit Report:\n', report);
-      console.log('✅ Quality audit complete');
+      
 
     } catch (error) {
       console.error('❌ Quality audit failed:', error);
@@ -1663,7 +1564,6 @@ ${analysis.suggestions?.map((s: string) => `  • ${s}`).join('\n') || '  • Ke
     }
 
     try {
-      console.log('🎯 Generating mindmap from goal:', goal);
 
       // Generate mindmap with AI
       const generatedMindmap = await mindmapAIService.generateMindmapFromPrompt(
@@ -1705,12 +1605,10 @@ ${analysis.suggestions?.map((s: string) => `  • ${s}`).join('\n') || '  • Ke
       );
 
       if (!confirmed) {
-        console.log('❌ User cancelled goal generation');
         return;
       }
 
       // Apply tree layout
-      console.log('🎨 Applying tree layout...');
       const { nodes: layoutedNodes, edges: layoutedEdges } =
         await getLayoutedElements(rfNodes, rfEdges, 'tree');
 
@@ -1720,8 +1618,7 @@ ${analysis.suggestions?.map((s: string) => `  • ${s}`).join('\n') || '  • Ke
       setEdges(layoutedEdges);
       setCurrentLayout('tree');
 
-      console.log(`✨ Generated ${layoutedNodes.length} nodes with hierarchical layout!`);
-      console.log('✅ Goal generation complete');
+
 
     } catch (error) {
       console.error('❌ Goal generation failed:', error);
@@ -1739,7 +1636,6 @@ ${analysis.suggestions?.map((s: string) => `  • ${s}`).join('\n') || '  • Ke
     const context = buildMindmapContext();
 
     try {
-      console.log('✨ Analyzing structure for reorganization...');
 
       // Analyze current structure
       const orphanedNodes = nodes.filter(n =>
@@ -1821,7 +1717,6 @@ Note: Auto-apply coming soon! For now, use these suggestions manually.
 `;
 
       alert(report);
-      console.log('✅ Reorganization analysis complete');
 
     } catch (error) {
       console.error('❌ Reorganize failed:', error);
@@ -1857,7 +1752,6 @@ Note: Auto-apply coming soon! For now, use these suggestions manually.
       return;
     }
 
-    console.log('↩️ Undoing:', result.description);
 
     // Restore previous state
     setNodes(result.nodes);
@@ -1879,7 +1773,6 @@ Note: Auto-apply coming soon! For now, use these suggestions manually.
       return;
     }
 
-    console.log('↪️ Redoing:', result.description);
 
     // Restore next state
     setNodes(result.nodes);
@@ -1918,11 +1811,9 @@ Note: Auto-apply coming soon! For now, use these suggestions manually.
 
   // Utility: Find nodes by pattern for multi-node operations
   const findNodesByPattern = useCallback((pattern: string, targetString: string): Node[] => {
-    console.log(`🔍 Finding nodes by pattern: "${pattern}" from target: "${targetString}"`);
 
     // Handle special cases
     if (targetString === 'all') {
-      console.log(`✅ Found ALL nodes: ${nodes.length}`);
       return nodes;
     }
 
@@ -1941,7 +1832,6 @@ Note: Auto-apply coming soon! For now, use these suggestions manually.
       typeof node.data.label === 'string' && node.data.label.toLowerCase().includes(keyword.toLowerCase())
     );
 
-    console.log(`✅ Found ${matchedNodes.length} nodes matching "${keyword}":`, matchedNodes.map(n => n.data.label));
     return matchedNodes;
   }, [nodes]);
 
@@ -1961,7 +1851,6 @@ Note: Auto-apply coming soon! For now, use these suggestions manually.
     // BRAINSTORM MODE: Conversational AI like ChatGPT
     if (chatMode === 'brainstorm') {
       try {
-        console.log('💭 Brainstorm mode - having conversation...');
 
         // Check if user wants to commit ideas to mindmap
         const commitPhrases = [
@@ -1982,8 +1871,6 @@ Note: Auto-apply coming soon! For now, use these suggestions manually.
         );
 
         if (isReadyToCommit) {
-          console.log('✅ User ready to commit! Extracting ideas and creating nodes...');
-          console.log('🎯 Discussion target node:', discussionTargetNode);
 
           // Switch to command mode temporarily to execute
           const extractPrompt = `Based on our conversation, extract the key ideas that should be added to the mindmap.
@@ -2022,13 +1909,11 @@ Extract the main topics/ideas that should become mindmap nodes. Respond with JSO
               targetNode = nodes.find(n =>
                 typeof n.data.label === 'string' && n.data.label.toLowerCase() === discussionTargetNode.toLowerCase()
               );
-              console.log(`🎯 Found discussion target: "${targetNode?.data.label}"`);
             }
 
             // Fallback to root if no discussion target
             if (!targetNode) {
               targetNode = nodes.find(n => !edges.some(e => e.target === n.id)) || nodes[0];
-              console.log(`📍 Using fallback target: "${targetNode?.data.label}"`);
             }
 
             // Generate nodes from topics
@@ -2064,11 +1949,9 @@ Extract the main topics/ideas that should become mindmap nodes. Respond with JSO
             // Clear conversation context AND discussion target after committing
             setConversationContext([]);
             setDiscussionTargetNode(null);
-            console.log('🧹 Cleared discussion target and context');
           }
         } else {
           // Continue brainstorming conversation
-          console.log('💬 Continuing brainstorm conversation...');
 
           // Detect if user mentioned a specific node (track discussion target)
           const nodeList = nodes.map(n => n.data.label).filter(label => typeof label === 'string') as string[];
@@ -2077,7 +1960,6 @@ Extract the main topics/ideas that should become mindmap nodes. Respond with JSO
           );
 
           if (mentionedNode) {
-            console.log(`🎯 User mentioned node: "${mentionedNode}" - setting as discussion target`);
             setDiscussionTargetNode(mentionedNode);
           }
 
@@ -2135,7 +2017,6 @@ IMPORTANT: Do NOT include JSON or commands. Just have a natural conversation.`;
 
     // COMMAND MODE: Direct execution (original behavior)
     try {
-      console.log('⚡ Command mode - executing directly...');
 
       // Parse command with AI
       const nodeList = nodes.map(n => n.data.label).join(', ');
@@ -2211,18 +2092,15 @@ Examples:
 
       const parseResponse = await aiService.generateContent(parsePrompt, { temperature: 0.3 });
 
-      console.log('📥 Raw AI Response:', parseResponse);
 
       // Extract JSON from response (handles markdown code blocks)
       let jsonStr = parseResponse;
 
       // Remove markdown code blocks if present
       if (jsonStr.includes('```')) {
-        console.log('🔧 Removing markdown code blocks...');
         jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '');
       }
 
-      console.log('🔍 Cleaned JSON string:', jsonStr);
 
       // Extract JSON object
       const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
@@ -2231,12 +2109,7 @@ Examples:
         throw new Error('No JSON found in AI response');
       }
 
-      console.log('✂️ Extracted JSON:', jsonMatch[0]);
-
       const parsed = JSON.parse(jsonMatch[0]);
-
-      console.log('✅ Parsed command:', parsed);
-      console.log('📍 Target node:', parsed.target);
 
       // Execute based on action type
       switch (parsed.action) {
@@ -2254,7 +2127,6 @@ Examples:
           if (!targetNode && (parsed.target === 'all' || parsed.target === 'none' || parsed.target === 'root' || !parsed.target)) {
             // Find root node (no incoming edges)
             targetNode = nodes.find(n => !edges.some(e => e.target === n.id)) || nodes[0];
-            console.log(`✅ Using root node: "${targetNode?.data.label}"`);
           }
 
           if (!targetNode) {
@@ -2263,8 +2135,6 @@ Examples:
             console.error(errorMsg);
             return;
           }
-
-          console.log(`✅ Found target node: "${targetNode.data.label}"`);
 
           // Generate new nodes
           const count = parsed.details.count || 3;
@@ -2322,8 +2192,6 @@ Examples:
         case 'modify': {
           // Check if using context (pronouns)
           if (parsed.useContext) {
-            console.log('🧠 Context-aware command detected');
-
             // Resolve nodes from context
             const contextNodeIds = chatContextManager.resolvePronoun(prompt);
 
@@ -2341,8 +2209,6 @@ Examples:
               setChatMessages(prev => [...prev, { role: 'ai', content: errorMsg }]);
               return;
             }
-
-            console.log(`✅ Resolved context to ${targetNodes.length} nodes:`, targetNodes.map(n => n.data.label));
 
             // Show action feedback
             const nodeNames = targetNodes.slice(0, 3).map(n => n.data.label).join(', ') + (targetNodes.length > 3 ? '...' : '');
@@ -2402,8 +2268,6 @@ Examples:
 
           // Check if multi-node operation
           if (parsed.isMultiNode) {
-            console.log('🔄 Multi-node modification detected');
-
             // Find all matching nodes
             const targetNodes = findNodesByPattern(parsed.details?.pattern || '', parsed.target);
 
@@ -2412,8 +2276,6 @@ Examples:
               setChatMessages(prev => [...prev, { role: 'ai', content: errorMsg }]);
               return;
             }
-
-            console.log(`✅ Found ${targetNodes.length} nodes for modification`);
 
             // Show action feedback
             setChatMessages(prev => [...prev, { role: 'ai', content: `🔄 ${parsed.response}\n\nEnhancing ${targetNodes.length} nodes...` }]);
@@ -2486,7 +2348,6 @@ Examples:
             return;
           }
 
-          console.log(`✅ Found target node for modification: "${targetNode.data.label}"`);
 
           // Show action feedback
           setChatMessages(prev => [...prev, { role: 'ai', content: `🔄 ${parsed.response}` }]);
@@ -2561,7 +2422,6 @@ Examples:
         }
       }
 
-      console.log('✅ Chat command executed');
 
     } catch (error) {
       console.error('❌ Chat command failed:', error);
@@ -2623,7 +2483,6 @@ Examples:
   // Load template
   // Handle AI Tools actions
   const handleAIAction = useCallback(async (action: AIAction) => {
-    console.log('🤖 AI ACTION:', action.type, action.data);
     setAILoading(true);
 
     try {
@@ -2682,14 +2541,12 @@ Examples:
 
     setNodes(templateNodes);
     setEdges(templateEdges);
-    console.log(`✅ Loaded template: ${template.name}`);
   }, [setNodes, setEdges]);
 
   // Load session from Editor on mount
   useEffect(() => {
     const session = sessionService.getSession();
     if (session) {
-      console.log('📖 Loading session from Editor:', session.sessionId);
       setHasEditorSession(true);
       setTitle(session.documentTitle);
 
@@ -2715,7 +2572,6 @@ Examples:
 
         if (rfNodes.length > 0) {
           // Apply ELK tree layout for hierarchical presentation
-          console.log('🎨 Applying hierarchical tree layout...');
           getLayoutedElements(rfNodes, rfEdges, 'tree').then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
             // Update edges to use default (bezier) type
             const bezierEdges = layoutedEdges.map(edge => ({
@@ -2726,7 +2582,6 @@ Examples:
             setNodes(layoutedNodes);
             setEdges(bezierEdges);
             setCurrentLayout('tree');
-            console.log('✅ Loaded', layoutedNodes.length, 'nodes with hierarchical tree layout + bezier edges');
           }).catch((err) => {
             console.error('Layout failed, using default positions:', err);
             setNodes(rfNodes);
@@ -2751,14 +2606,8 @@ Examples:
 
     // Only inject if there are nodes that need callbacks
     if (nodesNeedingCallbacks.length === 0) {
-      console.log('🔶 NO CALLBACK INJECTION NEEDED');
       return;
     }
-
-    console.log('🔶 INJECTING CALLBACKS:', {
-      nodesCount: nodes.length,
-      nodesNeedingCallbacks: nodesNeedingCallbacks.length,
-    });
 
     setNodes((nds) =>
       nds.map((node) => {
@@ -2766,7 +2615,6 @@ Examples:
         if (node.type === 'milestone') {
           // Milestone callbacks
           if (!node.data.onDelete) {
-            console.log(`🔶 INJECTING MILESTONE CALLBACKS into ${node.id}`);
             return {
               ...node,
               data: {
@@ -2779,12 +2627,7 @@ Examples:
         } else {
           // Regular node callbacks
           if (!node.data.onAddChild || !node.data.onAIEnhance) {
-            console.log(`🔶 INJECTING NODE CALLBACKS into ${node.id}`, {
-              hasParent: !!(node as any).parentId,
-              parentId: (node as any).parentId,
-              position: node.position,
-              extent: node.extent,
-            });
+         
             return {
               ...node,
               // CRITICAL: Preserve parentId and extent when injecting callbacks!
@@ -2837,7 +2680,6 @@ Examples:
                   if (!confirm('This will replace your current mindmap with a fresh one generated from the editor content. Continue?')) return;
                   
                   try {
-                    console.log('🔄 Regenerating mindmap from editor...');
                     const doc = await backendGetDocument(documentId);
                     if (doc?.content) {
                       // Generate new mindmap from current editor content
@@ -2868,7 +2710,6 @@ Examples:
                       setOriginalContent(doc.content);
                       setCurrentLayout('tree');
                       
-                      console.log('✅ Mindmap regenerated from editor');
                       toast({ title: '✅ Regenerated', description: `Created ${newNodes.length} nodes from editor content` });
                     }
                   } catch (error) {
@@ -3307,7 +3148,6 @@ Examples:
           position={suggestionPosition}
           onDismiss={handleDismissSuggestion}
           onAccept={() => {
-            console.log('✅ Suggestion accepted:', activeSuggestion.message);
             setActiveSuggestion(null);
           }}
         />

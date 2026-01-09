@@ -36,7 +36,6 @@ import {
   Quote,
   Code,
   Strikethrough,
-  Underline,
   Link as LinkIcon,
   Image as ImageIcon,
   Table as TableIcon,
@@ -44,8 +43,6 @@ import {
   Sparkles,
   Network,
   FileText,
-  Undo,
-  Redo,
   Keyboard,
   Wand2,
   MoreHorizontal,
@@ -56,9 +53,7 @@ import {
   Upload,
   Download,
   Save,
-  Share,
   ChevronDown,
-  FolderOpen,
   Cloud,
   HardDrive,
   Users,
@@ -201,20 +196,6 @@ export const FloatingSideToolbar: React.FC<FloatingSideToolbarProps> = ({
       editor.off('selectionUpdate', handleUpdate);
     };
   }, [editor]);
-
-  // Insert actions
-  const insertButtons: ToolbarButtonConfig[] = [
-    {
-      icon: LinkIcon,
-      label: 'Insert Link',
-      shortcut: 'Ctrl+K',
-      onClick: () => {
-        console.log('Link button clicked');
-        onInsertLink?.();
-      },
-      group: 'insert',
-    },
-  ];
 
   interface ToolbarButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     button: ToolbarButtonConfig;
@@ -653,21 +634,13 @@ export const FloatingSideToolbar: React.FC<FloatingSideToolbarProps> = ({
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger 
                   className="rounded-xl px-3 py-2.5 mb-1 hover:bg-muted/60 transition-all"
-                  onClick={() => console.log('🔄 FloatingSideToolbar: Save submenu opened', { 
-                    isAuthenticated, 
-                    onSaveToCloud: !!onSaveToCloud, 
-                    onSaveAsLocal: !!onSaveAsLocal, 
-                    onSaveLocally: !!onSaveLocally,
-                    onSave: !!onSave 
-                  })}
+                 
                 >
                   <Save className="h-4 w-4 mr-3" />
                   <span className="flex-1">Save</span>
                   <span className="text-xs text-muted-foreground font-mono ml-2">Ctrl+S</span>
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent 
-                  side="left"
-                  align="start"
                   className="min-w-[200px] bg-popover/95 backdrop-blur-xl border border-border/50 shadow-2xl rounded-2xl !z-[9999]"
                   style={{ 
                     marginLeft: '-8px'
@@ -678,7 +651,6 @@ export const FloatingSideToolbar: React.FC<FloatingSideToolbarProps> = ({
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        console.log('🔄 FloatingSideToolbar: Save to Cloud clicked');
                         onSaveToCloud();
                       }}
                       className="rounded-xl px-3 py-2.5 mb-1 hover:bg-muted/60 transition-all"
@@ -695,7 +667,6 @@ export const FloatingSideToolbar: React.FC<FloatingSideToolbarProps> = ({
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        console.log('🔄 FloatingSideToolbar: Save Locally (to disk) clicked');
                         onSaveAsLocal();
                       }}
                       className="rounded-xl px-3 py-2.5 mb-1 hover:bg-muted/60 transition-all"

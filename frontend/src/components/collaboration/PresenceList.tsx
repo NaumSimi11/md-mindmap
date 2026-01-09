@@ -70,17 +70,14 @@ export const PresenceList: React.FC<PresenceListProps> = ({
   
   useEffect(() => {
     if (!provider) {
-      console.log('👥 [PresenceList] No provider available');
       setUsers([]);
       return;
     }
     
     const awareness = provider.awareness;
-    console.log('👥 [PresenceList] Provider connected, clientID:', awareness.clientID);
     
     const updateUsers = () => {
       const states = awareness.getStates();
-      console.log('👥 [PresenceList] Awareness states:', states.size, 'users');
       const activeUsers: User[] = [];
       
       states.forEach((state, clientId) => {

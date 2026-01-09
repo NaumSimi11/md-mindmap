@@ -51,35 +51,28 @@ export class BackendWorkspaceService {
     try {
       // Check if user is authenticated
       if (!authService.isAuthenticated()) {
-        console.log('⚠️ User not authenticated, skipping workspace init');
         return;
       }
 
       // Fetch workspaces from backend
       const response = await apiWorkspace.listWorkspaces();
-      console.log('📦 API Response:', response);
       
       // Extract workspaces from paginated response
       const workspacesArray = (response as any).items || [];
-      console.log('📦 Workspaces array:', workspacesArray);
       
       if (workspacesArray.length === 0) {
         // Create default workspace if user has none
-        console.log('📝 Creating default workspace...');
         const newWorkspace = await apiWorkspace.createWorkspace({
           name: 'My Workspace',
           description: 'Your personal workspace',
         });
-        console.log('📦 New workspace created:', newWorkspace);
         
         this.currentWorkspace = this.mapApiWorkspace(newWorkspace);
         this.workspaces = [this.currentWorkspace];
-        console.log('📦 Mapped workspace:', this.currentWorkspace);
       } else {
         // Use first workspace as current
         this.workspaces = workspacesArray.map(w => this.mapApiWorkspace(w));
         this.currentWorkspace = this.workspaces[0];
-        console.log('📦 Current workspace:', this.currentWorkspace);
       }
 
       // Load documents for current workspace
@@ -88,7 +81,6 @@ export class BackendWorkspaceService {
       }
 
       this.isInitialized = true;
-      console.log('✅ Backend workspace initialized:', this.currentWorkspace?.name);
     } catch (error) {
       console.error('❌ Failed to initialize workspace:', error);
       throw error;
@@ -109,8 +101,8 @@ export class BackendWorkspaceService {
       sync: {
         status: 'synced', // Coming from backend = synced
         lastSyncedAt: new Date(),
-        cloudVersion: apiWorkspace.version,
-        localVersion: apiWorkspace.version,
+        cloudVersion: 1, // Workspace doesn't have version in API
+        localVersion: 1,
       },
     };
   }
@@ -119,22 +111,24 @@ export class BackendWorkspaceService {
    * Map API document to local format
    */
   private mapApiDocument(apiDoc: ApiDocument): Document {
+    // Cast to any to access optional API properties not in TypeScript type
+    const extendedDoc = apiDoc as any;
     return {
       id: apiDoc.id,
       type: apiDoc.content_type === 'markdown' ? 'markdown' : 'markdown', // Extend later for mindmap/presentation
       title: apiDoc.title,
       content: apiDoc.content,
-      folderId: apiDoc.folder_id || null,
+      folderId: extendedDoc.folder_id || null,
       workspaceId: apiDoc.workspace_id,
-      starred: apiDoc.is_starred || false,
-      tags: apiDoc.tags || [],
+      starred: extendedDoc.is_starred || false,
+      tags: extendedDoc.tags || [],
       createdAt: new Date(apiDoc.created_at),
       updatedAt: new Date(apiDoc.updated_at),
       lastOpenedAt: undefined,
       metadata: {
         version: apiDoc.version,
         createdBy: apiDoc.created_by,
-        accessModel: (apiDoc as any).access_model || 'inherited',
+        accessModel: extendedDoc.access_model || 'inherited',
       },
       sync: {
         status: 'synced', // Coming from backend = synced
@@ -154,7 +148,6 @@ export class BackendWorkspaceService {
       // Extract documents from paginated response
       const docsArray = (response as any).items || [];
       this.documents = docsArray.map((d: any) => this.mapApiDocument(d));
-      console.log(`✅ Loaded ${this.documents.length} documents`);
     } catch (error) {
       console.error('❌ Failed to load documents:', error);
       this.documents = [];
@@ -192,7 +185,6 @@ export class BackendWorkspaceService {
 
     this.currentWorkspace = workspace;
     await this.loadDocuments(workspaceId);
-    console.log('✅ Switched to workspace:', workspace.name);
   }
 
   /**
@@ -215,7 +207,6 @@ export class BackendWorkspaceService {
       // Add to workspaces list
       this.workspaces.push(mappedWorkspace);
       
-      console.log('✅ Workspace created:', mappedWorkspace.name);
       return mappedWorkspace;
     } catch (error) {
       console.error('❌ Failed to create workspace:', error);
@@ -252,10 +243,13 @@ export class BackendWorkspaceService {
           createdAt: new Date(),
           updatedAt: new Date(),
           metadata: {},
+          sync: {
+            status: 'local',
+            localVersion: 1,
+          },
         };
         
         this.documents.push(localDoc);
-        console.log('✅ Guest document created:', title, '| Total docs:', this.documents.length);
         return localDoc;
       }
 
@@ -270,7 +264,6 @@ export class BackendWorkspaceService {
       const doc = this.mapApiDocument(apiDoc);
       this.documents.push(doc);
       
-      console.log('✅ Document created:', title, '| Total docs:', this.documents.length);
       return doc;
     } catch (error) {
       console.error('❌ Failed to create document:', error);
@@ -323,12 +316,10 @@ export class BackendWorkspaceService {
       if (updates.starred !== undefined) apiUpdates.is_starred = updates.starred;
       // ⚠️ NEVER send content - Yjs handles it via Hocuspocus
 
-      console.log('🔄 Sending metadata-only PATCH:', { documentId, apiUpdates });
 
       // Send to backend
       const apiDoc = await apiDocument.updateDocument(documentId, apiUpdates);
       
-      console.log('📥 Backend response:', apiDoc);
       
       // Update local cache
       const doc = this.mapApiDocument(apiDoc);
@@ -337,7 +328,6 @@ export class BackendWorkspaceService {
         this.documents[index] = doc;
       }
       
-      console.log('✅ Document metadata updated in cache:', doc);
     } catch (error) {
       console.error('❌ Failed to update document metadata:', error);
       throw error;
@@ -358,7 +348,6 @@ export class BackendWorkspaceService {
     try {
       await apiDocument.deleteDocument(documentId);
       this.documents = this.documents.filter(d => d.id !== documentId);
-      console.log('✅ Document deleted');
     } catch (error) {
       console.error('❌ Failed to delete document:', error);
       throw error;

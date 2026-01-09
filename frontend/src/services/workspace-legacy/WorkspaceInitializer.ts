@@ -37,18 +37,15 @@ export class WorkspaceInitializer {
    */
   async initialize(): Promise<string | null> {
     if (!isDesktop()) {
-      console.log('🌐 Web mode: Skipping Tauri workspace initialization');
       return null;
     }
 
-    console.log('🖥️ Desktop mode: Initializing Tauri workspace...');
 
     try {
       // 1. Check if workspace is already configured
       const isConfigured = await invoke<boolean>('is_workspace_configured');
       
       if (isConfigured) {
-        console.log('✅ Workspace already configured, loading...');
         const config = await invoke<WorkspaceConfig>('load_workspace_config_v2');
         this.workspacePath = config.workspace_path;
         
@@ -58,7 +55,6 @@ export class WorkspaceInitializer {
         });
         
         if (isValid) {
-          console.log('📁 Workspace loaded:', this.workspacePath);
           return this.workspacePath;
         } else {
           console.warn('⚠️ Configured workspace path no longer exists, reinitializing...');
@@ -80,11 +76,9 @@ export class WorkspaceInitializer {
    * Setup a new workspace (first-time user experience)
    */
   private async setupNewWorkspace(): Promise<void> {
-    console.log('🆕 First-time setup: Creating new workspace...');
 
     // 1. Get default workspace path
     const defaultPath = await invoke<string>('get_default_workspace_location');
-    console.log('💡 Default workspace location:', defaultPath);
 
     // 2. Ask user if they want to use default or choose custom location
     const useDefault = await this.promptUserForWorkspaceLocation(defaultPath);
@@ -93,15 +87,12 @@ export class WorkspaceInitializer {
     
     if (useDefault) {
       workspacePath = defaultPath;
-      console.log('✅ User chose default location');
     } else {
       // User wants to choose custom location
       try {
         workspacePath = await invoke<string>('select_workspace_folder');
-        console.log('✅ User selected custom location:', workspacePath);
       } catch (error) {
         // User cancelled, use default
-        console.log('⚠️ User cancelled folder selection, using default');
         workspacePath = defaultPath;
       }
     }
@@ -113,7 +104,6 @@ export class WorkspaceInitializer {
     await this.saveWorkspaceConfig(workspacePath);
 
     this.workspacePath = workspacePath;
-    console.log('🎉 Workspace setup complete!');
   }
 
   /**
@@ -252,20 +242,17 @@ export class WorkspaceInitializer {
    * Create default folder structure in workspace
    */
   private async createWorkspaceStructure(workspacePath: string): Promise<void> {
-    console.log('📁 Creating workspace structure...');
 
     try {
       // Create default folders
       const folders = await invoke<string[]>('create_default_folders', { 
         workspace_path: workspacePath 
       });
-      console.log(`✅ Created ${folders.length} default folders:`, folders);
 
       // Create welcome document
       const welcomePath = await invoke<string>('create_welcome_document', { 
         workspace_path: workspacePath 
       });
-      console.log('📄 Created welcome document:', welcomePath);
 
     } catch (error) {
       console.error('❌ Failed to create workspace structure:', error);
@@ -289,7 +276,6 @@ export class WorkspaceInitializer {
 
     try {
       await invoke('save_workspace_config_v2', { config });
-      console.log('💾 Workspace configuration saved');
     } catch (error) {
       console.error('❌ Failed to save workspace config:', error);
       throw error;

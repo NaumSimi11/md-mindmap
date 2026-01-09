@@ -229,7 +229,6 @@ export function MDFileDropZone({ onFileAnalyzed, isAnalyzing = false }: MDFileDr
                 onClick={(e) => {
                   e.stopPropagation();
                   // TODO: Load sample file
-                  console.log('Load sample file');
                 }}
                 className="text-xs text-slate-400 hover:text-cyan-400 transition-colors underline"
               >

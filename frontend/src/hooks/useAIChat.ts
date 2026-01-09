@@ -178,13 +178,7 @@ export const useAIChat = ({ editor, documentContent, documentTitle = 'Document' 
                 input
             );
 
-            console.log('🧠 AI Intelligence:', {
-                documentType: docAnalysis.documentType,
-                sectionType: sectionAnalysis.currentSectionType,
-                userIntent: userIntent.action,
-                recommendedFormat: formatDecision.format,
-                confidence: formatDecision.confidence
-            });
+          
 
             // 🎯 Build comprehensive context for prompt
             const promptContext: PromptContext = {
@@ -306,11 +300,9 @@ Use this intelligence to make the PERFECT decision about formatting!
 
             if (jsonMatch) {
                 try {
-                    console.log('📝 Raw JSON match:', jsonMatch[0].substring(0, 200));
                     const functionCall = JSON.parse(jsonMatch[0]);
                     const { function: funcName, arguments: funcArgs } = functionCall;
 
-                    console.log('🔧 Function call parsed successfully:', funcName, funcArgs);
 
                     // Extract friendly message (text before the JSON)
                     let friendlyMessage = fullResponse.substring(0, jsonMatch.index).trim();
@@ -384,10 +376,7 @@ Use this intelligence to make the PERFECT decision about formatting!
                     // Get the full staged content from the store (now has id, timestamp, wordCount, etc.)
                     const fullStagedContent = stagingStore.currentStaged;
 
-                    console.log('📝 Content staged for preview:', {
-                        sections: sections.length,
-                        preview: previewContent.substring(0, 100) + '...'
-                    });
+                   
 
                     // 🎨 SHOW INLINE PREVIEW IN DOCUMENT!
                     if (editor && fullStagedContent) {
@@ -395,8 +384,6 @@ Use this intelligence to make the PERFECT decision about formatting!
                         const availablePositions = getAvailablePositions(editor);
                         const currentPositionLabel = formatPositionLabel(funcArgs.position || 'end');
                         
-                        console.log('🎨 Showing inline preview at position:', position);
-                        console.log('🎨 Full staged content:', fullStagedContent);
                         
                         showInlinePreview(editor, {
                             stagedContent: fullStagedContent,  // ✅ Use the FULL staged content from store!
@@ -404,15 +391,12 @@ Use this intelligence to make the PERFECT decision about formatting!
                             currentPosition: currentPositionLabel,
                             availablePositions,
                             onAccept: () => {
-                                console.log('✅ User accepted from inline preview');
                                 acceptStaged();
                             },
                             onReject: () => {
-                                console.log('❌ User rejected from inline preview');
                                 rejectStaged();
                             },
                             onChangePosition: (newPosition) => {
-                                console.log('📍 User changed position to:', newPosition);
                                 // TODO: Update position and re-render preview
                             },
                         });

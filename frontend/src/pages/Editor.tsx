@@ -134,7 +134,6 @@ export default function Editor({ onContentChange }: EditorProps = {}) {
     const navState = location.state as { documentId?: string } | null;
 
     const loadDoc = async (id: string) => {
-      console.log('📄 Loading document via Use Case:', id);
       const result = await loadDocument.execute({ id });
 
       if (isSuccess(result)) {
@@ -221,7 +220,6 @@ Happy writing! ✨`);
     if (sessionService.hasUpdates()) {
       const updates = sessionService.getUpdates();
       if (updates) {
-        console.log('✅ Studio2 updates received!', updates);
 
         // Insert diagram at cursor position
         const textarea = desktopEditorRef.current || document.getElementById('mobileCleanTextarea') as HTMLTextAreaElement;
@@ -287,12 +285,10 @@ Happy writing! ✨`);
       .replace(/\n/gim, '<br>');
 
     navigator.clipboard.writeText(html);
-    console.log('HTML copied to clipboard');
   };
 
   const copyContent = () => {
     navigator.clipboard.writeText(markdownContent);
-    console.log('Content copied to clipboard');
   };
 
   const exportAsMarkdown = () => {
@@ -376,7 +372,6 @@ Happy writing! ✨`);
     } else {
       // Fallback for browsers without native sharing
       navigator.clipboard.writeText(markdownContent);
-      console.log('Content copied to clipboard');
     }
   };
 
@@ -1336,7 +1331,6 @@ Happy writing! ✨`);
                     <button
                       className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-lg"
                       onClick={() => {
-                        console.log('Add to favorites');
                         setShowMoreOptions(false);
                       }}
                     >
@@ -1346,7 +1340,6 @@ Happy writing! ✨`);
                     <button
                       className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-lg"
                       onClick={() => {
-                        console.log('Find and replace');
                         setShowMoreOptions(false);
                       }}
                     >

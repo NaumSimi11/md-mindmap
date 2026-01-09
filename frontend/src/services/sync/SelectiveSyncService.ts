@@ -17,6 +17,7 @@ import { yjsDocumentManager } from '@/services/yjs/YjsDocumentManager';
 import { serializeYjsToHtml } from '@/services/snapshots/serializeYjs';
 import { extractUuid, toCloudId, toLocalDocId as toLocalId } from '@/utils/id';
 import { htmlToMarkdown } from '@/utils/markdownConversion';
+import { entityIdUnificationService } from './EntityIdUnificationService';
 import Dexie from 'dexie';
 import * as Y from 'yjs';
 import * as buffer from 'lib0/buffer';
@@ -523,8 +524,15 @@ export class SelectiveSyncService {
       let localFolder: Folder | null = null;
       if (localDoc.folderId) {
         try {
-          const folders = await backendWorkspaceService.getFolders(workspaceId);
-          localFolder = folders.find(f => f.id === localDoc.folderId) || null;
+          // 🔥 PRIMARY SOURCE: Guest workspace folders (where the document was created)
+          const guestFolders = await guestWorkspaceService.getFolders(workspaceId);
+          localFolder = guestFolders.find(f => f.id === localDoc.folderId) || null;
+
+          // 🔁 FALLBACK: Backend cache (for already-synced workspaces / folders)
+          if (!localFolder) {
+            const backendFolders = await backendWorkspaceService.getFolders(workspaceId);
+            localFolder = backendFolders.find(f => f.id === localDoc.folderId) || null;
+          }
         } catch (error) {
           console.warn('⚠️ Could not load folders for cascading creation:', error);
         }
@@ -535,6 +543,10 @@ export class SelectiveSyncService {
       
       // 🔥 CASCADING CREATION: Ensure folder exists if document is in a folder
       const cloudFolderId = await this.ensureFolderExists(localDoc.folderId, cloudWorkspaceId, localFolder);
+
+      // Store original local IDs for unification after sync
+      const originalLocalWorkspaceId = workspaceId;
+      const originalLocalFolderId = localDoc.folderId;
 
       // Decide create vs patch using local mapping only (WRITE-ONLY)
       const mappedCloudId = await this.getCloudDocumentId(documentId);
@@ -548,7 +560,8 @@ export class SelectiveSyncService {
           // PATCH existing cloud document
           const updatePayload: any = {
             title: localDoc.title,
-            folder_id: localDoc.folderId || undefined,
+            // 🔥 IMPORTANT: Use cloudFolderId, not localDoc.folderId (which is a local-only ID)
+            folder_id: cloudFolderId || null,
             is_starred: localDoc.starred,
             tags: localDoc.tags,
             content: contentToSave,
@@ -574,6 +587,14 @@ export class SelectiveSyncService {
 
           console.log('☁️ [pushDocument] POST to cloud:', createPayload.title, `(binary: ${yjsStateB64?.length || 0} chars)`);
           syncedDoc = await apiDocument.createDocument(createPayload);
+
+          // 🔁 After creating the document (and possibly its folder) on the backend,
+          // refresh the folder cache so the UI can see newly created cloud folders.
+          try {
+            await backendWorkspaceService.refreshFoldersFromCloud(workspaceId);
+          } catch (folderSyncError) {
+            console.warn('⚠️ [pushDocument] Failed to refresh folders from cloud:', folderSyncError);
+          }
           const returnedLocalId = toLocalId(syncedDoc.id);
 
           // Store mapping after successful creation
@@ -623,10 +644,14 @@ export class SelectiveSyncService {
 
         // 🔥 BUG FIX #5: Also cache in BackendWorkspaceService for immediate access
         // When user selects the document after push, backend cache must have it!
-        if (isAuthenticated) {
-          const { backendWorkspaceService } = await import('@/services/workspace/BackendWorkspaceService');
-          const backendDoc = await backendWorkspaceService.getDocument(syncedDoc!.id);
-          console.log(`✅ [pushDocument] Cached in backend service: ${syncedDoc!.id}`);
+        if (authService.isAuthenticated()) {
+          try {
+            const { backendWorkspaceService } = await import('@/services/workspace/BackendWorkspaceService');
+            const backendDoc = await backendWorkspaceService.getDocument(syncedDoc!.id);
+            console.log(`✅ [pushDocument] Cached in backend service: ${syncedDoc!.id}`);
+          } catch (cacheError) {
+            console.warn('⚠️ [pushDocument] Backend cache not ready, skipping:', cacheError);
+          }
         }
 
         // Dispatch event to update WorkspaceContext state (UI only)
@@ -642,6 +667,37 @@ export class SelectiveSyncService {
         }));
 
         console.log(`✅ [pushDocument] Sync state persisted to IndexedDB: local → synced (v${syncedDoc?.yjs_version || 0})`);
+        
+        // 🔥 FULL ID UNIFICATION: Replace all local IDs with cloud IDs
+        // This ensures refresh works correctly - all IDs match across local and cloud
+        try {
+          const cloudDocId = syncedDoc?.id || documentId;
+          
+          console.log('🔄 [pushDocument] Calling unifyAfterSync with:', {
+            localDocId: documentId,
+            cloudDocId,
+            localFolderId: originalLocalFolderId,
+            cloudFolderId,
+            localWorkspaceId: originalLocalWorkspaceId,
+            cloudWorkspaceId,
+            workspaceIdsMatch: originalLocalWorkspaceId === cloudWorkspaceId,
+          });
+          
+          const unifyResult = await entityIdUnificationService.unifyAfterSync(
+            documentId,                    // local document ID
+            cloudDocId,                    // cloud document ID
+            originalLocalFolderId || null, // local folder ID (before sync)
+            cloudFolderId || null,         // cloud folder ID
+            originalLocalWorkspaceId,      // local workspace ID
+            cloudWorkspaceId               // cloud workspace ID
+          );
+          
+          console.log('✅ [pushDocument] Unification result:', unifyResult);
+        } catch (unifyError) {
+          console.error('⚠️ [pushDocument] ID unification failed:', unifyError);
+          // Non-fatal - sync still succeeded, but refresh might have issues
+        }
+        
       } catch (updateError) {
         console.warn('⚠️ [pushDocument] Failed to update sync state:', updateError);
         // Non-fatal - document is still synced to cloud

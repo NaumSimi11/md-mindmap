@@ -40,14 +40,12 @@ export function RenameWorkspaceDialog({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    console.log('📝 Form submitted:', { name: name.trim(), currentName });
     
     if (!name.trim()) {
       console.warn('⚠️ Empty name, aborting');
       return;
     }
 
-    console.log('✅ Calling onRename with:', name.trim());
     onRename(name.trim());
     onClose();
   };

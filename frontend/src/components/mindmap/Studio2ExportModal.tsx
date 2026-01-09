@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import { Node, Edge } from '@xyflow/react';
-import { FileDown, FileText, FileJson, Image } from 'lucide-react';
+import { FileDown, FileText, FileJson } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { mindmapExporter } from '@/services/mindmap/MindmapExporter';
@@ -28,12 +28,12 @@ export default function Studio2ExportModal({ isOpen, onClose, title, nodes, edge
         title,
         nodes: nodes.map(n => ({
           id: n.id,
-          label: n.data.label || '',
-          description: n.data.description,
+          label: String(n.data.label || ''),
+          description: String(n.data.description || ''),
           x: n.position.x,
           y: n.position.y,
         })),
-        links: edges.map(e => ({
+        edges: edges.map(e => ({
           source: e.source,
           target: e.target,
         })),
@@ -46,7 +46,6 @@ export default function Studio2ExportModal({ isOpen, onClose, title, nodes, edge
       
       mindmapExporter.download(content, `${title.replace(/\s+/g, '_')}.${extension}`);
       
-      console.log(`✅ Exported as ${format}`);
       setTimeout(onClose, 500);
     } catch (error) {
       console.error('❌ Export failed:', error);

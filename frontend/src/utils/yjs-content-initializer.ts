@@ -34,11 +34,9 @@ export function initializeYjsWithMarkdown(
   tempFieldName: string = '_init_markdown'
 ): void {
   if (!markdownContent || !markdownContent.trim()) {
-    console.log('⚠️ No content to initialize');
     return;
   }
 
-  console.log(`🔧 Storing markdown in Yjs temp field (${markdownContent.length} chars)`);
 
   // Store markdown in a Y.Text field
   const ytext = ydoc.getText(tempFieldName);
@@ -52,7 +50,6 @@ export function initializeYjsWithMarkdown(
     ytext.insert(0, markdownContent);
   });
 
-  console.log('✅ Markdown stored in Yjs, TipTap will parse it on mount');
 }
 
 
@@ -85,7 +82,6 @@ export function initializeYjsWithHtml(
   html: string,
   tempFieldName: string = '_init_html'
 ): void {
-  console.log(`🔧 Storing HTML in Yjs temp field for TipTap to parse (${html.length} chars)`);
 
   const ytext = ydoc.getText(tempFieldName);
   
@@ -96,6 +92,5 @@ export function initializeYjsWithHtml(
     ytext.insert(0, html);
   });
 
-  console.log('✅ HTML stored in Yjs, TipTap will parse it');
 }
 

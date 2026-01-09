@@ -78,7 +78,6 @@ class GuestWorkspaceService {
    * Initialize guest workspaces (migrate from legacy if needed)
    */
   init(): void {
-    console.log('🔵 GuestWorkspaceService.init()');
     
     // Try loading new format
     const savedWorkspaces = localStorage.getItem(GUEST_WORKSPACES_KEY);
@@ -101,13 +100,11 @@ class GuestWorkspaceService {
       
       this.loadFolders();
       this.loadDocuments();
-      console.log('📦 Loaded workspaces from localStorage:', this.workspaces.length);
     } else {
       // Try migrating from legacy format
       const legacyWorkspace = localStorage.getItem(LEGACY_GUEST_WORKSPACE_KEY);
       
       if (legacyWorkspace) {
-        console.log('🔄 Migrating from legacy format');
         this.workspace = JSON.parse(legacyWorkspace);
         
         // Ensure UUID and sync metadata
@@ -123,20 +120,13 @@ class GuestWorkspaceService {
         this.loadDocuments();
         this.saveAll(); // Save in new format
         
-        console.log('✅ Migrated legacy workspace:', this.workspace.name);
       } else {
         // Create new default workspace
-        console.log('🆕 Creating default workspace');
         this.createDefaultWorkspace();
       }
     }
     
-    console.log('✅ GuestWorkspaceService initialized:', {
-      total: this.workspaces.length,
-      current: this.workspace?.name,
-      folders: this.folders.length,
-      documents: this.documents.length,
-    });
+    
   }
 
   /**
@@ -199,7 +189,6 @@ class GuestWorkspaceService {
     // Save to localStorage
     this.save();
     
-    console.log('✅ Default guest workspace created with folders:', this.folders.map(f => f.name));
   }
 
   /**
@@ -226,7 +215,6 @@ class GuestWorkspaceService {
     this.workspace.name = newName.trim();
     this.workspace.updatedAt = new Date().toISOString();
     this.save();
-    console.log(`✅ Workspace renamed to: ${newName}`);
   }
 
   /**
@@ -257,7 +245,6 @@ class GuestWorkspaceService {
     this.workspaces.push(newWorkspace);
     this.saveAll();
     
-    console.log('✅ Guest workspace created:', newWorkspace.name);
     return newWorkspace;
   }
 
@@ -278,7 +265,6 @@ class GuestWorkspaceService {
     this.loadFolders();
     this.loadDocuments();
     
-    console.log('✅ Switched to workspace:', targetWorkspace.name);
   }
 
   /**
@@ -334,7 +320,6 @@ class GuestWorkspaceService {
     this.folders.push(folder);
     this.save();
 
-    console.log('✅ Guest folder created:', name);
     return folder;
   }
 
@@ -350,7 +335,6 @@ class GuestWorkspaceService {
     Object.assign(folder, updates, { updatedAt: new Date().toISOString() });
     this.save();
 
-    console.log('✅ Guest folder updated:', folderId);
   }
 
   /**
@@ -386,7 +370,6 @@ class GuestWorkspaceService {
     this.folders = this.folders.filter(f => f.id !== folderId);
     this.save();
 
-    console.log('✅ Guest folder deleted:', folderId, { cascade });
   }
 
   /**
@@ -453,7 +436,6 @@ class GuestWorkspaceService {
     this.documents.push(doc);
     this.save();
 
-    console.log('✅ Guest document metadata created:', title, `(folder: ${folderId || 'root'})`);
     return doc;
   }
 
@@ -469,7 +451,6 @@ class GuestWorkspaceService {
     Object.assign(doc, updates, { updatedAt: new Date().toISOString() });
     this.save();
 
-    console.log('✅ Guest document metadata updated:', documentId);
   }
 
   /**
@@ -479,7 +460,6 @@ class GuestWorkspaceService {
     this.documents = this.documents.filter(d => d.id !== documentId);
     this.save();
 
-    console.log('✅ Guest document metadata deleted:', documentId);
   }
 
   /**
@@ -495,7 +475,6 @@ class GuestWorkspaceService {
     doc.updatedAt = new Date().toISOString();
     this.save();
 
-    console.log('✅ Guest document moved:', documentId, '→', targetFolderId || 'root');
   }
 
   /**
@@ -574,7 +553,6 @@ class GuestWorkspaceService {
     localStorage.removeItem(LEGACY_GUEST_FOLDERS_KEY);
     localStorage.removeItem(LEGACY_GUEST_DOCUMENTS_KEY);
     
-    console.log('✅ Guest workspace cleared');
   }
 
   /**

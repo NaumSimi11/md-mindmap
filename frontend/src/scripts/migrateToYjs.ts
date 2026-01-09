@@ -19,8 +19,6 @@ interface MigrationStats {
  * Migrates documents from multiple sources to Yjs IndexedDB
  */
 export async function migrateToYjs(dryRun: boolean = false): Promise<MigrationStats> {
-  console.log('🔄 Starting Yjs migration...');
-  console.log(`   Mode: ${dryRun ? 'DRY RUN (no changes)' : 'LIVE MIGRATION'}`);
 
   const stats: MigrationStats = {
     total: 0,
@@ -35,11 +33,9 @@ export async function migrateToYjs(dryRun: boolean = false): Promise<MigrationSt
 
   // Source 1: OfflineDatabase (Dexie IndexedDB)
   try {
-    console.log('\n📦 Checking OfflineDatabase (Dexie)...');
     const offlineDocs = await offlineDB.documents.toArray();
     
     if (offlineDocs.length > 0) {
-      console.log(`   Found ${offlineDocs.length} documents in OfflineDatabase`);
       stats.sources.indexedDB = offlineDocs.length;
       stats.total += offlineDocs.length;
 
@@ -50,7 +46,6 @@ export async function migrateToYjs(dryRun: boolean = false): Promise<MigrationSt
           const exists = await checkYjsDocExists(yjsDbName);
           
           if (exists) {
-            console.log(`   ⏭️  Skipping ${doc.id} (already in Yjs)`);
             stats.skipped++;
             continue;
           }
@@ -74,10 +69,8 @@ export async function migrateToYjs(dryRun: boolean = false): Promise<MigrationSt
             await new Promise<void>(resolve => persistence.once('synced', resolve));
             persistence.destroy();
 
-            console.log(`   ✅ Migrated ${doc.id} (${doc.title})`);
             stats.migrated++;
           } else {
-            console.log(`   [DRY RUN] Would migrate ${doc.id} (${doc.title})`);
             stats.migrated++;
           }
         } catch (error) {
@@ -94,12 +87,10 @@ export async function migrateToYjs(dryRun: boolean = false): Promise<MigrationSt
 
   // Source 2: Guest Workspace (localStorage)
   try {
-    console.log('\n👤 Checking Guest Workspace (localStorage)...');
     guestWorkspaceService.init();
     const guestDocs = guestWorkspaceService.getDocuments();
     
     if (guestDocs.length > 0) {
-      console.log(`   Found ${guestDocs.length} documents in Guest Workspace`);
       stats.sources.guestWorkspace = guestDocs.length;
       stats.total += guestDocs.length;
 
@@ -110,13 +101,11 @@ export async function migrateToYjs(dryRun: boolean = false): Promise<MigrationSt
           const exists = await checkYjsDocExists(yjsDbName);
           
           if (exists) {
-            console.log(`   ✅ ${doc.id} (${doc.title}) - already in Yjs`);
             stats.skipped++;
             continue;
           }
 
           // Guest documents should have content in Yjs from creation
-          console.log(`   ⚠️  ${doc.id} (${doc.title}) - missing from Yjs (should not happen)`);
           stats.failed++;
         } catch (error) {
           console.error(`   ❌ Failed to check ${doc.id}:`, error);
@@ -131,24 +120,8 @@ export async function migrateToYjs(dryRun: boolean = false): Promise<MigrationSt
   }
 
   // Print summary
-  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('📊 MIGRATION SUMMARY');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`   Total documents found:    ${stats.total}`);
-  console.log(`   ✅ Successfully migrated:  ${stats.migrated}`);
-  console.log(`   ⏭️  Skipped (already done): ${stats.skipped}`);
-  console.log(`   ❌ Failed:                 ${stats.failed}`);
-  console.log('\n   Sources:');
-  console.log(`   - IndexedDB (Dexie):      ${stats.sources.indexedDB}`);
-  console.log(`   - Guest Workspace:        ${stats.sources.guestWorkspace}`);
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   
-  if (dryRun) {
-    console.log('\n⚠️  This was a DRY RUN - no changes were made');
-    console.log('   Run migrateToYjs(false) to perform actual migration');
-  } else {
-    console.log('\n🎉 Migration complete!');
-  }
+
 
   return stats;
 }
@@ -186,7 +159,6 @@ async function checkYjsDocExists(dbName: string): Promise<boolean> {
  * Checks that all documents are properly stored in Yjs IndexedDB
  */
 export async function verifyMigration(): Promise<boolean> {
-  console.log('🔍 Verifying migration integrity...');
   
   let allValid = true;
   
@@ -225,7 +197,6 @@ if (typeof window !== 'undefined' && localStorage.getItem('yjs-migration-done') 
   migrateToYjs(false).then((stats) => {
     if (stats.failed === 0) {
       localStorage.setItem('yjs-migration-done', 'true');
-      console.log('✅ Migration completed and marked as done');
     } else {
       console.warn('⚠️ Migration had failures, not marking as complete');
     }

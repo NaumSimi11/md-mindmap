@@ -91,7 +91,6 @@ export function DragDropZone() {
             // Convert file to markdown
             const needsConversion = ['.docx', '.xlsx', '.xls', '.html', '.htm'].includes(ext);
             
-            console.log(`📄 [DragDrop] Processing file: ${file.name} (${ext}, size: ${file.size})`);
             
             const conversionResult = await convertFileToMarkdown(file);
             
@@ -114,7 +113,6 @@ export function DragDropZone() {
               return;
             }
             
-            console.log(`✅ [DragDrop] Converted ${file.name}: ${content.length} chars`);
             
             // Track converted files
             if (needsConversion) {

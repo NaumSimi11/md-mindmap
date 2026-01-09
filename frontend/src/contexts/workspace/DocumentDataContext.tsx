@@ -138,10 +138,7 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
     try {
       const isLocalOnly = currentWorkspace.syncStatus === 'local';
       
-      console.log('🔄 [DocumentData] Refreshing for workspace:', currentWorkspace.name, {
-        isLocalOnly,
-        shouldUseBackendService,
-      });
+   
       
       // Authenticated + cloud workspace: Load from backend AND merge local docs
       if (shouldUseBackendService && !isLocalOnly) {
@@ -151,7 +148,6 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
           const { selectiveSyncService } = await import('@/services/sync/SelectiveSyncService');
           const cloudWorkspaceId = await selectiveSyncService.getCloudWorkspaceId(currentWorkspace.id);
           if (cloudWorkspaceId && cloudWorkspaceId !== currentWorkspace.id) {
-            console.log(`🆔 [DocumentData] Workspace mapping: ${currentWorkspace.id} → ${cloudWorkspaceId}`);
             workspaceIdToFetch = cloudWorkspaceId;
           }
         } catch (err) {
@@ -165,7 +161,6 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
           guestWorkspaceService.getDocuments(currentWorkspace.id),
         ]);
         
-        console.log(`📥 [DocumentData] Loaded ${backendDocs.length} backend doc(s), ${guestDocs.length} guest doc(s)`);
         
         if (backendDocs.length > 0 || guestDocs.length > 0) {
           const backendMapped = backendDocs.map(mapDocumentMetaToDocument);
@@ -211,59 +206,47 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
           return;
         }
         
-        console.log('⚠️ [DocumentData] No backend or guest docs found');
         setDocuments([]);
         return;
       }
       
       // Guest mode OR local-only workspace: Use guest service
       const docs = await guestWorkspaceService.getDocuments(currentWorkspace.id);
-      console.log(`📥 [DocumentData] Loaded ${docs.length} guest doc(s)`);
       
-      // 🔥 BUG FIX #6: Preserve actual sync status from guest IndexedDB
-      // Don't hardcode 'local' - use the real syncStatus (could be 'synced' after push)
+      // 🔥 BUG FIX #7: Don't merge with previous workspace documents!
+      // When switching workspaces, we should REPLACE not merge documents.
+      // The previous merge logic caused documents from other workspaces to persist.
       const mappedDocs = docs.map((d: any) => mapDocumentMetaToDocument(d));
       
-      // Merge with existing docs by canonical key
-      setDocuments(prev => {
-        const map = new Map<string, Document>();
-
-        prev.forEach(d => {
-          const key = getCanonicalDocKey({ id: d.id, sync: d.sync });
-          map.set(key, d);
-        });
-
-        mappedDocs.forEach(d => {
-          const key = getCanonicalDocKey({
-            id: d.id,
-            sync: { cloudId: (d.sync as any)?.cloudId },
-          });
-          const existing = map.get(key);
-          map.set(key, { ...existing, ...d });
-        });
-
-        const merged = Array.from(map.values());
-
-        // Dev invariant check
-        if (process.env.NODE_ENV === 'development') {
-          const seen = new Set<string>();
-          for (const doc of merged) {
-            const key = getCanonicalDocKey({ id: doc.id, sync: doc.sync });
-            if (seen.has(key)) {
-              console.error('[DocumentData] Duplicate canonical key:', {
-                key,
-                docs: merged
-                  .filter(d => getCanonicalDocKey({ id: d.id, sync: d.sync }) === key)
-                  .map(d => ({ id: d.id, title: d.title, sync: d.sync })),
-              });
-              break;
-            }
-            seen.add(key);
-          }
-        }
-
-        return merged;
+      // Deduplicate by canonical key (in case there are duplicates in the same workspace)
+      const map = new Map<string, Document>();
+      mappedDocs.forEach(d => {
+        const key = getCanonicalDocKey({ id: d.id, sync: d.sync });
+        map.set(key, d);
       });
+      
+      const deduped = Array.from(map.values());
+      
+      // Dev invariant check
+      if (process.env.NODE_ENV === 'development') {
+        const seen = new Set<string>();
+        for (const doc of deduped) {
+          const key = getCanonicalDocKey({ id: doc.id, sync: doc.sync });
+          if (seen.has(key)) {
+            console.error('[DocumentData] Duplicate canonical key:', {
+              key,
+              docs: deduped
+                .filter(d => getCanonicalDocKey({ id: d.id, sync: d.sync }) === key)
+                .map(d => ({ id: d.id, title: d.title, sync: d.sync })),
+            });
+            break;
+          }
+          seen.add(key);
+        }
+      }
+      
+      // Replace documents (don't merge with previous workspace)
+      setDocuments(deduped);
     } catch (err) {
       console.error('❌ [DocumentData] Refresh failed:', err);
     }
@@ -272,7 +255,6 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
   // 🔥 FIX: Auto-load documents when workspace is set (initial load + switches)
   useEffect(() => {
     if (currentWorkspace) {
-      console.log('🔄 [DocumentData] Workspace changed, loading documents:', currentWorkspace.name);
       refreshDocuments();
     }
   }, [currentWorkspace, refreshDocuments]);
@@ -302,7 +284,6 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
       const customEvent = event as CustomEvent;
       const { oldId, newId, doc } = customEvent.detail;
       
-      console.log(`🔄 [DocumentData] Document synced: ${oldId} → ${newId}`);
       
       const mappedDoc: Document = {
         id: doc.id,
@@ -336,7 +317,6 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
       const customEvent = event as CustomEvent;
       const { documentId, syncStatus, cloudId, lastSyncedAt, yjsVersion, yjsStateB64 } = customEvent.detail;
       
-      console.log(`✅ [DocumentData] Sync status changed: ${documentId} → ${syncStatus}`);
       
       setDocuments(prev => prev.map(doc => {
         if (doc.id === documentId) {
@@ -356,7 +336,6 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
     };
     
     const handleOfflineDataLoaded = async () => {
-      console.log('🔄 [DocumentData] Offline data loaded, refreshing...');
       if (currentWorkspace) {
         await refreshDocuments();
       }
@@ -367,7 +346,6 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
       const customEvent = event as CustomEvent;
       const { totalOps, totalSuccessful, totalFailed } = customEvent.detail;
       
-      console.log(`🎉 [DocumentData] Batch sync complete: ${totalSuccessful}/${totalOps} successful`);
       
       // Refresh documents to show updated sync status
       if (totalSuccessful > 0) {
@@ -401,17 +379,14 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
       const guestDoc = await guestWorkspaceService.getDocument(documentId);
       
       if (guestDoc) {
-        console.log(`✅ [DocumentData] Found in guest service: ${documentId}`);
         
         // 🔥 BUG FIX #1: Skip backend calls for local-only or pending documents
         if (guestDoc.syncStatus === 'local' || guestDoc.syncStatus === 'pending') {
-          console.log(`✅ [DocumentData] Local-only doc (${guestDoc.syncStatus}), skipping backend fetch`);
           document = mapDocumentMetaToDocument(guestDoc);
           // Skip to hydration
         } 
         // Check if pushed to cloud
         else if (guestDoc.cloudId && guestDoc.syncStatus === 'synced') {
-          console.log(`🔄 [DocumentData] Loading cloud version: ${guestDoc.cloudId}`);
           
           const cloudDoc = await backendWorkspaceService.getDocument(guestDoc.cloudId);
           if (cloudDoc) {
@@ -430,7 +405,6 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
             .catch(() => null);
           
           if (cloudDoc) {
-            console.log(`🔄 [DocumentData] Found cloud version: ${possibleCloudId}`);
             // Update guest doc with mapping
             await guestWorkspaceService.updateDocument(documentId, {
               cloudId: possibleCloudId,
@@ -503,7 +477,7 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
         // Check if the key properties are the same (avoid expensive deep comparison)
         const keyPropsSame = existingDoc.title === document.title &&
                             existingDoc.content === document.content &&
-                            existingDoc.syncStatus === document.syncStatus;
+                            existingDoc.sync?.status === document.sync?.status;
         if (keyPropsSame) {
           return existingDoc; // Return stable reference from documents array
         }
@@ -524,7 +498,6 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
       throw new Error('No workspace selected');
     }
     
-    console.log('🔵 [DocumentData] Creating document:', { type, title, folderId });
     
     // 🔥 LOCAL-FIRST: Always create in guest service first
     const authCheck = authService.isAuthenticated();
@@ -561,7 +534,9 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
       lastOpenedAt: guestDoc.lastOpenedAt ? new Date(guestDoc.lastOpenedAt) : undefined,
       metadata: {},
       sync: { 
-        status: guestDoc.syncStatus || 'local', 
+        status: (['local', 'synced', 'syncing', 'pending', 'conflict'] as const).includes(guestDoc.syncStatus as any)
+          ? (guestDoc.syncStatus as 'local' | 'synced' | 'syncing' | 'pending' | 'conflict')
+          : 'local', 
         localVersion: guestDoc.version || 1 
       }
     };
@@ -572,7 +547,6 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
       return [...prev, doc];
     });
     
-    console.log('✅ [DocumentData] Document created:', doc.title);
     return doc;
   }, [currentWorkspace, shouldUseBackendService]);
 
@@ -640,11 +614,9 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
     
     // Guest mode OR local-only document → use guest service (hard delete)
     if (!shouldUseBackendService || isLocalOnlyDoc) {
-      console.log(`🗑️ [DocumentData] Deleting local document: ${documentId}`);
       try {
         await guestWorkspaceService.deleteDocument(documentId);
         setDocuments(prev => prev.filter(d => d.id !== documentId));
-        console.log(`✅ [DocumentData] Local document deleted: ${documentId}`);
       } catch (error) {
         console.error(`❌ [DocumentData] Failed to delete local document:`, error);
         throw error;
@@ -653,11 +625,9 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
     }
     
     // Backend document → use backend service (soft delete)
-    console.log(`🗑️ [DocumentData] Deleting backend document: ${documentId}`);
     try {
       await backendWorkspaceService.deleteDocument(documentId);
       setDocuments(prev => prev.filter(d => d.id !== documentId));
-      console.log(`✅ [DocumentData] Backend document deleted: ${documentId}`);
     } catch (error) {
       console.error(`❌ [DocumentData] Failed to delete backend document:`, error);
       // 🔥 FIX: Don't update UI if backend deletion failed
@@ -667,7 +637,6 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
 
   // Auto-save document
   const autoSaveDocument = useCallback(async (documentId: string, content: string) => {
-    console.log(`💾 [DocumentData] Auto-save: ${documentId}, ${content.length} chars`);
     
     // Get binary state for dual-write
     const { yjsDocumentManager } = await import('@/services/yjs/YjsDocumentManager');
@@ -687,7 +656,6 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
           : doc
       ));
       
-      console.log(`✅ [DocumentData] Saved to guest IndexedDB: ${content.length} chars`);
       return;
     }
     
@@ -708,7 +676,6 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
             : doc
         ));
         
-        console.log(`✅ [DocumentData] Saved to backend cache: ${content.length} chars`);
       } catch (err) {
         console.warn('⚠️ [DocumentData] Failed to save to cache:', err);
       }

@@ -97,11 +97,9 @@ export default function PresentationEditor() {
       const sessionKey = localStorage.getItem('presentation-session');
 
       if (sessionKey) {
-        console.log('🎤 Generating presentation from session:', sessionKey);
         await generateFromSession(sessionKey);
       } else if (actualId) {
         // Load existing presentation from workspace or localStorage
-        console.log('📂 Loading presentation:', actualId);
         loadExistingPresentation(actualId);
       } else {
         setError('No presentation ID or session found');
@@ -124,8 +122,7 @@ export default function PresentationEditor() {
       const mindmapDataStr = localStorage.getItem(`mindmap-${sessionKey}`);
       const mindmapData = mindmapDataStr ? JSON.parse(mindmapDataStr) : null;
 
-      console.log('📝 Editor content length:', editorContent.length);
-      console.log('🧠 Mindmap nodes:', mindmapData?.nodes?.length || 0);
+
 
       if (!editorContent && !mindmapData) {
         throw new Error('No content found to generate presentation from');
@@ -150,7 +147,6 @@ export default function PresentationEditor() {
       localStorage.removeItem(`editor-${sessionKey}`);
       localStorage.removeItem(`mindmap-${sessionKey}`);
 
-      console.log('✅ Presentation generated successfully!');
     } catch (error) {
       console.error('❌ Generation failed:', error);
       setError(error instanceof Error ? error.message : 'Failed to generate presentation');
@@ -166,7 +162,6 @@ export default function PresentationEditor() {
       try {
         const parsed = JSON.parse(workspaceDoc.content);
         setPresentation(parsed);
-        console.log('✅ Loaded presentation from workspace:', parsed.title);
         return;
       } catch (e) {
         console.error('Failed to parse workspace presentation:', e);
@@ -178,7 +173,6 @@ export default function PresentationEditor() {
     if (saved) {
       const parsed = JSON.parse(saved);
       setPresentation(parsed);
-      console.log('✅ Loaded presentation from localStorage:', parsed.title);
     } else {
       setError('Presentation not found');
     }
@@ -186,7 +180,6 @@ export default function PresentationEditor() {
 
   const savePresentationToStorage = (pres: Presentation) => {
     localStorage.setItem(`presentation-${pres.id}`, JSON.stringify(pres));
-    console.log('💾 Saved presentation to localStorage');
   };
 
   const handleSave = () => {
@@ -194,7 +187,6 @@ export default function PresentationEditor() {
       // Update updatedAt timestamp
       presentation.metadata.updatedAt = new Date();
       savePresentationToStorage(presentation);
-      console.log('💾 Presentation saved');
     }
   };
 
@@ -292,7 +284,6 @@ export default function PresentationEditor() {
       slides: updatedSlides,
     };
 
-    console.log('🔄 Updating slide:', updatedSlide.id, updatedSlide);
     setPresentation(updatedPresentation);
     savePresentationToStorage(updatedPresentation);
   };
@@ -318,12 +309,10 @@ export default function PresentationEditor() {
     };
 
     handleUpdateSlide(updatedSlide);
-    console.log('✅ Added block:', blockType, newBlock);
   };
 
   // Add image to current slide
   const handleAddImage = (imageUrl: string) => {
-    console.log('🖼️ handleAddImage called with:', imageUrl);
     if (!presentation) {
       console.error('❌ No presentation!');
       return;
@@ -335,7 +324,6 @@ export default function PresentationEditor() {
       return;
     }
 
-    console.log('📝 Current slide before:', currentSlide);
 
     // Add image to slide content
     const updatedSlide: Slide = {
@@ -346,9 +334,7 @@ export default function PresentationEditor() {
       },
     };
 
-    console.log('📝 Updated slide:', updatedSlide);
     handleUpdateSlide(updatedSlide);
-    console.log('✅ Image added successfully!');
   };
 
   const handlePresent = () => {

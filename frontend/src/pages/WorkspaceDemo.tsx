@@ -19,7 +19,6 @@ export default function WorkspaceDemo() {
     const doc = workspaceService.getDocument(documentId);
     
     if (doc) {
-      console.log('📄 Document selected:', doc.title, `(${doc.type})`);
       setCurrentDocId(documentId);
       setCurrentDoc(doc);
     }

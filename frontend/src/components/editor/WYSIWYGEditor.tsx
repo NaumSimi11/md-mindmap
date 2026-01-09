@@ -151,6 +151,12 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
   const navigate = useNavigate();
   const [title, setTitle] = useState(documentTitle);
 
+  // 🔥 BUG FIX: Sync title state with documentTitle prop
+  // Without this, export uses stale "Untitled Document" even after user edits title
+  useEffect(() => {
+    setTitle(documentTitle);
+  }, [documentTitle]);
+
   // Zustand Store
   const {
     showAIModal, setShowAIModal,
@@ -221,7 +227,6 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
   // Get Yjs document (may be undefined initially)
   const { ydoc, websocketProvider, status, syncStatus: yjsSyncStatus } = useYjsDocument(documentId);
   
-  console.log('✅ [STEP 3] Yjs document status:', status, 'for document:', documentId);
 
   // 🔥 Collaboration cursor user info
   const currentUser = useMemo(() => {
@@ -279,7 +284,6 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
     const checkInterval = setInterval(() => {
       try {
         if (editor.view && editor.view.dom) {
-          console.log('✅ [STEP 3] TipTap View is now ready for', documentId);
           setViewReady(true);
           clearInterval(checkInterval);
         }
@@ -548,7 +552,6 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
     const text = hasSelection ? editor.state.doc.textBetween(from, to, '\n') : editor.getText();
     const prompt = generateAIFormatPrompt(text);
     setShowAIModal(true);
-    console.log('AI Format prompt:', prompt);
   };
 
   const exportAsMarkdown = () => {
@@ -600,7 +603,6 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
       
       // 🔥 FIX: Get live content from editor, not stale cache
       const liveContent = htmlToMarkdown('', editor);
-      console.log('☁️ [Cloud Save] Sending content:', liveContent.substring(0, 100) + '...');
       
       const result = await selectiveSyncService.pushDocument(documentId, liveContent);
       
@@ -801,7 +803,7 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
               variant: 'destructive' 
             });
           }}
-          onShare={() => console.log('Share clicked')}
+       
           onShowShareModal={isAuthenticated && documentId && userRole ? () => setShowShareModal(true) : undefined}
           onShowVersionHistory={isAuthenticated && documentId && userRole ? () => setShowVersionHistory(true) : undefined}
         />

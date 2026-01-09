@@ -131,7 +131,6 @@ export const AISidebarChat: React.FC<AISidebarChatProps> = ({
             
             // Check if user wants to accept
             if (acceptCommands.some(cmd => normalizedInput === cmd || normalizedInput.startsWith(cmd))) {
-                console.log('✅ User accepted staged content');
                 await acceptStaged();
                 setInput('');
                 return;
@@ -139,21 +138,18 @@ export const AISidebarChat: React.FC<AISidebarChatProps> = ({
             
             // Check if user wants to cancel
             if (cancelCommands.some(cmd => normalizedInput === cmd || normalizedInput.startsWith(cmd))) {
-                console.log('❌ User cancelled staged content');
                 rejectStaged();
                 setInput('');
                 return;
             }
             
             // Otherwise, treat as modification request
-            console.log('✏️ User requested modification:', input);
             await modifyStaged(input);
             setInput('');
             return;
         }
         
         // No staged content - generate new
-        console.log('🆕 Generating new content for:', input);
         await sendMessage(input, currentModel);
         setInput('');
     };

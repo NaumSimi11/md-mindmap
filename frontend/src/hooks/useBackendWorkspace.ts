@@ -63,8 +63,6 @@ export function useBackendWorkspace() {
           // Save to localStorage
           localStorage.setItem(LAST_WORKSPACE_KEY, workspace.id);
           
-          console.log('✅ Workspace hook initialized:', workspace.name);
-          console.log('📦 Total workspaces:', allWorkspaces.length);
         }
       } catch (err: any) {
         console.error('❌ Failed to initialize workspaces:', err);
@@ -95,7 +93,6 @@ export function useBackendWorkspace() {
       setDocuments([...docs]);
       localStorage.setItem(LAST_WORKSPACE_KEY, workspace.id);
       
-      console.log('✅ Switched to workspace:', workspace.name, '| Docs:', docs.length);
     } catch (err) {
       console.error('❌ Failed to switch workspace:', err);
       throw err;
@@ -115,7 +112,6 @@ export function useBackendWorkspace() {
     // Automatically switch to the new workspace
     await switchWorkspace(newWorkspace);
     
-    console.log('✅ Workspace created:', newWorkspace.name);
     return newWorkspace;
   }, [switchWorkspace]);
 

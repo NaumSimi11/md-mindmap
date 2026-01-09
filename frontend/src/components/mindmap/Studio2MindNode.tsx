@@ -261,14 +261,10 @@ function Studio2MindNode({ data, id, selected }: NodeProps) {
             className="p-1.5 hover:bg-gray-100 rounded transition-colors"
             title="AI Enhance"
             onClick={(e) => {
-              console.log('🔥🔥🔥 SPARKLES ICON CLICKED! 🔥🔥🔥');
-              console.log('Node ID:', id);
-              console.log('Node Label:', nodeData.label);
-              console.log('onAIEnhance exists?', !!nodeData.onAIEnhance);
+             
               e.stopPropagation();
 
               if (nodeData.onAIEnhance) {
-                console.log('✅ Calling onAIEnhance...');
                 nodeData.onAIEnhance(id);
               } else {
                 console.error('❌ onAIEnhance is NOT DEFINED!');

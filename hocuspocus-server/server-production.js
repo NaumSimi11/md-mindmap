@@ -53,15 +53,9 @@ const server = Server.configure({
     const url = data.request?.url || '';
     const pathMatch = url.match(/^\/([^?]+)/);
     const documentName = pathMatch ? pathMatch[1] : '';
-    
-    console.log(`🔍 [ON_REQUEST] Incoming WebSocket connection:`);
-    console.log(`   URL: ${url}`);
-    console.log(`   Extracted documentName: "${documentName}"`);
-    
     // Override the documentName in the data object
     if (documentName && !data.documentName) {
       data.documentName = documentName;
-      console.log(`   ✅ Set documentName to: "${documentName}"`);
     }
     
     return data;
@@ -85,15 +79,6 @@ const server = Server.configure({
    */
   async onConnect({ documentName, requestHeaders, connection, context, request }) {
     const user = context?.user?.name || 'Guest';
-    console.log(`
-🔌 Connection established
-👤 User: ${user}
-📄 Document: "${documentName}"
-📄 Document length: ${documentName ? documentName.length : 0}
-📄 Document bytes: ${documentName ? Buffer.from(documentName).toString('hex') : 'none'}
-🌐 URL: ${request?.url || 'unknown'}
-🌐 IP: ${requestHeaders['x-forwarded-for'] || connection.readyState}
-    `);
   },
 
   /**
@@ -101,7 +86,6 @@ const server = Server.configure({
    */
   async onDisconnect({ documentName, context }) {
     const user = context?.user?.name || 'Guest';
-    console.log(`🔌 Connection closed: ${user} → ${documentName}`);
   },
 
   /**
@@ -109,7 +93,6 @@ const server = Server.configure({
    */
   async onChange({ documentName, context, document }) {
     const user = context?.user?.name || 'Guest';
-    console.log(`✏️  Document updated: ${documentName} by ${user}`);
   },
 
   /**

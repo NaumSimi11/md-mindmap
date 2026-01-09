@@ -58,6 +58,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { NewDocumentModal } from './NewDocumentModal';
+import { RenameFolderModal } from './RenameFolderModal';
 import { guestWorkspaceService } from '@/services/workspace/GuestWorkspaceService';
 import { useSharedWithMeDocuments } from '@/hooks/useSharedWithMeDocuments';
 import { Badge } from '@/components/ui/badge';
@@ -88,7 +89,7 @@ export function WorkspaceSidebar({
     deleteDocument: contextDeleteDocument,
     createDocument, // 🔥 ADD: Need this for document creation
   } = useWorkspace();
-  const { folderTree, createFolder, updateFolder, deleteFolder } = useBackendFolders();
+  const { folderTree, createFolder, updateFolder, deleteFolder, isLoading: foldersLoading } = useBackendFolders();
   
   // Force re-render on workspace change (controlled by state for rename)
   
@@ -108,17 +109,20 @@ export function WorkspaceSidebar({
   
   const orphanDocs = docsInFolders.filter(doc => !folderIds.has(doc.folderId!));
   
-  console.log('🔍 WorkspaceSidebar render:', {
-    workspace: currentWorkspace?.name,
-    total: backendDocuments.length,
-    rootDocs: rootDocs.length,
-    docsInFolders: docsInFolders.length,
-    orphanDocs: orphanDocs.length,
-    folders: folderTree.length
-  });
-  
-  if (orphanDocs.length > 0) {
-    console.warn('⚠️ Orphan documents (folder_id points to non-existent folder):', orphanDocs.map(d => ({title: d.title, folderId: d.folderId})));
+  // Only warn about orphans when folders have finished loading
+  // During loading, folders might not be in the tree yet
+  if (orphanDocs.length > 0 && !foldersLoading && folderTree.length >= 0) {
+    // Additional check: only warn if we've actually tried loading folders
+    // (folderTree.length === 0 could mean no folders exist, which is valid)
+    const hasAnyDocsInFolders = docsInFolders.length > 0;
+    const shouldWarn = hasAnyDocsInFolders && folderIds.size === 0 && folderTree.length === 0
+      ? false  // Folders haven't loaded yet
+      : true;  // Folders loaded, orphans are real
+    
+    if (shouldWarn) {
+      console.warn('⚠️ Orphan documents (folder_id points to non-existent folder):', 
+        orphanDocs.map(d => ({title: d.title, folderId: d.folderId})));
+    }
   }
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [activeSection, setActiveSection] = useState<'all' | 'recent' | 'starred' | 'shared'>('all');
@@ -126,6 +130,12 @@ export function WorkspaceSidebar({
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [selectedFolderIdForNewDoc, setSelectedFolderIdForNewDoc] = useState<string | null>(null); // 🔥 NEW: Track folder for new document
+  const [selectedFolderNameForNewDoc, setSelectedFolderNameForNewDoc] = useState<string | null>(null); // 🔥 NEW: Track folder name for display
+  
+  // Rename folder modal state
+  const [showRenameFolderModal, setShowRenameFolderModal] = useState(false);
+  const [folderToRename, setFolderToRename] = useState<{ id: string; name: string } | null>(null);
   // Workspace rename UI moved to the sidebar WorkspaceSwitcher (single source of truth)
   const [workspaceKey, setWorkspaceKey] = useState(0);
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
@@ -173,11 +183,15 @@ export function WorkspaceSidebar({
     setShowCreateFolderModal(true);
   };
 
-  const handleRenameFolder = async (folderId: string, currentName: string) => {
-    const name = prompt('Rename folder:', currentName);
-    if (name && name !== currentName) {
-      await updateFolder(folderId, { name });
-    }
+  const handleRenameFolder = (folderId: string, currentName: string) => {
+    // Open the rename modal instead of browser prompt
+    setFolderToRename({ id: folderId, name: currentName });
+    setShowRenameFolderModal(true);
+  };
+
+  const handleRenameFolderSubmit = async (newName: string) => {
+    if (!folderToRename) return;
+    await updateFolder(folderToRename.id, { name: newName });
   };
 
   const handleDeleteFolder = async (folderId: string) => {
@@ -238,7 +252,6 @@ export function WorkspaceSidebar({
     if (confirm(message)) {
       try {
         await deleteFolder(folderId, true); // cascade = true
-        console.log(`✅ Folder "${folderName}" deleted (${subfolderCount} subfolders, ${docCount} documents)`);
       } catch (error) {
         console.error('❌ Failed to delete folder:', error);
         alert('Failed to delete folder. Please try again.');
@@ -260,11 +273,9 @@ export function WorkspaceSidebar({
     
     try {
       await contextDeleteDocument(deletedDocId);
-      console.log('✅ Document deleted successfully');
       
       // 🔥 FIX: If we deleted the currently viewed document, navigate away
       if (currentDocumentId === deletedDocId) {
-        console.log('📍 Navigating away from deleted document');
         navigate('/workspace');
       }
     } catch (error) {
@@ -281,7 +292,6 @@ export function WorkspaceSidebar({
     
     try {
       await backendUpdateDocument(documentId, { starred: !doc.starred });
-      console.log('✅ Toggled star:', doc.title);
     } catch (error) {
       console.error('Failed to toggle star:', error);
     }
@@ -290,10 +300,16 @@ export function WorkspaceSidebar({
   const handleMoveDocument = async (documentId: string, folderId: string | null) => {
     try {
       await backendUpdateDocument(documentId, { folderId });
-      console.log(`✅ Moved document to folder: ${folderId || 'root'}`);
     } catch (error) {
       console.error('Failed to move document:', error);
     }
+  };
+
+  // 🔥 NEW: Create document directly in folder
+  const handleCreateDocumentInFolder = (folderId: string, folderName: string) => {
+    setSelectedFolderIdForNewDoc(folderId);
+    setSelectedFolderNameForNewDoc(folderName);
+    setShowNewDocModal(true);
   };
 
   // Sync handlers
@@ -307,7 +323,6 @@ export function WorkspaceSidebar({
     try {
       const result = await selectiveSyncService.pushDocument(documentId);
       if (result.success) {
-        console.log('✅ Document pushed to cloud');
         // 🔥 Refresh to update sync status badge in UI
         await refreshDocuments();
       } else if (result.status === 'conflict') {
@@ -331,7 +346,6 @@ export function WorkspaceSidebar({
     try {
       const result = await selectiveSyncService.pullDocument(documentId);
       if (result.success) {
-        console.log('✅ Document pulled from cloud');
         await refreshDocuments();
       } else if (result.status === 'conflict') {
         alert(`Conflict: ${result.error}\n\nPlease resolve the conflict manually.`);
@@ -347,7 +361,6 @@ export function WorkspaceSidebar({
   const handleMarkLocalOnly = async (documentId: string) => {
     try {
       await selectiveSyncService.markAsLocalOnly(documentId);
-      console.log('✅ Document marked as local-only');
       await refreshDocuments();
     } catch (error) {
       console.error('❌ Failed to mark as local-only:', error);
@@ -509,12 +522,19 @@ export function WorkspaceSidebar({
       {/* New Document Modal */}
       <NewDocumentModal
         isOpen={showNewDocModal}
-        onClose={() => setShowNewDocModal(false)}
+        onClose={() => {
+          setShowNewDocModal(false);
+          setSelectedFolderIdForNewDoc(null); // 🔥 Clear folder selection on close
+          setSelectedFolderNameForNewDoc(null);
+        }}
         onDocumentCreated={(docId, doc) => {
-          console.log('✅ Document created in sidebar:', docId, doc);
+          setSelectedFolderIdForNewDoc(null); // 🔥 Clear folder selection after creation
+          setSelectedFolderNameForNewDoc(null);
           // Navigate directly - document is already in WorkspaceContext state
           navigate(`/workspace/doc/${docId}/edit`);
         }}
+        folderId={selectedFolderIdForNewDoc} // 🔥 NEW: Pass selected folder ID
+        folderName={selectedFolderNameForNewDoc} // 🔥 NEW: Pass selected folder name
         createDocument={createDocument} // 🔥 PASS: createDocument function
       />
 
@@ -525,6 +545,17 @@ export function WorkspaceSidebar({
         onCreate={async (data) => {
           await createFolder(data);
         }}
+      />
+
+      {/* Rename Folder Modal */}
+      <RenameFolderModal
+        isOpen={showRenameFolderModal}
+        onClose={() => {
+          setShowRenameFolderModal(false);
+          setFolderToRename(null);
+        }}
+        currentName={folderToRename?.name || ''}
+        onRename={handleRenameFolderSubmit}
       />
 
       {/* Rename Workspace Dialog removed (handled by Workspace.tsx via AdaptiveSidebar WorkspaceSwitcher) */}
@@ -715,7 +746,6 @@ export function WorkspaceSidebar({
                   document={doc}
                   isActive={doc.id === currentDocumentId}
                   onClick={() => {
-                    console.log('📄 [Sidebar] Document clicked:', doc.id, doc.title);
                     onDocumentSelect(doc.id);
                   }}
                   onToggleStar={() => handleToggleStar(doc.id)}
@@ -745,6 +775,7 @@ export function WorkspaceSidebar({
                     onDelete={() => handleDeleteFolder(folder.id)}
                     onDeleteDocument={handleDeleteDocument} // 🔥 FIX: Pass delete handler
                     onToggleStar={handleToggleStar} // 🔥 FIX: Pass star handler
+                    onCreateDocument={handleCreateDocumentInFolder} // 🔥 NEW: Create document in folder
                     onPushToCloud={handlePushToCloud}
                     onPullFromCloud={handlePullFromCloud}
                     onMarkLocalOnly={handleMarkLocalOnly}
@@ -822,6 +853,7 @@ interface BackendFolderItemProps {
   onDelete: () => void;
   onDeleteDocument: (documentId: string) => void; // 🔥 ADD: For deleting documents inside folder
   onToggleStar: (documentId: string) => void; // 🔥 ADD: For starring documents inside folder
+  onCreateDocument: (folderId: string, folderName: string) => void; // 🔥 NEW: Create document directly in folder
   currentDocumentId?: string;
   onDocumentSelect: (documentId: string) => void;
   getDocumentIcon: (type: Document['type']) => JSX.Element;
@@ -853,6 +885,7 @@ function BackendFolderItem({
   onDelete,
   onDeleteDocument, // 🔥 ADD
   onToggleStar, // 🔥 ADD
+  onCreateDocument, // 🔥 NEW: Create document in folder
   onPushToCloud,
   onPullFromCloud,
   onMarkLocalOnly,
@@ -915,6 +948,18 @@ function BackendFolderItem({
           ({documentsInFolder.length})
         </span>
 
+        {/* 🔥 NEW: Quick Add Document Button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onCreateDocument(folder.id, folder.name);
+          }}
+          className="p-1 hover:bg-primary/10 rounded flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+          title={`Create document in ${folder.name}`}
+        >
+          <Plus className="h-3.5 w-3.5 text-primary" />
+        </button>
+
         {/* 3-dot menu - ALWAYS VISIBLE */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -926,6 +971,14 @@ function BackendFolderItem({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {/* 🔥 NEW: New Document in Folder */}
+            <DropdownMenuItem onClick={(e) => {
+              e.stopPropagation();
+              onCreateDocument(folder.id, folder.name);
+            }}>
+              <Plus className="h-3.5 w-3.5 mr-2" />
+              New Document
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={(e) => {
               e.stopPropagation();
               onRename(folder.name);
@@ -979,8 +1032,9 @@ function BackendFolderItem({
               onToggle={() => {}}
               onRename={onRename}
               onDelete={onDelete}
-              onDeleteDocument={onDeleteDocument} // 🔥 FIX: Pass through to subfolders
-              onToggleStar={onToggleStar} // 🔥 FIX: Pass through to subfolders
+              onDeleteDocument={onDeleteDocument}
+              onToggleStar={onToggleStar}
+              onCreateDocument={onCreateDocument}
               onPushToCloud={onPushToCloud}
               onPullFromCloud={onPullFromCloud}
               onMarkLocalOnly={onMarkLocalOnly}
@@ -1095,26 +1149,26 @@ function DocumentItem({
       )}
 
       {/* 🔥 BLOCKING ACTION 2: Enhanced Sync Status Badge */}
-      {document.sync && (
+      {(document as any).sync && (
         <>
-          {document.sync.status === 'local' && (
+          {(document as any).sync.status === 'local' && (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700" title="Local only - not synced to cloud">
               🔒 Local
             </span>
           )}
-          {document.sync.status === 'synced' && (
+          {(document as any).sync.status === 'synced' && (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700" title="Synced to cloud">
               ☁️ Synced
             </span>
           )}
-          {document.sync.status === 'syncing' && (
-            <SyncStatusIcon status={document.sync.status} size="sm" />
+          {(document as any).sync?.status === 'syncing' && (
+            <SyncStatusIcon status={(document as any).sync.status} size="sm" />
           )}
-          {document.sync.status === 'conflict' && (
-            <SyncStatusIcon status={document.sync.status} size="sm" />
+          {(document as any).sync?.status === 'conflict' && (
+            <SyncStatusIcon status={(document as any).sync.status} size="sm" />
           )}
-          {document.sync.status === 'error' && (
-            <SyncStatusIcon status={document.sync.status} size="sm" />
+          {(document as any).sync?.status === 'error' && (
+            <SyncStatusIcon status={(document as any).sync.status} size="sm" />
           )}
         </>
       )}
@@ -1143,9 +1197,9 @@ function DocumentItem({
           {isAuthenticated && isOnlineMode && (
             <>
               {/* If local → Enable Cloud Sync */}
-              {(!document.sync || document.sync.status === 'local') && onPushToCloud && (
+              {(!(document as any).sync || (document as any).sync.status === 'local') && onPushToCloud && (
                 <DropdownMenuItem 
-                  data-testid={`enable-sync-${document.slug}`}
+                  data-testid={`enable-sync-${slug}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     onPushToCloud();
@@ -1157,7 +1211,7 @@ function DocumentItem({
               )}
               
               {/* If synced → Show sync status + disable option */}
-              {document.sync?.status === 'synced' && (
+              {(document as any).sync?.status === 'synced' && (
                 <>
                   <DropdownMenuItem disabled className="opacity-70">
                     <Cloud className="h-3.5 w-3.5 mr-2 text-green-500" />
@@ -1176,7 +1230,7 @@ function DocumentItem({
               )}
               
               {/* If syncing → Show syncing status */}
-              {document.sync?.status === 'syncing' && (
+              {(document as any).sync?.status === 'syncing' && (
                 <DropdownMenuItem disabled className="opacity-70">
                   <RefreshCw className="h-3.5 w-3.5 mr-2 animate-spin" />
                   Syncing...

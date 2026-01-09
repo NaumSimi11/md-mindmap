@@ -58,47 +58,22 @@ export const AIEnhanceModal: React.FC<AIEnhanceModalProps> = ({
 
   // Render current diagram - with delay to ensure DOM is ready
   useEffect(() => {
-    console.group('🔄 MODAL LIFECYCLE: Current Diagram Effect');
-    console.log('Trigger params:', { 
-      isOpen, 
-      hasCode: !!currentCode, 
-      codeLength: currentCode?.length,
-      activeTab,
-      hasRef: !!currentPreviewRef.current,
-      currentZoom
-    });
-    
     if (isOpen && currentCode) {
-      console.log('✅ Modal is OPEN with code, scheduling render in 100ms...');
       // Small delay to ensure DOM is mounted
       const timer = setTimeout(() => {
-        console.log('⏰ Timer fired after 100ms, checking ref...');
         if (currentPreviewRef.current) {
-          console.log('✅ Ref exists! Rendering current diagram with zoom:', currentZoom);
           renderDiagram(currentCode, currentPreviewRef.current, 'current', currentZoom);
-        } else {
-          console.warn('❌ Ref not ready after 100ms delay!');
         }
       }, 100);
-      console.groupEnd();
       return () => {
-        console.log('🧹 Cleanup: Clearing render timer');
         clearTimeout(timer);
       };
-    } else {
-      console.log('⏸️ Effect skipped:', {
-        reason: !isOpen ? 'Modal closed' : 'No code',
-        isOpen,
-        hasCode: !!currentCode
-      });
-      console.groupEnd();
     }
   }, [isOpen, currentCode, activeTab]);
 
   // Render enhanced diagram
   useEffect(() => {
     if (enhancedCode && enhancedPreviewRef.current) {
-      console.log('✅ Rendering enhanced diagram with zoom:', enhancedZoom);
       renderDiagram(enhancedCode, enhancedPreviewRef.current, 'enhanced', enhancedZoom);
     }
   }, [enhancedCode]);
@@ -111,42 +86,12 @@ export const AIEnhanceModal: React.FC<AIEnhanceModalProps> = ({
   }, [isOpen, currentCode]);
 
   const renderDiagram = async (code: string, container: HTMLElement, prefix: string, initialZoom: number = 1) => {
-    console.group(`🎨 RENDER DIAGRAM: ${prefix.toUpperCase()}`);
-    console.log('📋 Parameters:', { 
-      prefix,
-      hasContainer: !!container, 
-      codeLength: code?.length,
-      initialZoom,
-      containerClass: container?.className
-    });
-    
-    if (!container) {
-      console.warn('❌ Container not ready for', prefix);
-      console.groupEnd();
-      return;
-    }
-    
-    // Log container state BEFORE render
-    const containerRect = container.getBoundingClientRect();
-    console.log('📦 Container BEFORE render:', {
-      width: containerRect.width,
-      height: containerRect.height,
-      top: containerRect.top,
-      left: containerRect.left
-    });
+    if (!container) return;
     
     try {
       const id = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-      console.log(`🔷 Rendering mermaid with ID: ${id}`);
-      
       const { svg } = await mermaid.render(id, code);
-      console.log(`✅ Mermaid rendered successfully!`, { 
-        svgLength: svg.length,
-        svgPreview: svg.substring(0, 100) + '...'
-      });
-      
       container.innerHTML = svg;
-      console.log(`✅ SVG inserted into DOM`);
       
       // Style SVG for SMART responsiveness with FIT-TO-VIEW
       const svgElement = container.querySelector('svg');
@@ -154,7 +99,7 @@ export const AIEnhanceModal: React.FC<AIEnhanceModalProps> = ({
         // Get original dimensions (robust): prefer viewBox → width/height → bbox → container
         const parseNumber = (val: string | null): number | undefined => {
           if (!val) return undefined;
-          if (val.includes('%')) return undefined; // percentages are ambiguous
+          if (val.includes('%')) return undefined;
           const n = parseFloat(val);
           return Number.isFinite(n) ? n : undefined;
         };
@@ -194,53 +139,27 @@ export const AIEnhanceModal: React.FC<AIEnhanceModalProps> = ({
           originalHeight = originalHeight || containerSize.height || 600;
         }
 
-        console.log('📏 SVG Original Dimensions (final):', { originalWidth, originalHeight });
-        
         // Set viewBox for proper scaling
         if (!svgElement.getAttribute('viewBox')) {
           svgElement.setAttribute('viewBox', `0 0 ${originalWidth} ${originalHeight}`);
-          console.log('✅ ViewBox set:', `0 0 ${originalWidth} ${originalHeight}`);
         }
         
         // Get container dimensions AFTER SVG inserted
         const containerRectAfter = container.getBoundingClientRect();
-        const containerWidth = containerRectAfter.width - 32; // Account for padding
+        const containerWidth = containerRectAfter.width - 32;
         const containerHeight = containerRectAfter.height - 32;
-        
-        console.log('📦 Container AFTER SVG inserted:', {
-          width: containerRectAfter.width,
-          height: containerRectAfter.height,
-          usableWidth: containerWidth,
-          usableHeight: containerHeight
-        });
         
         // Calculate scale to fit
         const scaleX = containerWidth / originalWidth;
         const scaleY = containerHeight / originalHeight;
-        const autoScale = Math.min(scaleX, scaleY); // base fit (allow up-scaling via user zoom)
-        
-        console.log('🔢 Scale Calculation:', {
-          scaleX: scaleX.toFixed(3),
-          scaleY: scaleY.toFixed(3),
-          autoScale: autoScale.toFixed(3),
-          formula: `min(${scaleX.toFixed(2)}, ${scaleY.toFixed(2)}, 1.0) = ${autoScale.toFixed(2)}`
-        });
+        const autoScale = Math.min(scaleX, scaleY);
         
         // Remove fixed dimensions
         svgElement.removeAttribute('width');
         svgElement.removeAttribute('height');
-        console.log('✅ Fixed width/height attributes removed');
         
         // Calculate final scale (fit × user zoom)
         const finalScale = autoScale * initialZoom;
-        
-        console.log('🎯 Final Scale Calculation:', {
-          autoScale: autoScale.toFixed(3),
-          userZoom: initialZoom.toFixed(2),
-          finalScale: finalScale.toFixed(3),
-          formula: `${autoScale.toFixed(2)} × ${initialZoom.toFixed(2)} = ${finalScale.toFixed(2)}`,
-          percentage: `${Math.round(finalScale * 100)}%`
-        });
         
         // Use CSS transform for zoom (doesn't affect layout!)
         svgElement.style.width = `${originalWidth}px`;
@@ -251,31 +170,8 @@ export const AIEnhanceModal: React.FC<AIEnhanceModalProps> = ({
         svgElement.style.maxHeight = 'none';
         svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet');
         svgElement.style.transition = 'transform 0.2s ease';
-        
-        console.log('✅ SVG Styles Applied:', {
-          width: svgElement.style.width,
-          height: svgElement.style.height,
-          transform: svgElement.style.transform,
-          transformOrigin: svgElement.style.transformOrigin,
-          transition: svgElement.style.transition
-        });
-        
-        // Log final container state
-        const finalContainerRect = container.getBoundingClientRect();
-        console.log('📦 Container FINAL state:', {
-          width: finalContainerRect.width,
-          height: finalContainerRect.height,
-          didGrow: finalContainerRect.width > containerRect.width || finalContainerRect.height > containerRect.height,
-          widthDiff: finalContainerRect.width - containerRect.width,
-          heightDiff: finalContainerRect.height - containerRect.height
-        });
-        
-        console.log('🎉 RENDER COMPLETE!');
-      } else {
-        console.error('❌ SVG element not found in container!');
       }
     } catch (error) {
-      console.error('💥 RENDER ERROR:', error);
       container.innerHTML = `
         <div class="text-red-500 text-xs p-4">
           <p class="font-semibold mb-1">⚠️ Render Error</p>
@@ -283,8 +179,6 @@ export const AIEnhanceModal: React.FC<AIEnhanceModalProps> = ({
         </div>
       `;
     }
-    
-    console.groupEnd();
   };
 
   const generateSuggestions = async () => {
@@ -349,8 +243,6 @@ Rules:
         setChatInput('');
       }
     } catch (err: any) {
-      console.error('Enhancement error:', err);
-      
       if (err.message?.includes('Rate limit')) {
         setError('Rate limit exceeded. Please wait a moment.');
       } else if (err.message?.includes('API key')) {
@@ -424,116 +316,54 @@ Rules:
 
   // Zoom controls for current preview
   const handleCurrentZoomIn = () => {
-    console.log('🔍 ZOOM IN: Current Preview');
-    console.log('  Old zoom:', currentZoom);
-    // Larger, more satisfying step: 50%
     const newZoom = Math.min(currentZoom + 0.5, 5);
-    console.log('  New zoom:', newZoom, `(${Math.round(newZoom * 100)}%)`);
-    console.log('  Capped at max:', newZoom === 3 ? 'YES' : 'NO');
     setCurrentZoom(newZoom);
     if (currentPreviewRef.current && currentCode) {
-      console.log('  ✅ Re-rendering with new zoom...');
       renderDiagram(currentCode, currentPreviewRef.current, 'current', newZoom);
-    } else {
-      console.warn('  ❌ Cannot re-render:', { hasRef: !!currentPreviewRef.current, hasCode: !!currentCode });
     }
   };
 
   const handleCurrentZoomOut = () => {
-    console.log('🔍 ZOOM OUT: Current Preview');
-    console.log('  Old zoom:', currentZoom);
-    // Larger step and lower floor
     const newZoom = Math.max(currentZoom - 0.5, 0.1);
-    console.log('  New zoom:', newZoom, `(${Math.round(newZoom * 100)}%)`);
-    console.log('  Floored at min:', newZoom === 0.25 ? 'YES' : 'NO');
     setCurrentZoom(newZoom);
     if (currentPreviewRef.current && currentCode) {
-      console.log('  ✅ Re-rendering with new zoom...');
       renderDiagram(currentCode, currentPreviewRef.current, 'current', newZoom);
-    } else {
-      console.warn('  ❌ Cannot re-render:', { hasRef: !!currentPreviewRef.current, hasCode: !!currentCode });
     }
   };
 
   const handleCurrentFitToView = () => {
-    console.log('🔍 FIT-TO-VIEW: Current Preview');
-    console.log('  Old zoom:', currentZoom);
-    console.log('  Resetting to:', 1.0, '(100%)');
     setCurrentZoom(1);
     if (currentPreviewRef.current && currentCode) {
-      console.log('  ✅ Re-rendering with reset zoom...');
       renderDiagram(currentCode, currentPreviewRef.current, 'current', 1);
-    } else {
-      console.warn('  ❌ Cannot re-render:', { hasRef: !!currentPreviewRef.current, hasCode: !!currentCode });
     }
   };
 
   // Zoom controls for enhanced preview
   const handleEnhancedZoomIn = () => {
-    console.log('🔍 ZOOM IN: Enhanced Preview');
-    console.log('  Old zoom:', enhancedZoom);
     const newZoom = Math.min(enhancedZoom + 0.5, 5);
-    console.log('  New zoom:', newZoom, `(${Math.round(newZoom * 100)}%)`);
-    console.log('  Capped at max:', newZoom === 3 ? 'YES' : 'NO');
     setEnhancedZoom(newZoom);
     if (enhancedPreviewRef.current && enhancedCode) {
-      console.log('  ✅ Re-rendering with new zoom...');
       renderDiagram(enhancedCode, enhancedPreviewRef.current, 'enhanced', newZoom);
-    } else {
-      console.warn('  ❌ Cannot re-render:', { hasRef: !!enhancedPreviewRef.current, hasCode: !!enhancedCode });
     }
   };
 
   const handleEnhancedZoomOut = () => {
-    console.log('🔍 ZOOM OUT: Enhanced Preview');
-    console.log('  Old zoom:', enhancedZoom);
     const newZoom = Math.max(enhancedZoom - 0.5, 0.1);
-    console.log('  New zoom:', newZoom, `(${Math.round(newZoom * 100)}%)`);
-    console.log('  Floored at min:', newZoom === 0.25 ? 'YES' : 'NO');
     setEnhancedZoom(newZoom);
     if (enhancedPreviewRef.current && enhancedCode) {
-      console.log('  ✅ Re-rendering with new zoom...');
       renderDiagram(enhancedCode, enhancedPreviewRef.current, 'enhanced', newZoom);
-    } else {
-      console.warn('  ❌ Cannot re-render:', { hasRef: !!enhancedPreviewRef.current, hasCode: !!enhancedCode });
     }
   };
 
   const handleEnhancedFitToView = () => {
-    console.log('🔍 FIT-TO-VIEW: Enhanced Preview');
-    console.log('  Old zoom:', enhancedZoom);
-    console.log('  Resetting to:', 1.0, '(100%)');
     setEnhancedZoom(1);
     if (enhancedPreviewRef.current && enhancedCode) {
-      console.log('  ✅ Re-rendering with reset zoom...');
       renderDiagram(enhancedCode, enhancedPreviewRef.current, 'enhanced', 1);
-    } else {
-      console.warn('  ❌ Cannot re-render:', { hasRef: !!enhancedPreviewRef.current, hasCode: !!enhancedCode });
     }
   };
 
-  // Log modal state changes
-  useEffect(() => {
-    if (isOpen) {
-      console.group('🚀 MODAL OPENED');
-      console.log('Props:', {
-        diagramType,
-        hasCurrentCode: !!currentCode,
-        codeLength: currentCode?.length,
-        currentZoom,
-        enhancedZoom
-      });
-      console.groupEnd();
-    } else {
-      console.log('❌ MODAL CLOSED');
-    }
-  }, [isOpen]);
-
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => {
-      console.log('🔀 Dialog state changing:', { from: isOpen, to: open });
-      onClose();
-    }}>
+    <Dialog open={isOpen} onOpenChange={() => onClose()}>
       <DialogContent className="max-w-7xl max-h-[95vh] p-0 w-[95vw] overflow-hidden" aria-describedby="ai-enhance-description">
         <DialogHeader className="px-6 py-4 border-b">
           <div className="flex items-center gap-2">

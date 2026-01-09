@@ -58,7 +58,6 @@ export default function AILandingPage() {
 
   // Handle file analysis
   const handleFileAnalyzed = async (result: FileAnalysisResult) => {
-    console.log('📄 File analyzed:', result.fileName);
     setIsAnalyzing(true);
     
     try {
@@ -71,7 +70,6 @@ export default function AILandingPage() {
       
       setFileAnalysis(result);
       setAnalysisInsights(insights);
-      console.log('✨ Insights generated:', insights);
     } catch (error) {
       console.error('❌ Failed to generate insights:', error);
       alert('Failed to analyze file. Please try again.');
@@ -84,7 +82,6 @@ export default function AILandingPage() {
   const handleFileActionSelect = async (actionId: string) => {
     if (!fileAnalysis || !analysisInsights) return;
     
-    console.log('🎯 Action selected:', actionId);
     
     const action = analysisInsights.suggestions.find(s => s.id === actionId);
     if (!action) return;
@@ -282,7 +279,6 @@ Generate 5-20 nodes with a clear hierarchy. Position nodes in a radial layout ar
 
   // Handle opening a file from disk
   const handleOpenFile = async () => {
-    console.log('📂 Open File clicked');
     
     // Create hidden file input
     const input = document.createElement('input');
@@ -294,12 +290,10 @@ Generate 5-20 nodes with a clear hierarchy. Position nodes in a radial layout ar
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
       
-      console.log('📄 File selected:', file.name);
       
       try {
         // Read file content
         const content = await file.text();
-        console.log('✅ File read:', content.length, 'characters');
         
         // Create document (no AI, no credits used)
         const title = file.name.replace(/\.(md|markdown|txt)$/i, '');
@@ -347,7 +341,6 @@ Generate 5-20 nodes with a clear hierarchy. Position nodes in a radial layout ar
 
   // Handle starting a blank document
   const handleStartWriting = async () => {
-    console.log('✍️ Start Writing clicked');
 
     try {
       // Check if user already has documents in workspace
@@ -356,13 +349,11 @@ Generate 5-20 nodes with a clear hierarchy. Position nodes in a radial layout ar
 
       if (existingDocs > 0) {
         // User has existing documents - just navigate to workspace without creating new document
-        console.log(`📂 User has ${existingDocs} existing documents, navigating to workspace`);
         navigate('/workspace');
         return;
       }
 
       // No existing documents - create a blank one
-      console.log('📄 No existing documents, creating blank document');
       const doc = await createDocument('markdown', 'Untitled', '');
 
       // Initialize Yjs document
@@ -385,10 +376,7 @@ Generate 5-20 nodes with a clear hierarchy. Position nodes in a radial layout ar
   };
 
   const handleGenerate = async () => {
-    console.log('🚀 Generate button clicked!');
-    console.log('Prompt:', prompt);
-    console.log('Selected Type:', selectedType);
-    console.log('Guest Credits:', guestCredits);
+  
     
     if (!prompt.trim()) {
       console.warn('❌ Missing prompt');
@@ -401,7 +389,6 @@ Generate 5-20 nodes with a clear hierarchy. Position nodes in a radial layout ar
     }
 
     setIsGenerating(true);
-    console.log('✨ Starting AI generation...');
 
     try {
       // Determine document type based on prompt or user selection
@@ -419,7 +406,6 @@ Generate 5-20 nodes with a clear hierarchy. Position nodes in a radial layout ar
           finalType = 'presentation';
         }
         // Everything else = document (default)
-        console.log('🤖 AI detected type:', finalType);
       }
 
       // Generate content with AI
@@ -470,7 +456,6 @@ Create 5-8 slides with varied layouts: title, content, bullets, diagram.`,
         title = `Presentation: ${prompt.substring(0, 40)}`;
       }
 
-      console.log('✅ Content generated:', content.substring(0, 100) + '...');
 
       // Create temporary guest document
       const tempDoc = await createDocument(
@@ -526,7 +511,6 @@ Create 5-8 slides with varied layouts: title, content, bullets, diagram.`,
       alert(`Failed to generate content: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsGenerating(false);
-      console.log('🏁 Generation complete');
     }
   };
 

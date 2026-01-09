@@ -91,21 +91,16 @@ export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
   // Create manual snapshot
   const handleCreateSnapshot = useCallback(async () => {
     const timestamp = new Date().toISOString();
-    console.log(`\n🎬 ========== SNAPSHOT CREATION START [${timestamp}] ==========`);
-    console.log(`📍 [${timestamp}] Document ID:`, documentId);
-    
+
     const normalizedId = documentId.startsWith('doc_') 
       ? documentId.slice(4) 
       : documentId;
     
-    console.log(`📍 [${new Date().toISOString()}] Normalized ID:`, normalizedId);
-    console.log(`📍 [${new Date().toISOString()}] Editor available:`, !!editor);
-    
+
     setCreatingSnapshot(true);
     
     try {
       // Get binary snapshot from YjsDocumentManager
-      console.log(`🔧 [${new Date().toISOString()}] Getting Yjs binary snapshot...`);
       const binarySnapshot = yjsDocumentManager.getYjsBinarySnapshot(documentId);
       
       if (!binarySnapshot) {
@@ -118,39 +113,23 @@ export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
         return;
       }
       
-      console.log(`✅ [${new Date().toISOString()}] Binary snapshot size:`, binarySnapshot.length, 'bytes');
       
       // Convert to base64
-      console.log(`🔧 [${new Date().toISOString()}] Converting to base64...`);
       const base64State = btoa(String.fromCharCode(...binarySnapshot));
-      console.log(`✅ [${new Date().toISOString()}] Base64 length:`, base64State.length, 'chars');
       
       // Get HTML preview from editor if available
       let htmlPreview: string | undefined;
-      console.log(`🔧 [${new Date().toISOString()}] Getting HTML preview from editor...`);
       
       if (editor) {
         try {
           htmlPreview = editor.getHTML();
-          console.log(`✅ [${new Date().toISOString()}] ✨ HTML PREVIEW OBTAINED!`);
-          console.log(`📊 [${new Date().toISOString()}] HTML preview length:`, htmlPreview?.length || 0, 'chars');
-          console.log(`📝 [${new Date().toISOString()}] HTML preview sample:`, htmlPreview?.substring(0, 200));
-          console.log(`📝 [${new Date().toISOString()}] HTML preview (full):`, htmlPreview);
         } catch (err) {
           console.error(`❌ [${new Date().toISOString()}] Could not get HTML preview from editor:`, err);
         }
       } else {
         console.error(`❌ [${new Date().toISOString()}] ⚠️ NO EDITOR AVAILABLE FOR HTML PREVIEW!`);
       }
-      
-      console.log(`🚀 [${new Date().toISOString()}] Calling createManualHistorySnapshot...`);
-      console.log(`📦 [${new Date().toISOString()}] Parameters:`, {
-        normalizedId,
-        base64StateLength: base64State.length,
-        note: 'Manual save point',
-        htmlPreviewLength: htmlPreview?.length || 0,
-        hasHtmlPreview: !!htmlPreview
-      });
+ 
       
       const success = await createManualHistorySnapshot(
         normalizedId,
@@ -159,16 +138,13 @@ export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
         htmlPreview
       );
       
-      console.log(`📊 [${new Date().toISOString()}] Snapshot creation result:`, success ? '✅ SUCCESS' : '❌ FAILED');
       
       if (success) {
         toast({
           title: 'Snapshot Created',
           description: 'Your document version has been saved.',
         });
-        console.log(`🔄 [${new Date().toISOString()}] Reloading snapshots list...`);
         await loadSnapshots();
-        console.log(`✅ [${new Date().toISOString()}] Snapshots reloaded`);
       } else {
         toast({
           title: 'Failed to Create Snapshot',
@@ -185,7 +161,6 @@ export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
       });
     } finally {
       setCreatingSnapshot(false);
-      console.log(`🏁 ========== SNAPSHOT CREATION END [${new Date().toISOString()}] ==========\n`);
     }
   }, [documentId, toast, editor]);
 
@@ -367,16 +342,7 @@ export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
       {/* Enhanced Preview Modal */}
       {showEnhancedPreview && previewSnapshot && (() => {
         const timestamp = new Date().toISOString();
-        console.log(`\n👁️ ========== PREVIEW MODAL OPENED [${timestamp}] ==========`);
-        console.log(`🔍 [${timestamp}] Snapshot ID:`, previewSnapshot.id);
-        console.log(`🔍 [${timestamp}] Snapshot note:`, previewSnapshot.note);
-        console.log(`🔍 [${timestamp}] Snapshot created:`, previewSnapshot.created_at);
-        console.log(`🔍 [${timestamp}] Size bytes:`, previewSnapshot.size_bytes);
-        console.log(`🔍 [${timestamp}] HTML preview length:`, previewSnapshot.html_preview?.length || 0);
-        console.log(`🔍 [${timestamp}] Has HTML preview:`, !!previewSnapshot.html_preview);
-        console.log(`🔍 [${timestamp}] HTML preview sample:`, previewSnapshot.html_preview?.substring(0, 200));
-        console.log(`🔍 [${timestamp}] HTML preview (full):`, previewSnapshot.html_preview);
-        console.log(`👁️ ========== PREVIEW DATA END ==========\n`);
+        
         
         return (
           <EnhancedVersionPreview

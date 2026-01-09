@@ -314,7 +314,6 @@ export default function Workspace() {
           const html = serializeYjsToHtml(yjsInstance.ydoc);
           if (html) {
             contentToUse = htmlToMarkdown(html);
-            console.log('✅ [Mindmap] Got live content from Yjs:', contentToUse.length, 'chars');
           }
         } else {
           console.warn('⚠️ [Mindmap] No Yjs instance found for:', normalizedDocId);
@@ -343,7 +342,6 @@ export default function Workspace() {
 
   // Generate mindmap from content
   const generateMindmap = async (content: string, type: 'mindmap' | 'flowchart' | 'orgchart') => {
-    console.log('🚀 Starting mindmap generation:', { type, contentLength: content.length });
 
     setIsGeneratingMindmap(true);
     setMindmapProgress(0);
@@ -377,7 +375,6 @@ export default function Workspace() {
 
       // Complete!
       setMindmapProgress(100);
-      console.log('🎉 Mindmap generation complete!');
 
       // Wait a moment to show 100%, then close loading screen
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -398,21 +395,16 @@ export default function Workspace() {
 
   // Handle document selection from sidebar or quick switcher
   const handleDocumentSelect = async (docId: string) => {
-    console.log('📄 Document selected:', docId);
-    console.log('📊 Available documents in context:', backendDocuments.length);
-    
     // 🔥 FIX: getDocument is now async
     const doc = await backendGetDocument(docId);
     
     if (!doc) {
       console.error('❌ Document not found in context:', docId);
-      console.log('💡 Attempting direct navigation anyway...');
       // 🔥 FIX: Navigate anyway (document exists in localStorage/IndexedDB)
       navigate(`/workspace/doc/${docId}/edit`);
       return;
     }
 
-    console.log('✅ Document found:', doc.title, doc.type);
 
     // Navigate to appropriate view based on document type
     if (doc.type === 'markdown') {
@@ -426,20 +418,16 @@ export default function Workspace() {
 
   // Handle new document creation
   const handleNewDocument = () => {
-    console.log('🆕 Opening new document modal...');
     setShowNewDocModal(true);
   };
 
   // Handle workspace creation
   const handleCreateWorkspace = async (data: { name: string; description: string; icon: string }) => {
     try {
-      console.log('🏢 Creating new workspace:', data.name);
       const newWorkspace = await createWorkspace(data);
-      console.log('✅ Workspace created and switched:', newWorkspace.name);
       
       // 🔥 Navigate to workspace root (clear document view)
       navigate('/workspace');
-      console.log('✅ Navigated to new workspace');
     } catch (error) {
       console.error('❌ Failed to create workspace:', error);
       throw error;
@@ -449,13 +437,11 @@ export default function Workspace() {
   // Handle workspace switch
   const handleSwitchWorkspace = async (workspace: any) => {
     try {
-      console.log('🔄 Switching to workspace:', workspace.name);
       await switchWorkspace(workspace);
       
       // Navigate to home when switching workspaces
       navigate('/workspace');
       
-      console.log('✅ Switched to workspace:', workspace.name);
     } catch (error) {
       console.error('❌ Failed to switch workspace:', error);
     }
@@ -463,7 +449,6 @@ export default function Workspace() {
 
   // Load demo presentation with all beautiful blocks
   const handleLoadDemoPresentation = async () => {
-    console.log('🎨 Loading demo presentation...');
 
     try {
       // Save demo presentation to workspace
@@ -472,8 +457,6 @@ export default function Workspace() {
         'Beautiful Blocks Showcase',
         JSON.stringify(DEMO_PRESENTATION)
       );
-
-      console.log('✅ Demo presentation created:', doc.id);
 
       // Navigate to presentation editor
       navigate(`/workspace/doc/${doc.id}/slides`);
@@ -485,7 +468,6 @@ export default function Workspace() {
 
   // Generate presentation from editor
   const handleGeneratePresentation = async (settings: GenerationSettings) => {
-    console.log('🎬 Generating presentation from editor with settings:', settings);
 
     if (!currentDocument) return;
 
@@ -496,7 +478,6 @@ export default function Workspace() {
       key.startsWith('mindmap-pres-session-')
     );
     oldKeys.forEach(key => localStorage.removeItem(key));
-    console.log('🧹 Cleared old session keys:', oldKeys.length);
 
     // Close wizard, show progress
     setShowPresentationWizard(false);
@@ -506,30 +487,23 @@ export default function Workspace() {
 
     try {
       const editorContent = liveEditorContent || currentDocument.content;
-      console.log('📝 Editor content length:', editorContent.length);
 
-      console.log('🤖 Calling safe presentation service...');
       const presentation = await safePresentationService.generateSafely(
         editorContent,
         null, // No mindmap data from editor
         settings,
         currentDocument.id, // ✅ Pass source document ID
         (progress: ProgressUpdate) => {
-          console.log('📊 Progress:', progress);
           setPresentationProgress(progress);
         }
       );
 
-      console.log('✅ Presentation generated:', presentation);
-
       // Save presentation to workspace
-      console.log('💾 Saving presentation to workspace...');
       const doc = await backendCreateDocument(
         'presentation',
         `${currentDocument.title} - Presentation`,
         JSON.stringify(presentation)
       );
-      console.log('✅ Presentation saved:', doc.id);
 
       // Wait a moment to show success, then navigate
       setTimeout(() => {
@@ -549,11 +523,9 @@ export default function Workspace() {
   };
 
   const handleDocumentCreated = (docId: string, doc?: any) => {
-    console.log('✅ Document created:', docId);
     
     // If we have the document object, use it directly (avoids race condition)
     if (doc) {
-      console.log('📄 Setting document directly from creation:', doc);
       setCurrentDocument(doc);
       // Navigate to edit mode (viewMode is derived from URL)
       navigate(`/workspace/doc/${docId}/edit`);
@@ -568,7 +540,6 @@ export default function Workspace() {
     if (editorInstanceRef.current) {
       // Use TipTap editor instance to insert content
       editorInstanceRef.current.chain().focus().insertContent(`\n\n${content}\n\n`).run();
-      console.log('✅ Content inserted into editor');
     } else {
       // Fallback: copy to clipboard
       navigator.clipboard.writeText(content);
@@ -587,7 +558,6 @@ export default function Workspace() {
     // Auto-save to backend (debounced)
     if (currentDocument) {
       // DEBUG: Log actual content being passed to save
-      console.log('[TEST PATCH PAYLOAD]', { id: currentDocument.id, length: content.length, preview: content.substring(0,100) });
       autoSaveDocument(currentDocument.id, content);
     }
   }, [currentDocument, autoSaveDocument]);
@@ -657,7 +627,6 @@ export default function Workspace() {
   const scrollToHeading = (headingIndex: number) => {
     // 🔧 FIX: Prevent overlapping scroll operations (race condition fix!)
     if (isScrollingRef.current) {
-      console.log('⏸️ Already scrolling, ignoring click');
       return;
     }
 
@@ -667,7 +636,6 @@ export default function Workspace() {
     }
 
     const editor = editorInstanceRef.current;
-    console.log('🔍 Scrolling to heading index:', headingIndex);
 
     // Set scrolling flag
     isScrollingRef.current = true;
@@ -687,8 +655,6 @@ export default function Workspace() {
           pos
         });
       });
-      console.log('📄 Document structure:', allNodes);
-      console.log(`🔍 Looking for heading index ${headingIndex} (total headings found: ${allNodes.filter(n => n.type === 'heading').length})`);
 
       // Find the Nth heading node
       doc.descendants((node, pos) => {
@@ -697,7 +663,6 @@ export default function Workspace() {
         if (node.type.name === 'heading') {
           if (currentHeadingIndex === headingIndex) {
             targetPos = pos;
-            console.log('✅ Found target heading at position:', targetPos, 'Text:', node.textContent);
             return false;
           }
           currentHeadingIndex++;
@@ -705,7 +670,6 @@ export default function Workspace() {
       });
 
       if (targetPos !== -1) {
-        console.log('📍 Scrolling to position:', targetPos);
 
         setTimeout(() => {
           try {
@@ -775,13 +739,11 @@ export default function Workspace() {
                 });
               }
 
-              console.log('✅ Scrolled to heading with offset');
             }
 
             // Reset scrolling flag
             setTimeout(() => {
               isScrollingRef.current = false;
-              console.log('🔓 Scroll lock released');
             }, 600);
           } catch (scrollError) {
             console.error('❌ Scroll error:', scrollError);
@@ -833,16 +795,10 @@ export default function Workspace() {
     }
 
     if (viewMode === 'mindmap') {
-      console.log('🎯 [Workspace] Rendering mindmap mode:', {
-        isGeneratingMindmap,
-        currentDocument: !!currentDocument,
-        documentId,
-        documentTitle: currentDocument?.title
-      });
+   
 
       // Wait for document to load before showing mindmap
       if (!currentDocument && documentId) {
-        console.log('⏳ [Workspace] Waiting for document to load before showing mindmap');
         return (
           <div className="flex items-center justify-center h-screen">
             <div className="text-center">
@@ -861,7 +817,6 @@ export default function Workspace() {
       }
 
       // Show MindmapStudio2
-      console.log('🚀 [Workspace] Rendering MindmapStudio2 component');
       return <MindmapStudio2 />;
     }
 
@@ -887,7 +842,6 @@ export default function Workspace() {
             // Outline reads only heading structure; keep it synced to the live editor doc.
             documentContent={liveOutlineContent || currentDocument?.content || ''}
             onHeadingClick={(text, line, headingIndex) => {
-              console.log('📍 Outline clicked - Scroll to heading index:', headingIndex, 'Text:', text);
               // Trigger scroll in editor by index (more reliable)
               if (editorInstanceRef.current && headingIndex !== undefined) {
                 scrollToHeading(headingIndex);

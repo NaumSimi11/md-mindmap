@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -59,33 +59,6 @@ export default function MindmapPreviewModal({
   // Track which format user wants to preview/insert
   const [selectedFormat, setSelectedFormat] = useState<DiagramFormat>('mindmap');
   const [showPreviewCode, setShowPreviewCode] = useState(false); // Start false - user must select format or generate
-
-  // Helper to generate hierarchical markdown from mindmap data
-  // MUST BE DEFINED BEFORE USAGE IN useMemo
-  const generateMarkdownStructure = useCallback((data: typeof mindmapData): string => {
-    const lines: string[] = [];
-    const rootNodes = data.nodes.filter(n => n.level === 0);
-    
-    const addNode = (nodeId: string, indent: number = 0) => {
-      const node = data.nodes.find(n => n.id === nodeId);
-      if (!node) return;
-      
-      const prefix = '  '.repeat(indent);
-      const marker = indent === 0 ? '#' : '-';
-      lines.push(`${prefix}${marker} ${node.text}`);
-      
-      // Find children
-      const children = data.connections
-        .filter(conn => conn.from === nodeId)
-        .map(conn => conn.to);
-      
-      children.forEach(childId => addNode(childId, indent + 1));
-    };
-    
-    rootNodes.forEach(node => addNode(node.id, 0));
-    
-    return lines.join('\n');
-  }, []);
 
   // Generate the Mermaid code for the selected format
   const generatedCode = useMemo(() => {
@@ -161,8 +134,7 @@ Ensure all node names are simple and avoid special characters.`;
 
       const response = await aiService.generateContent(
         aiPrompt,
-        systemPrompt,
-        { temperature: 0.7, maxTokens: 1000 }
+        { systemPrompt, temperature: 0.7, maxTokens: 1000 }
       );
 
       // Clean up the response (remove markdown fences if present)
@@ -208,7 +180,6 @@ Ensure all node names are simple and avoid special characters.`;
       generationMode,
     });
     
-    console.log('🚀 Opening Studio2 with session:', sessionId);
     
     // Navigate to Studio2
     window.location.href = '/workspace';

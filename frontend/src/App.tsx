@@ -68,7 +68,7 @@ const App = () => (
 
             {/* NEW: Main Workspace (AI Office Suite) - Guest & Auth Support */}
             <Route path="/workspace" element={<Workspace />} />
-            <Route path="/workspace/:workspaceId/settings" element={<ProtectedRoute><WorkspaceSettingsPage /></ProtectedRoute>} />
+            <Route path="/workspace/:workspaceId/settings" element={<WorkspaceSettingsPage />} />
             <Route path="/settings" element={<ProtectedRoute><UserSettings /></ProtectedRoute>} />
             <Route path="/workspace/doc/:id/edit" element={<Workspace />} />
             <Route path="/workspace/doc/:id/mindmap" element={<Workspace />} />

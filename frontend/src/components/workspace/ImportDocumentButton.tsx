@@ -97,7 +97,6 @@ export function ImportDocumentButton({
           const ext = getFileExtension(file.name);
           const needsConversion = ['.docx', '.xlsx', '.xls', '.html', '.htm'].includes(ext);
           
-          console.log(`📄 [Import] Processing file: ${file.name} (${ext}, size: ${file.size})`);
           
           const conversionResult = await convertFileToMarkdown(file);
           
@@ -120,7 +119,6 @@ export function ImportDocumentButton({
             return;
           }
           
-          console.log(`✅ [Import] Converted ${file.name}: ${content.length} chars`);
           
           // Show conversion warnings if any
           if (conversionResult.warnings && conversionResult.warnings.length > 0) {
@@ -140,7 +138,6 @@ export function ImportDocumentButton({
           const existingDoc = documents.find(d => d.title === title);
 
           if (existingDoc) {
-            console.log(`📋 Found existing document: ${title} (${existingDoc.id})`);
             
             // GUEST MODE: Use local versioning
             if (!isAuthenticated) {
@@ -151,7 +148,6 @@ export function ImportDocumentButton({
               );
               
               if (isIdentical) {
-                console.log(`✅ Content identical, skipping: ${title}`);
                 toast.info(`"${title}" is already up to date`, {
                   duration: 2000
                 });
@@ -159,7 +155,6 @@ export function ImportDocumentButton({
               }
               
               // Content changed - create new version
-              console.log(`🔄 Content changed, creating new version: ${title}`);
               const newVersion = await guestVersionManager.createVersion(
                 existingDoc.id,
                 content,
@@ -184,7 +179,6 @@ export function ImportDocumentButton({
             
             // AUTHENTICATED MODE: Use backend versioning
             else {
-              console.log(`🔐 Authenticated mode: updating via backend: ${title}`);
               await updateDocument(existingDoc.id, { content } as any);
               toast.success(`Updated "${title}" (new version created)`, {
                 duration: 3000
@@ -195,21 +189,17 @@ export function ImportDocumentButton({
           }
 
           // No duplicate - create new document
-          console.log(`✨ [Import] Creating new document: ${title} (content: ${content.length} chars)`);
           const newDoc = await createDocument('markdown', title, content);
-          console.log(`✅ [Import] Document created: ${newDoc.id}, content length in DB: ${newDoc.content?.length || 0}`);
           
           // 🔥 CRITICAL: Hydrate Yjs document IMMEDIATELY after creation
           // This ensures content is in Yjs BEFORE editor loads
           try {
-            console.log(`🔄 [Import] Hydrating document: ${newDoc.id}`);
             await yjsHydrationService.hydrateDocument(
               newDoc.id,
               content,
               undefined, // No binary state for new imports
               isAuthenticated
             );
-            console.log(`✅ [Import] Document hydrated: ${newDoc.id}`);
           } catch (hydrationError) {
             console.error(`⚠️ [Import] Hydration failed (non-critical):`, hydrationError);
             // Non-critical - editor will retry hydration when loading
@@ -235,7 +225,6 @@ export function ImportDocumentButton({
 
       // 🔥 AUTO-NAVIGATE: Open first imported document in editor
       if (firstImportedDocId && successCount > 0) {
-        console.log(`🚀 [Import] Auto-navigating to: ${firstImportedDocId}`);
         navigate(`/workspace/doc/${firstImportedDocId}/edit`);
       }
 

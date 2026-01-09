@@ -24,6 +24,7 @@ import {
   Sparkles,
   Plus,
   X,
+  Folder,
 } from 'lucide-react';
 import { documentTemplates_service, type DocumentTemplate } from '@/services/workspace-legacy/DocumentTemplates';
 import { syncModeService } from '@/services/sync/SyncModeService';
@@ -35,8 +36,9 @@ interface NewDocumentModalProps {
   onClose: () => void;
   onDocumentCreated: (documentId: string, document?: any) => void; // 🔥 FIX: Add optional document param
   defaultType?: 'markdown' | 'mindmap' | 'presentation';
-  folderId?: string | null;
-  createDocument?: (type: 'markdown' | 'mindmap' | 'presentation', title: string, content: string) => Promise<any>;
+  folderId?: string | null; // 🔥 NEW: Folder to create document in
+  folderName?: string | null; // 🔥 NEW: Folder name for display
+  createDocument?: (type: 'markdown' | 'mindmap' | 'presentation', title: string, content: string, folderId?: string | null) => Promise<any>;
 }
 
 export function NewDocumentModal({
@@ -45,6 +47,7 @@ export function NewDocumentModal({
   onDocumentCreated,
   defaultType,
   folderId = null,
+  folderName = null,
   createDocument,
 }: NewDocumentModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -93,12 +96,16 @@ export function NewDocumentModal({
       const title = customTitle.trim() || 'Untitled Document';
       const content = getBlankContent(type, title);
       
+      // 🔥 PASS folderId to createDocument - document created directly in folder!
       const doc = createDocument 
-        ? await createDocument(type, title, content)
+        ? await createDocument(type, title, content, folderId)
         : { id: `doc-${Date.now()}` };
       
+      if (folderId) {
+        console.log(`📁 Created document in folder: ${folderId}`);
+      }
+      
       // Show success message
-      console.log(`✅ Created ${type}: ${title} (ID: ${doc.id})`);
       
       // 🔥 AUTO-SYNC: If user is authenticated, auto-enable cloud sync
       if (authService.isAuthenticated() && doc.id) {
@@ -107,7 +114,6 @@ export function NewDocumentModal({
           try {
             const result = await syncModeService.enableCloudSync(doc.id);
             if (result.success) {
-              console.log(`☁️ Auto-synced new document to cloud: ${doc.id}`);
               toast.success('Document saved to cloud');
             }
           } catch (e) {
@@ -129,9 +135,14 @@ export function NewDocumentModal({
     try {
       const title = customTitle.trim() || template.name;
       
+      // 🔥 PASS folderId to createDocument - document created directly in folder!
       const doc = createDocument
-        ? await createDocument(template.type, title, template.content)
+        ? await createDocument(template.type, title, template.content, folderId)
         : { id: `doc-${Date.now()}` };
+      
+      if (folderId) {
+        console.log(`📁 Created template document in folder: ${folderId}`);
+      }
       
       // Show success message
       console.log(`✅ Created from template "${template.name}": ${title} (ID: ${doc.id})`);
@@ -142,7 +153,6 @@ export function NewDocumentModal({
           try {
             const result = await syncModeService.enableCloudSync(doc.id);
             if (result.success) {
-              console.log(`☁️ Auto-synced new document to cloud: ${doc.id}`);
               toast.success('Document saved to cloud');
             }
           } catch (e) {
@@ -256,6 +266,16 @@ export function NewDocumentModal({
             </Button>
           </div>
           
+          {/* Folder Indicator - Show when creating in folder */}
+          {folderId && (
+            <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+              <Folder className="h-4 w-4 text-yellow-500" />
+              <span className="text-sm text-yellow-400">
+                Creating in: <span className="font-semibold text-yellow-300">{folderName || 'folder'}</span>
+              </span>
+            </div>
+          )}
+
           {/* Document Title Input - Always Visible */}
           <div>
             <label className="text-sm font-medium text-muted-foreground block mb-2">
@@ -266,11 +286,22 @@ export function NewDocumentModal({
               placeholder="Enter document name..."
               value={customTitle}
               onChange={(e) => setCustomTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  // If a template is selected, create from template; otherwise create blank markdown
+                  if (previewTemplate) {
+                    handleCreateFromTemplate(previewTemplate);
+                  } else {
+                    handleCreateBlank('markdown');
+                  }
+                }
+              }}
               className="w-full"
               autoFocus
             />
             <p className="text-xs text-muted-foreground mt-1">
-              Leave empty to use default or template name
+              Leave empty to use default or template name. Press <kbd className="px-1 py-0.5 rounded bg-muted text-xs">Enter</kbd> to create.
             </p>
           </div>
 

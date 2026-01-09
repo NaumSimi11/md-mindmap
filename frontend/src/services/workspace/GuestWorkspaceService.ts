@@ -523,6 +523,321 @@ export class GuestWorkspaceService {
   }
 
   // ==========================================================================
+  // Folder ID Replacement (for sync - local ID → cloud ID)
+  // ==========================================================================
+
+  /**
+   * Replace a folder's local ID with the cloud ID after sync.
+   * This updates the folder itself AND all references to it.
+   * 
+   * @param oldFolderId - The local folder ID (e.g., "fld_2c4e57bb-...")
+   * @param newFolderId - The cloud folder ID (e.g., "b72c56c1-...")
+   * @returns Success status and counts of updated entities
+   */
+  async replaceFolderIdWithCloudId(
+    oldFolderId: string, 
+    newFolderId: string
+  ): Promise<{ success: boolean; folder: boolean; documents: number; childFolders: number }> {
+    console.log(`🔄 [GuestService] Replacing folder ID: ${oldFolderId} → ${newFolderId}`);
+    
+    const result = { success: false, folder: false, documents: 0, childFolders: 0 };
+    
+    try {
+      // 1. Get the original folder
+      const originalFolder = await db.folders.get(oldFolderId);
+      if (!originalFolder) {
+        console.warn(`⚠️ [GuestService] Folder ${oldFolderId} not found, nothing to replace`);
+        result.success = true; // Not an error, just nothing to do
+        return result;
+      }
+      
+      // 2. Create new folder record with cloud ID
+      const newFolder: Folder = {
+        ...originalFolder,
+        id: newFolderId,
+        syncStatus: 'synced',
+        updatedAt: new Date().toISOString(),
+      };
+      
+      // 3. Insert new folder (will fail if already exists)
+      try {
+        await db.folders.add(newFolder);
+        console.log(`✅ [GuestService] Created folder with cloud ID: ${newFolderId}`);
+        result.folder = true;
+      } catch (e: any) {
+        if (e.name === 'ConstraintError') {
+          // Folder with this ID already exists, just update it
+          await db.folders.update(newFolderId, newFolder);
+          console.log(`✅ [GuestService] Updated existing folder: ${newFolderId}`);
+          result.folder = true;
+        } else {
+          throw e;
+        }
+      }
+      
+      // 4. Update all documents that reference the old folder ID
+      const docsUpdated = await db.documents
+        .where('folderId').equals(oldFolderId)
+        .modify({ folderId: newFolderId });
+      result.documents = docsUpdated;
+      console.log(`✅ [GuestService] Updated ${docsUpdated} document(s) folderId`);
+      
+      // 5. Update all child folders that have this as parentId
+      const childrenUpdated = await db.folders
+        .where('parentId').equals(oldFolderId)
+        .modify({ parentId: newFolderId });
+      result.childFolders = childrenUpdated;
+      console.log(`✅ [GuestService] Updated ${childrenUpdated} child folder(s) parentId`);
+      
+      // 6. Delete the old folder record
+      await db.folders.delete(oldFolderId);
+      console.log(`✅ [GuestService] Deleted old folder: ${oldFolderId}`);
+      
+      result.success = true;
+      console.log(`✅ [GuestService] Folder ID replacement complete:`, result);
+      
+    } catch (error) {
+      console.error(`❌ [GuestService] Failed to replace folder ID:`, error);
+      result.success = false;
+    }
+    
+    return result;
+  }
+
+  /**
+   * Verify that a folder ID replacement was successful.
+   * Checks that:
+   * 1. New folder exists
+   * 2. Old folder does NOT exist
+   * 3. No documents reference the old folder ID
+   * 4. No child folders reference the old folder ID as parentId
+   */
+  async verifyFolderIdReplacement(oldFolderId: string, newFolderId: string): Promise<{
+    valid: boolean;
+    newFolderExists: boolean;
+    oldFolderExists: boolean;
+    orphanDocuments: number;
+    orphanChildFolders: number;
+  }> {
+    const newFolder = await db.folders.get(newFolderId);
+    const oldFolder = await db.folders.get(oldFolderId);
+    const orphanDocs = await db.documents.where('folderId').equals(oldFolderId).count();
+    const orphanChildren = await db.folders.where('parentId').equals(oldFolderId).count();
+    
+    const result = {
+      valid: !!newFolder && !oldFolder && orphanDocs === 0 && orphanChildren === 0,
+      newFolderExists: !!newFolder,
+      oldFolderExists: !!oldFolder,
+      orphanDocuments: orphanDocs,
+      orphanChildFolders: orphanChildren,
+    };
+    
+    if (!result.valid) {
+      console.warn(`⚠️ [GuestService] Folder ID replacement verification FAILED:`, result);
+    }
+    
+    return result;
+  }
+
+  /**
+   * Replace folder ID with verification and retry.
+   * Will retry up to maxRetries times if verification fails.
+   */
+  async replaceFolderIdWithVerification(
+    oldFolderId: string,
+    newFolderId: string,
+    maxRetries: number = 3
+  ): Promise<boolean> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      console.log(`🔄 [GuestService] Folder ID replacement attempt ${attempt}/${maxRetries}`);
+      
+      // Attempt replacement
+      const replaceResult = await this.replaceFolderIdWithCloudId(oldFolderId, newFolderId);
+      
+      if (!replaceResult.success) {
+        console.warn(`⚠️ [GuestService] Replacement failed on attempt ${attempt}`);
+        continue;
+      }
+      
+      // Verify replacement
+      const verifyResult = await this.verifyFolderIdReplacement(oldFolderId, newFolderId);
+      
+      if (verifyResult.valid) {
+        console.log(`✅ [GuestService] Folder ID replacement verified on attempt ${attempt}`);
+        return true;
+      }
+      
+      // If verification failed, try to fix specific issues
+      if (verifyResult.orphanDocuments > 0) {
+        console.log(`🔧 [GuestService] Fixing ${verifyResult.orphanDocuments} orphan documents...`);
+        await db.documents.where('folderId').equals(oldFolderId).modify({ folderId: newFolderId });
+      }
+      
+      if (verifyResult.orphanChildFolders > 0) {
+        console.log(`🔧 [GuestService] Fixing ${verifyResult.orphanChildFolders} orphan child folders...`);
+        await db.folders.where('parentId').equals(oldFolderId).modify({ parentId: newFolderId });
+      }
+      
+      if (verifyResult.oldFolderExists) {
+        console.log(`🔧 [GuestService] Deleting lingering old folder...`);
+        await db.folders.delete(oldFolderId);
+      }
+    }
+    
+    console.error(`❌ [GuestService] Folder ID replacement failed after ${maxRetries} attempts`);
+    return false;
+  }
+
+  // ==========================================================================
+  // Workspace ID Replacement (for sync - local ID → cloud ID)
+  // ==========================================================================
+
+  /**
+   * Replace a workspace's local ID with the cloud ID after sync.
+   * This updates the workspace itself AND all references to it.
+   * 
+   * @param oldWorkspaceId - The local workspace ID (e.g., "ws_abc123")
+   * @param newWorkspaceId - The cloud workspace ID (e.g., "9b7990af-...")
+   * @returns Success status and counts of updated entities
+   */
+  async replaceWorkspaceIdWithCloudId(
+    oldWorkspaceId: string,
+    newWorkspaceId: string
+  ): Promise<{ success: boolean; workspace: boolean; folders: number; documents: number }> {
+    console.log(`🔄 [GuestService] Replacing workspace ID: ${oldWorkspaceId} → ${newWorkspaceId}`);
+    
+    const result = { success: false, workspace: false, folders: 0, documents: 0 };
+    
+    try {
+      // 1. Get the original workspace
+      const originalWorkspace = await db.workspaces.get(oldWorkspaceId);
+      if (!originalWorkspace) {
+        console.warn(`⚠️ [GuestService] Workspace ${oldWorkspaceId} not found, nothing to replace`);
+        result.success = true;
+        return result;
+      }
+      
+      // 2. Create new workspace record with cloud ID
+      const newWorkspace: Workspace = {
+        ...originalWorkspace,
+        id: newWorkspaceId,
+        syncStatus: 'synced',
+        updatedAt: new Date().toISOString(),
+      };
+      
+      // 3. Insert new workspace
+      try {
+        await db.workspaces.add(newWorkspace);
+      } catch (e: any) {
+        if (e.name === 'ConstraintError') {
+          await db.workspaces.update(newWorkspaceId, newWorkspace);
+        } else {
+          throw e;
+        }
+      }
+      result.workspace = true;
+      
+      // 4. Update all folders' workspaceId
+      result.folders = await db.folders
+        .where('workspaceId').equals(oldWorkspaceId)
+        .modify({ workspaceId: newWorkspaceId });
+      console.log(`  ✅ Updated ${result.folders} folder(s) workspaceId`);
+      
+      // 5. Update all documents' workspaceId
+      result.documents = await db.documents
+        .where('workspaceId').equals(oldWorkspaceId)
+        .modify({ workspaceId: newWorkspaceId });
+      console.log(`  ✅ Updated ${result.documents} document(s) workspaceId`);
+      
+      // 6. Delete old workspace
+      await db.workspaces.delete(oldWorkspaceId);
+      console.log(`  ✅ Deleted old workspace: ${oldWorkspaceId}`);
+      
+      // 7. Update current workspace ID if needed
+      if (this.currentWorkspaceId === oldWorkspaceId) {
+        this.currentWorkspaceId = newWorkspaceId;
+        await this.setSetting('lastWorkspaceId', newWorkspaceId);
+      }
+      
+      result.success = true;
+      console.log(`✅ [GuestService] Workspace ID replacement complete:`, result);
+      
+    } catch (error) {
+      console.error(`❌ [GuestService] Failed to replace workspace ID:`, error);
+      result.success = false;
+    }
+    
+    return result;
+  }
+
+  /**
+   * Verify workspace ID replacement was successful
+   */
+  async verifyWorkspaceIdReplacement(oldId: string, newId: string): Promise<boolean> {
+    const oldExists = await db.workspaces.get(oldId);
+    const newExists = await db.workspaces.get(newId);
+    const orphanFolders = await db.folders.where('workspaceId').equals(oldId).count();
+    const orphanDocs = await db.documents.where('workspaceId').equals(oldId).count();
+    
+    return !oldExists && !!newExists && orphanFolders === 0 && orphanDocs === 0;
+  }
+
+  // ==========================================================================
+  // Document ID Replacement (for sync - local ID → cloud ID)
+  // ==========================================================================
+
+  /**
+   * Replace a document's local ID with the cloud ID after sync.
+   * 
+   * @param oldDocumentId - The local document ID (e.g., "doc_abc123")
+   * @param newDocumentId - The cloud document ID (e.g., "1968fd14-...")
+   */
+  async replaceDocumentIdWithCloudId(
+    oldDocumentId: string,
+    newDocumentId: string
+  ): Promise<{ success: boolean }> {
+    console.log(`🔄 [GuestService] Replacing document ID: ${oldDocumentId} → ${newDocumentId}`);
+    
+    try {
+      // 1. Get the original document
+      const originalDoc = await db.documents.get(oldDocumentId);
+      if (!originalDoc) {
+        console.warn(`⚠️ [GuestService] Document ${oldDocumentId} not found, nothing to replace`);
+        return { success: true };
+      }
+      
+      // 2. Create new document record with cloud ID
+      const newDoc: DocumentMeta = {
+        ...originalDoc,
+        id: newDocumentId,
+        syncStatus: 'synced',
+        updatedAt: new Date().toISOString(),
+      };
+      
+      // 3. Insert new document
+      try {
+        await db.documents.add(newDoc);
+      } catch (e: any) {
+        if (e.name === 'ConstraintError') {
+          await db.documents.update(newDocumentId, newDoc);
+        } else {
+          throw e;
+        }
+      }
+      
+      // 4. Delete old document
+      await db.documents.delete(oldDocumentId);
+      console.log(`  ✅ Document ID replaced: ${oldDocumentId} → ${newDocumentId}`);
+      
+      return { success: true };
+      
+    } catch (error) {
+      console.error(`❌ [GuestService] Failed to replace document ID:`, error);
+      return { success: false };
+    }
+  }
+
+  // ==========================================================================
   // Document Methods
   // ==========================================================================
 

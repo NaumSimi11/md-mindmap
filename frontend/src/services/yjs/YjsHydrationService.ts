@@ -47,7 +47,6 @@ export class YjsHydrationService {
         : documentId;
       
       if (normalizedDocId !== documentId) {
-        console.log(`🔄 [YjsHydration] Normalized ID: ${documentId} → ${normalizedDocId}`);
       }
       
       // 1. Get Yjs document from manager (using normalized ID)
@@ -76,7 +75,6 @@ export class YjsHydrationService {
       
       // Wait for IndexedDB sync FIRST (with timeout for new docs)
       if (indexeddbProvider && !instance.isInitialized) {
-        console.log('⏳ [YjsHydration] Waiting for IndexedDB sync...');
         await new Promise<void>((resolve) => {
           const handler = () => {
             indexeddbProvider.off('synced', handler);
@@ -87,11 +85,9 @@ export class YjsHydrationService {
           // Short timeout for new documents (IndexedDB might be empty)
           setTimeout(() => {
             indexeddbProvider.off('synced', handler);
-            console.log('⏱️ [YjsHydration] IndexedDB sync timeout (500ms), proceeding');
             resolve();
           }, 500);
         });
-        console.log('✅ [YjsHydration] IndexedDB sync complete');
       }
       
       // NOW check fragment state (after IndexedDB has loaded)
@@ -100,24 +96,20 @@ export class YjsHydrationService {
       
       // If fragment has content, skip hydration (content already loaded from IndexedDB)
       if (isFragmentPopulated) {
-        console.log('ℹ️ [YjsHydration] Document has content from IndexedDB, skipping hydrate:', normalizedDocId);
         return;
       }
       
       // Also check _init_markdown (might have been written by import)
       const initMarkdown = ydoc.getText('_init_markdown');
       if (initMarkdown.length > 0) {
-        console.log('ℹ️ [YjsHydration] Document has _init_markdown, skipping hydrate:', normalizedDocId);
         return;
       }
       
       // 3. APPLY YJS BINARY (AUTHORITATIVE)
       if (yjsStateB64) {
-        console.log('🧬 [YjsHydration] Binary truth:', normalizedDocId, `(${yjsStateB64.length} chars b64)`);
         try {
           const binary = buffer.fromBase64(yjsStateB64);
           Y.applyUpdate(ydoc, binary, 'initial-hydration');
-          console.log('✅ [YjsHydration] Binary applied successfully');
           return; // ✅ ENFORCED: Do not fall back to markdown if binary exists
         } catch (error) {
           console.warn('⚠️ [YjsHydration] Binary failed, falling back to markdown:', error);
@@ -127,7 +119,6 @@ export class YjsHydrationService {
       
       // 4. FALLBACK TO MARKDOWN
       if (!markdown) {
-        console.log('ℹ️ [YjsHydration] No content to hydrate:', normalizedDocId);
         return;
       }
       
@@ -138,13 +129,10 @@ export class YjsHydrationService {
         }
       }
 
-      console.log('🧬 [YjsHydration] Hydrating from markdown:', normalizedDocId, `(${markdown.length} chars)`);
       
       // Step 1: Convert Markdown → HTML
       const html = markdownToHtml(markdown);
-      console.log('📝 [YjsHydration] Converted to HTML:', html.length, 'chars');
-      console.log('📝 [YjsHydration] HTML preview:', html.substring(0, 200) + '...');
-      
+    
       // Step 2: Store in _init_markdown for TipTap to pick up
       ydoc.transact(() => {
         const tempText = ydoc.getText('_init_markdown');
@@ -152,12 +140,10 @@ export class YjsHydrationService {
           tempText.delete(0, tempText.length);
         }
         tempText.insert(0, html);
-        console.log('📝 [YjsHydration] Wrote to _init_markdown:', tempText.length, 'chars');
       });
       
       // Verify the write
       const verifyText = ydoc.getText('_init_markdown');
-      console.log('✅ [YjsHydration] Verified _init_markdown has:', verifyText.length, 'chars');
     } catch (error) {
       console.error('❌ [YjsHydration] Failed:', error);
     }
@@ -186,7 +172,6 @@ export class YjsHydrationService {
           vector: null 
         };
         localStorage.setItem(`mdreader:snapshot:${documentId}:${ts}`, JSON.stringify(meta));
-        console.log('🔖 [Snapshot] Recorded (no ydoc):', meta);
         return;
       }
 
@@ -213,12 +198,7 @@ export class YjsHydrationService {
         console.warn('⚠️ [Snapshot] Failed to persist to localStorage', e);
       }
 
-      console.log('🔖 [Snapshot] Recorded:', { 
-        documentId, 
-        timestamp: ts, 
-        reason: opts.reason, 
-        filePath: opts.filePath 
-      });
+    
     } catch (err) {
       console.error('❌ [Snapshot] Failed:', err);
     }

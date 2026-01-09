@@ -28,7 +28,6 @@ export const GhostTextExtension = Extension.create<GhostTextOptions>({
   },
 
   onCreate() {
-    console.log('🎯 GhostTextExtension CREATED! Enabled:', this.options.isEnabled());
   },
 
   addProseMirrorPlugins() {
@@ -40,7 +39,6 @@ export const GhostTextExtension = Extension.create<GhostTextOptions>({
 
         state: {
           init() {
-            console.log('🔌 GhostText Plugin STATE initialized');
             return DecorationSet.empty;
           },
 
@@ -51,7 +49,6 @@ export const GhostTextExtension = Extension.create<GhostTextOptions>({
             // Clear on user typing
             if (tr.docChanged && !tr.getMeta('ghostText')) {
               const enabled = extension.options.isEnabled();
-              console.log('⌨️ User typed! Enabled:', enabled);
               
               currentSuggestion = null;
               if (triggerTimeout) clearTimeout(triggerTimeout);
@@ -59,32 +56,25 @@ export const GhostTextExtension = Extension.create<GhostTextOptions>({
               // Trigger new suggestion after delay
               triggerTimeout = setTimeout(() => {
                 const enabledNow = extension.options.isEnabled();
-                console.log('⏱️ Timeout fired! Enabled:', enabledNow);
                 
                 if (!enabledNow) {
-                  console.log('❌ Extension is DISABLED, skipping...');
                   return;
                 }
                 
                 const text = tr.doc.textContent;
-                console.log('📝 Text length:', text.length, 'Last char:', text[text.length - 1]);
                 
                 if (text.length < 15) {
-                  console.log('❌ Text too short, skipping...');
                   return;
                 }
                 
                 if (text[text.length - 1] !== ' ') {
-                  console.log('❌ Does not end with space, skipping...');
                   return;
                 }
                 
                 const context = text.slice(Math.max(0, text.length - 500));
-                console.log('🤖 Triggering AI with context:', context.slice(-50));
                 
                 extension.options.onTrigger(context).then(suggestion => {
                   if (suggestion) {
-                    console.log('✅ Got suggestion:', suggestion);
                     const view = (extension.editor as any).view;
                     if (view) {
                       const tr = view.state.tr;
@@ -92,7 +82,6 @@ export const GhostTextExtension = Extension.create<GhostTextOptions>({
                       view.dispatch(tr);
                     }
                   } else {
-                    console.log('❌ No suggestion returned');
                   }
                 });
               }, extension.options.debounceMs);
@@ -103,7 +92,6 @@ export const GhostTextExtension = Extension.create<GhostTextOptions>({
             // Show ghost text
             const meta = tr.getMeta('ghostText');
             if (meta?.show && meta.suggestion) {
-              console.log('👻 Showing ghost text:', meta.suggestion);
               currentSuggestion = meta.suggestion;
               const pos = tr.selection.$anchor.pos;
 
@@ -140,7 +128,6 @@ export const GhostTextExtension = Extension.create<GhostTextOptions>({
             // Tab - Accept
             if (event.key === 'Tab' && !event.shiftKey) {
               event.preventDefault();
-              console.log('✅ Accepting suggestion:', currentSuggestion);
               const tr = view.state.tr;
               tr.insertText(currentSuggestion);
               tr.setMeta('ghostText', { clear: true });
@@ -152,7 +139,6 @@ export const GhostTextExtension = Extension.create<GhostTextOptions>({
             // Esc - Reject
             if (event.key === 'Escape') {
               event.preventDefault();
-              console.log('❌ Rejecting suggestion');
               const tr = view.state.tr;
               tr.setMeta('ghostText', { clear: true });
               view.dispatch(tr);

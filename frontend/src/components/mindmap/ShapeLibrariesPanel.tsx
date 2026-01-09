@@ -586,7 +586,6 @@ export default function ShapeLibrariesPanel({ onAddShape, isOpen, onToggle }: Sh
                     onClick={() => {
                       // This would trigger template creation
                       // For now, just show a placeholder
-                      console.log('Apply template:', template.pattern);
                     }}
                     title={`Create ${template.name} template`}
                   >

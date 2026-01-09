@@ -118,7 +118,6 @@ export default function MindmapStudio1() {
     layoutEngine.register('tree-vertical', treeVerticalLayout);
     layoutEngine.register('tree-horizontal', treeHorizontalLayout);
     layoutEngine.register('force', forceLayout);
-    console.log('🎨 Registered all layouts: Radial, Tree (V/H), Force');
   }, []);
 
   // Keyboard shortcuts
@@ -158,19 +157,16 @@ export default function MindmapStudio1() {
 
       // Ctrl/Cmd + Z - Undo (placeholder)
       if (ctrl && event.key === 'z' && !shift) {
-        console.log('⏪ Undo (not implemented yet)');
         event.preventDefault();
       }
 
       // Ctrl/Cmd + Shift + Z or Ctrl/Cmd + Y - Redo (placeholder)
       if ((ctrl && shift && event.key === 'z') || (ctrl && event.key === 'y')) {
-        console.log('⏩ Redo (not implemented yet)');
         event.preventDefault();
       }
 
       // Ctrl/Cmd + A - Select all (placeholder)
       if (ctrl && event.key === 'a') {
-        console.log('📋 Select All (not implemented yet)');
         event.preventDefault();
       }
 
@@ -328,7 +324,6 @@ export default function MindmapStudio1() {
       .on("mousedown", function(event, d) {
         if (event.button !== 0) return; // Only left mouse button
         
-        console.log(`🟢 DRAG START: ${d.id} (${d.label}) at (${d.x}, ${d.y})`);
         
         let isDragging = false;
         let startMouseX = event.clientX;
@@ -348,7 +343,6 @@ export default function MindmapStudio1() {
           const newX = startNodeX + deltaX;
           const newY = startNodeY + deltaY;
           
-          console.log(`🔵 DRAGGING: ${d.id} | delta: (${deltaX}, ${deltaY}) | new: (${newX}, ${newY})`);
           
           // Update node position immediately
           d.x = newX;
@@ -366,7 +360,6 @@ export default function MindmapStudio1() {
         };
         
         const handleMouseUp = (e: MouseEvent) => {
-          console.log(`🔴 DRAG END: ${d.id} | final: (${d.x}, ${d.y})`);
           
           document.removeEventListener('mousemove', handleMouseMove);
           document.removeEventListener('mouseup', handleMouseUp);
@@ -381,7 +374,6 @@ export default function MindmapStudio1() {
         event.stopPropagation();
       })
       .on("dblclick", function(event, d) {
-        console.log(`🔍 NODE DOUBLE-CLICK: ${d.id} (${d.label})`);
         
         // Open details sidebar for this node
         setSelectedNodeId(d.id);
@@ -419,10 +411,8 @@ export default function MindmapStudio1() {
     mainGroup.selectAll(".milestone-title").remove();
 
     // Render milestone containers BEHIND nodes
-    console.log('🏁 Rendering', milestones.length, 'milestones:', milestones.map(m => m.id));
     
     milestones.forEach((milestone, index) => {
-      console.log(`🏁 Creating milestone ${milestone.id} at bounds:`, milestone.bounds);
       
       // Create milestone container
       const container = mainGroup.insert("rect", ":first-child") // Insert at beginning so it's behind nodes
@@ -455,7 +445,6 @@ export default function MindmapStudio1() {
             (element as any).clickTimeout = null;
             
             // This is a double click
-            console.log(`🔍 MILESTONE DOUBLE-CLICK: ${clickData.id} (${clickData.title})`);
             
             // Open details sidebar for this milestone
             setSelectedMilestoneId(clickData.id);
@@ -469,7 +458,6 @@ export default function MindmapStudio1() {
           
           // Set timeout for single click
           (element as any).clickTimeout = setTimeout(() => {
-            console.log(`🖱️ MILESTONE SINGLE-CLICK: ${clickData.id} (${clickData.title})`);
             
             // Select milestone for resizing
             setSelectedMilestoneForResize(clickData.id);
@@ -500,7 +488,6 @@ export default function MindmapStudio1() {
             // Only start dragging if mouse has moved significantly
             if (moveDistance > 5 && !hasMoved) {
               hasMoved = true;
-              console.log(`🏁 MILESTONE DRAG START: ${d.id} (${d.title})`);
               
               // Clear any pending drag timeout
               if (dragTimeout) {
@@ -532,7 +519,6 @@ export default function MindmapStudio1() {
             const currentMilestone = milestones.find(m => m.id === d.id);
             const groupedNodeIds = new Set(currentMilestone?.groupedNodes || d.groupedNodes);
             
-            console.log(`🏁 Moving milestone ${d.id} with nodes:`, Array.from(groupedNodeIds));
             
             setNodes(prev => prev.map(node => {
               if (groupedNodeIds.has(node.id)) {
@@ -567,7 +553,6 @@ export default function MindmapStudio1() {
             }
             
             if (hasMoved) {
-              console.log(`🏁 MILESTONE DRAG END: ${d.id} | final bounds: (${d.bounds.x}, ${d.bounds.y})`);
               
               // Get fresh grouped nodes data for cleanup
               const currentMilestone = milestones.find(m => m.id === d.id);
@@ -660,7 +645,6 @@ export default function MindmapStudio1() {
         setSelectionCurrent({ x: startX, y: startY });
         setIsSelecting(true);
         
-        console.log('🏁 Started milestone selection at:', { x: startX, y: startY });
         
         event.preventDefault();
         event.stopPropagation();
@@ -677,7 +661,6 @@ export default function MindmapStudio1() {
         // Only clear if clicking on empty space (not on nodes or milestones)
         const target = event.target;
         if (target === svg.node() || target.tagName === 'svg') {
-          console.log('🖱️ Canvas clicked - clearing milestone selection');
           setSelectedMilestoneForResize(null);
         }
       });
@@ -714,7 +697,6 @@ export default function MindmapStudio1() {
           createMilestone(selectedNodeIds);
         }
         
-        console.log('🏁 Milestone selection ended, selected nodes:', selectedNodeIds);
       };
       
       document.addEventListener('mousemove', handleMouseMove);
@@ -773,7 +755,6 @@ export default function MindmapStudio1() {
     };
     
     setMilestones(prev => [...prev, milestone]);
-    console.log('🏁 Created milestone:', milestone.title, 'with', nodeIds.length, 'nodes');
   };
 
   // Get selected node or milestone for sidebar (always get fresh data)
@@ -857,7 +838,6 @@ export default function MindmapStudio1() {
           event.preventDefault();
           event.stopPropagation();
           
-          console.log(`🔧 RESIZE START: ${handle.name} handle for ${milestone.id}`);
           
           const startX = event.clientX;
           const startY = event.clientY;
@@ -928,11 +908,9 @@ export default function MindmapStudio1() {
           };
           
           const handleMouseUp = (e: MouseEvent) => {
-            console.log(`🔧 RESIZE END: ${handle.name} handle for ${milestone.id}`);
             
             // Update grouped nodes based on new bounds (with delay to ensure state is updated)
             setTimeout(() => {
-              console.log(`🎯 RESIZE: Calling updateGroupedNodesFromBounds for ${milestone.id}`);
               updateGroupedNodesFromBounds(milestone.id);
             }, 50);
             
@@ -951,11 +929,9 @@ export default function MindmapStudio1() {
   // Apply layout algorithm
   const applyLayout = (layoutId: string) => {
     if (layoutId === 'manual') {
-      console.log('🎨 Manual layout - no automatic positioning');
       return;
     }
 
-    console.log(`🎨 Applying ${layoutId} layout...`);
 
     try {
       // Convert to layout format
@@ -998,7 +974,6 @@ export default function MindmapStudio1() {
         return node;
       }));
 
-      console.log(`🎨 ${layoutId} layout applied successfully`);
     } catch (error) {
       console.error('🎨 Layout failed:', error);
     }
@@ -1006,7 +981,6 @@ export default function MindmapStudio1() {
 
   // Export mindmap
   const handleExport = (format: ExportFormat) => {
-    console.log(`📤 Exporting as ${format}`);
     
     try {
       // Convert D3 data to export format
@@ -1078,7 +1052,6 @@ export default function MindmapStudio1() {
 
       setNodes(prev => [...prev, ...newNodes]);
       
-      console.log(`✨ AI generated ${newNodes.length} child nodes`);
     } catch (error) {
       console.error('❌ AI expansion failed:', error);
       alert('AI expansion failed. Please try again.');
@@ -1125,7 +1098,6 @@ export default function MindmapStudio1() {
     setNodes(template.nodes as Node[]);
     setLinks(template.links);
     setShowTemplateGallery(false);
-    console.log(`✨ Loaded template: ${template.name}`);
   };
 
   const handleAnalyzeQuality = async () => {
@@ -1148,7 +1120,6 @@ export default function MindmapStudio1() {
       setQualityReport(report);
       setShowQualityReport(true);
 
-      console.log(`✨ Quality analysis complete: ${report.score}/100`);
     } catch (error) {
       console.error('❌ Quality analysis failed:', error);
       alert('Quality analysis failed. Please try again.');
@@ -1195,7 +1166,6 @@ export default function MindmapStudio1() {
           target: s.target,
         }));
         setLinks(prev => [...prev, ...newLinks]);
-        console.log(`✨ Added ${newLinks.length} AI-suggested connections`);
       }
     } catch (error) {
       console.error('❌ Connection suggestion failed:', error);
@@ -1481,12 +1451,9 @@ export default function MindmapStudio1() {
     setMilestones(currentMilestones => {
       const milestone = currentMilestones.find(m => m.id === milestoneId);
       if (!milestone) {
-        console.log(`⚠️ Milestone ${milestoneId} not found`);
         return currentMilestones;
       }
   
-      console.log(`🔍 === MILESTONE RESIZE DETECTION ===`);
-      console.log(`🔍 Milestone ${milestoneId} bounds:`, milestone.bounds);
       
       // Get current nodes from state
       let currentNodes: Node[] = [];
@@ -1495,36 +1462,28 @@ export default function MindmapStudio1() {
         return n;
       });
       
-      console.log(`🔍 All nodes positions:`, currentNodes.map(n => ({ id: n.id, label: n.label, x: n.x, y: n.y })));
       
       // Find all nodes within the new bounds with some padding for better detection
       const padding = 25; // Node radius
       const { x, y, width, height } = milestone.bounds;
       
-      console.log(`🔍 Detection area: x=${x-padding} to ${x+width+padding}, y=${y-padding} to ${y+height+padding}`);
       
       const nodesInBounds = currentNodes.filter(node => {
         const isInsideX = node.x >= (x - padding) && node.x <= (x + width + padding);
         const isInsideY = node.y >= (y - padding) && node.y <= (y + height + padding);
         const isInside = isInsideX && isInsideY;
         
-        console.log(`🔍 Node ${node.id} (${node.label}) at (${node.x}, ${node.y})`);
-        console.log(`   X check: ${node.x} >= ${x-padding} && ${node.x} <= ${x+width+padding} = ${isInsideX}`);
-        console.log(`   Y check: ${node.y} >= ${y-padding} && ${node.y} <= ${y+height+padding} = ${isInsideY}`);
-        console.log(`   Result: ${isInside}`);
+      
         
         return isInside;
       });
       
       const newGroupedNodes = nodesInBounds.map(n => n.id);
       
-      console.log(`🔄 Updated milestone ${milestoneId} grouped nodes:`, newGroupedNodes);
-      console.log(`🔄 Previous nodes:`, milestone.groupedNodes);
-      console.log(`🔄 New nodes:`, newGroupedNodes);
+ 
       
       // Force sidebar refresh if this milestone is currently selected
       if (selectedMilestoneId === milestoneId && showSidebar) {
-        console.log('🔄 Forcing sidebar refresh for updated milestone');
         setTimeout(() => {
           setSelectedMilestoneId(null);
           setTimeout(() => {

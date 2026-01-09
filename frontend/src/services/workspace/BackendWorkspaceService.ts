@@ -82,17 +82,14 @@ export class BackendWorkspaceService {
     // Listen for online/offline events
     window.addEventListener('online', () => {
       this.isOnline = true;
-      console.log('🌐 Backend service: Online');
     });
     
     window.addEventListener('offline', () => {
       this.isOnline = false;
-      console.log('📴 Backend service: Offline');
     });
     
     // Listen for logout to reset state and clear cache
     window.addEventListener(EventNames.AUTH_LOGOUT, async () => {
-      console.log('🚪 [BackendWorkspaceService] Logout detected, resetting state and clearing cache...');
       await this.reset();
     });
   }
@@ -101,23 +98,22 @@ export class BackendWorkspaceService {
    * Reset service state on logout
    * Clears all cached data and resets initialization flag
    * 
-   * 🔥 CRITICAL: Must clear IndexedDB cache to prevent cross-user data leakage!
+   * CRITICAL: Must clear IndexedDB cache to prevent cross-user data leakage!
    * Without this, a new user logging in would see the previous user's cached data.
    */
   async reset(): Promise<void> {
     this.currentWorkspaceId = null;
     this.isInitialized = false;
     
-    // 🔥 Clear ALL cached data to prevent cross-user data leakage
+    // Clear ALL cached data to prevent cross-user data leakage
     try {
       await cacheDb.workspaces.clear();
       await cacheDb.documents.clear();
       await cacheDb.folders.clear();
       await cacheDb.settings.clear();
       await cacheDb.workspaceMappings.clear();
-      console.log('✅ [BackendWorkspaceService] State and cache cleared');
-    } catch (error) {
-      console.error('❌ [BackendWorkspaceService] Failed to clear cache:', error);
+    } catch {
+      // Silently handle cache clear errors
     }
   }
 
@@ -134,7 +130,6 @@ export class BackendWorkspaceService {
     try {
       // Check authentication
       if (!authService.isAuthenticated()) {
-        console.log('⚠️ User not authenticated, skipping backend workspace init');
         return;
       }
 
@@ -143,7 +138,7 @@ export class BackendWorkspaceService {
         try {
           await this.syncWorkspaces();
         } catch (error) {
-          console.warn('⚠️ Failed to sync workspaces from backend, using cache:', error);
+          // Failed to sync workspaces, will use cache
         }
       }
 
@@ -152,7 +147,6 @@ export class BackendWorkspaceService {
       
       if (workspaces.length === 0) {
         // Create default workspace if none exist
-        console.log('📝 Creating default workspace...');
         const newWorkspace = await this.createDefaultWorkspace();
         this.currentWorkspaceId = newWorkspace.id;
       } else {
@@ -163,26 +157,28 @@ export class BackendWorkspaceService {
         } else {
           this.currentWorkspaceId = workspaces[0].id;
         }
-        console.log(`📦 Loaded ${workspaces.length} workspace(s) from cache`);
       }
 
-      // 🔥 SYNC DOCUMENTS: After loading workspaces, sync documents for current workspace
+      // Sync folders and documents for current workspace after loading workspaces
       if (this.currentWorkspaceId && this.isOnline) {
         try {
-          console.log(`🔄 Syncing documents for workspace: ${this.currentWorkspaceId}`);
+          await this.syncFolders(this.currentWorkspaceId);
+        } catch (error) {
+          // Failed to sync folders, will use cache
+        }
+        
+        try {
           await this.syncDocuments(this.currentWorkspaceId);
         } catch (error) {
-          console.warn('⚠️ Failed to sync documents from backend, using cache:', error);
+          // Failed to sync documents, will use cache
         }
       }
 
       this.isInitialized = true;
-      console.log('✅ Backend workspace service initialized');
       
       // Emit event for listeners waiting for backend to be ready
       dispatchSyncBackendReady();
     } catch (error) {
-      console.error('❌ Failed to initialize backend workspace service:', error);
       throw error;
     }
   }
@@ -236,7 +232,7 @@ export class BackendWorkspaceService {
     try {
       const apiWorkspaces = await workspaceService.listWorkspaces();
       
-      // 🔥 FIX: Handle different response formats
+      // Handle different response formats
       let workspacesArray: ApiWorkspace[] = [];
       
       if (Array.isArray(apiWorkspaces)) {
@@ -252,8 +248,6 @@ export class BackendWorkspaceService {
         }
       }
       
-      console.log(`📦 API returned ${workspacesArray.length} workspace(s)`);
-      
       // Map to our format and cache
       const workspaces: Workspace[] = workspacesArray.map((w: ApiWorkspace) => this.mapApiWorkspace(w));
       
@@ -262,10 +256,7 @@ export class BackendWorkspaceService {
       if (workspaces.length > 0) {
         await cacheDb.workspaces.bulkAdd(workspaces);
       }
-      
-      console.log(`✅ Synced ${workspaces.length} workspace(s) from backend`);
     } catch (error) {
-      console.error('❌ Failed to sync workspaces:', error);
       throw error;
     }
   }
@@ -285,6 +276,7 @@ export class BackendWorkspaceService {
       description: apiWorkspace.description,
       createdAt: apiWorkspace.created_at,
       updatedAt: apiWorkspace.updated_at,
+      syncMode: 'cloud', // Backend workspaces are cloud by default
       syncStatus: 'synced',
       lastSyncedAt: new Date().toISOString(),
       version: 1, // Backend uses version field for optimistic locking
@@ -312,6 +304,23 @@ export class BackendWorkspaceService {
   }
 
   /**
+   * Refresh folders for a workspace from the backend into the local cache.
+   *
+   * This is used by sync flows (e.g. selective sync) that may create folders
+   * directly via the API and then need the sidebar / folder tree to see them.
+   */
+  async refreshFoldersFromCloud(workspaceId?: string): Promise<void> {
+    // Don't throw if not initialized - just skip silently
+    // This can be called during sync before full init is complete
+    if (!this.isInitialized) return;
+    
+    const targetWorkspaceId = workspaceId || this.currentWorkspaceId;
+    if (!targetWorkspaceId) return;
+
+    await this.syncFolders(targetWorkspaceId);
+  }
+
+  /**
    * Map API document to our format
    */
   private mapApiDocument(apiDoc: ApiDocument): DocumentMeta {
@@ -319,34 +328,23 @@ export class BackendWorkspaceService {
     const yjsStateB64 = (apiDoc as any).yjs_state_b64 || undefined;
     const yjsVersion = (apiDoc as any).yjs_version || 0;
     
-    // 🔥 DEBUG: Log content mapping
-    if (!content && apiDoc.id) {
-      console.warn(`⚠️ [mapApiDocument] Document ${apiDoc.id} (${apiDoc.title}) has NO content from API`);
-    } else {
-      console.log(`✅ [mapApiDocument] Document ${apiDoc.id} (${apiDoc.title}) has content: ${content.substring(0, 50)}...`);
-    }
-    
-    // 🔥 BUG FIX #4: Map yjs_state_b64 from API to enable binary hydration
-    if (yjsStateB64) {
-      console.log(`🧬 [mapApiDocument] Document ${apiDoc.id} has Yjs binary (${yjsStateB64.length} chars b64, v${yjsVersion})`);
-    }
-    
     return {
       id: apiDoc.id,
       workspaceId: apiDoc.workspace_id,
       folderId: (apiDoc as any).folder_id || null,
       title: apiDoc.title,
       type: apiDoc.content_type === 'markdown' ? 'markdown' : 'markdown', // Extend later
-      content,  // 🔥 CRITICAL: Include content from backend
+      content,
       starred: (apiDoc as any).is_starred || false, // Backend returns is_starred
       tags: (apiDoc as any).tags || [], // Backend returns tags array
       createdAt: apiDoc.created_at,
       updatedAt: apiDoc.updated_at,
+      syncMode: 'cloud-enabled', // Backend documents are cloud by default
       syncStatus: 'synced',
       lastSyncedAt: new Date().toISOString(),
       version: apiDoc.version || 1,
-      yjsVersion,         // 🔥 BUG FIX #4: Map Yjs version
-      yjsStateB64,        // 🔥 BUG FIX #4: Map Yjs binary state
+      yjsVersion,
+      yjsStateB64,
     };
   }
 
@@ -378,13 +376,12 @@ export class BackendWorkspaceService {
     // Return from cache (always up-to-date after sync)
     const workspaces = await cacheDb.workspaces.orderBy('createdAt').toArray();
     
-    // 🔥 FIX: Filter out temp workspaces that failed to sync
+    // Filter out temp workspaces that failed to sync
     // If we have temp workspaces and we're online, try to sync them
     const tempWorkspaces = workspaces.filter(w => w.id.startsWith('temp_'));
     const realWorkspaces = workspaces.filter(w => !w.id.startsWith('temp_'));
     
     if (tempWorkspaces.length > 0 && this.isOnline) {
-      console.warn(`⚠️ Found ${tempWorkspaces.length} temp workspace(s), attempting to sync...`);
       // Try to sync temp workspaces (they should have been synced already, but retry)
       for (const tempWs of tempWorkspaces) {
         try {
@@ -410,9 +407,7 @@ export class BackendWorkspaceService {
           await this.createDefaultFolders(realWorkspace.id);
           
           realWorkspaces.push(realWorkspace);
-          console.log(`✅ Synced temp workspace "${tempWs.name}" → ${realWorkspace.id}`);
-        } catch (error) {
-          console.error(`❌ Failed to sync temp workspace "${tempWs.name}":`, error);
+        } catch {
           // Keep temp workspace for now
           realWorkspaces.push(tempWs);
         }
@@ -447,6 +442,7 @@ export class BackendWorkspaceService {
       description: input.description,
       createdAt: now,
       updatedAt: now,
+      syncMode: 'cloud', // Creating via backend service = cloud workspace
       syncStatus: this.isOnline ? 'syncing' : 'local',
       version: 1,
     };
@@ -474,13 +470,11 @@ export class BackendWorkspaceService {
           this.currentWorkspaceId = realWorkspace.id;
         }
         
-        // 🔥 CREATE DEFAULT FOLDERS after workspace is created
+        // Create default folders after workspace is created
         await this.createDefaultFolders(realWorkspace.id);
         
-        console.log('✅ Workspace created:', realWorkspace.name);
         return realWorkspace;
-      } catch (error) {
-        console.error('❌ Failed to create workspace on backend:', error);
+      } catch {
         // Keep optimistic workspace (will sync later)
         optimisticWorkspace.syncStatus = 'local';
         await cacheDb.workspaces.update(optimisticWorkspace.id, { syncStatus: 'local' });
@@ -523,12 +517,10 @@ export class BackendWorkspaceService {
         for (const folderInput of folders) {
           try {
             await this.createFolder(folderInput);
-          } catch (error) {
-            console.error(`❌ Failed to create folder "${folderInput.name}":`, error);
+          } catch {
             // Continue with other folders
           }
         }
-        console.log(`✅ Created ${folders.length} default folders for workspace`);
       } else {
         // Optimistic create (offline mode)
         for (const folderInput of folders) {
@@ -547,10 +539,8 @@ export class BackendWorkspaceService {
           };
           await cacheDb.folders.add(optimisticFolder);
         }
-        console.log(`✅ Created ${folders.length} default folders (optimistic) for workspace`);
       }
-    } catch (error) {
-      console.error('❌ Failed to create default folders:', error);
+    } catch {
       // Don't throw - folder creation failure shouldn't break workspace creation
     }
   }
@@ -583,8 +573,7 @@ export class BackendWorkspaceService {
         updated.syncStatus = 'synced';
         updated.lastSyncedAt = new Date().toISOString();
         await cacheDb.workspaces.update(id, updated);
-      } catch (error) {
-        console.error('❌ Failed to update workspace on backend:', error);
+      } catch {
         updated.syncStatus = 'local';
         await cacheDb.workspaces.update(id, updated);
       }
@@ -608,9 +597,7 @@ export class BackendWorkspaceService {
     if (this.isOnline) {
       try {
         await workspaceService.deleteWorkspace(id);
-        console.log('✅ Workspace deleted from backend');
-      } catch (error) {
-        console.error('❌ Failed to delete workspace on backend:', error);
+      } catch {
         // Already deleted from cache, will sync later
       }
     }
@@ -632,17 +619,15 @@ export class BackendWorkspaceService {
     this.currentWorkspaceId = id;
     await this.setSetting('lastWorkspaceId', id);
     
-    // 🔥 SYNC DOCUMENTS: Sync documents from backend when switching workspaces
+    // Sync folders AND documents from backend when switching workspaces
     if (this.isOnline && authService.isAuthenticated()) {
       try {
-        console.log(`🔄 Syncing documents for workspace: ${workspace.name}`);
+        await this.syncFolders(id);
         await this.syncDocuments(id);
-      } catch (error) {
-        console.warn('⚠️ Failed to sync documents when switching workspace, using cache:', error);
+      } catch {
+        // Failed to sync, using cache
       }
     }
-    
-    console.log(`✅ Switched to workspace: ${workspace.name}`);
   }
 
   // ==========================================================================
@@ -706,10 +691,8 @@ export class BackendWorkspaceService {
         await cacheDb.folders.delete(optimisticFolder.id);
         await cacheDb.folders.add(realFolder);
         
-        console.log('✅ Folder created:', realFolder.name);
         return realFolder;
-      } catch (error) {
-        console.error('❌ Failed to create folder on backend:', error);
+      } catch {
         optimisticFolder.syncStatus = 'local';
         await cacheDb.folders.update(optimisticFolder.id, { syncStatus: 'local' });
         return optimisticFolder;
@@ -750,8 +733,7 @@ export class BackendWorkspaceService {
         updated.syncStatus = 'synced';
         updated.lastSyncedAt = new Date().toISOString();
         await cacheDb.folders.update(id, updated);
-      } catch (error) {
-        console.error('❌ Failed to update folder on backend:', error);
+      } catch {
         updated.syncStatus = 'local';
         await cacheDb.folders.update(id, updated);
       }
@@ -778,9 +760,8 @@ export class BackendWorkspaceService {
     if (this.isOnline) {
       try {
         await folderService.deleteFolder(id, existing.workspaceId, true); // cascade=true
-        console.log('✅ Folder deleted from backend');
-      } catch (error) {
-        console.error('❌ Failed to delete folder on backend:', error);
+      } catch {
+        // Failed to delete on backend
       }
     }
   }
@@ -800,7 +781,7 @@ export class BackendWorkspaceService {
     const targetWorkspaceId = workspaceId || this.currentWorkspaceId;
     if (!targetWorkspaceId) return [];
     
-    // 🔥 FIX: DON'T sync on every getDocuments call (it's called on every keystroke!)
+    // Don't sync on every getDocuments call (it's called on every keystroke)
     // The list endpoint doesn't return content anyway, so syncing here is useless
     // Content should only be fetched when:
     // 1. Explicitly opening a document (getDocument)
@@ -816,7 +797,7 @@ export class BackendWorkspaceService {
 
   /**
    * Get a single document by ID
-   * 🔥 FIX: Smart caching - prefer local if newer, fetch from backend if missing/stale
+   * Smart caching - prefer local if newer, fetch from backend if missing/stale
    */
   async getDocument(id: string): Promise<DocumentMeta | null> {
     this.assertInitialized('getDocument');
@@ -825,51 +806,37 @@ export class BackendWorkspaceService {
       // Try cache first
       const cachedDoc = await cacheDb.documents.get(id);
       
-      console.log(`🔍 [getDocument] Cache check for ${id}:`, {
-        found: !!cachedDoc,
-        syncStatus: cachedDoc?.syncStatus,
-        hasContent: !!cachedDoc?.content,
-        contentLength: cachedDoc?.content?.length || 0,
-        updatedAt: cachedDoc?.updatedAt
-      });
-      
       // If in cache AND has content, check if it's local-only or needs sync
       if (cachedDoc) {
         // If local-only or pending sync, ALWAYS use cache (it's the source of truth)
         if (cachedDoc.syncStatus === 'local' || cachedDoc.syncStatus === 'pending') {
-          console.log(`✅ [getDocument] Using local cache (${cachedDoc.syncStatus}): ${id}, content: ${cachedDoc.content?.length || 0} chars`);
           return cachedDoc;
         }
         
         // If synced and has content, use cache
         if (cachedDoc.content) {
-          console.log(`✅ [getDocument] Using synced cache: ${id}, content: ${cachedDoc.content?.length || 0} chars`);
           return cachedDoc;
         }
       }
       
       // If authenticated and online, try to fetch from backend (only if not local-only or pending)
-      // 🔥 FIX: Don't fetch from backend if we have local changes pending sync
+      // Don't fetch from backend if we have local changes pending sync
       if (this.isOnline && authService.isAuthenticated() && 
           cachedDoc?.syncStatus !== 'local' && 
           cachedDoc?.syncStatus !== 'pending') {
         try {
-          // 🔥 LOCAL-FIRST: Backend now accepts our IDs, so ID should be the same!
-          console.log(`📥 [getDocument] Fetching from backend: ${id}`);
+          // Backend now accepts our IDs, so ID should be the same
           const apiDoc = await documentService.getDocument(id);
           const fullDoc = this.mapApiDocument(apiDoc);
           
           // Only update cache if backend version is newer OR cache has no content
           if (!cachedDoc || !cachedDoc.content || new Date(fullDoc.updatedAt) > new Date(cachedDoc.updatedAt)) {
             await cacheDb.documents.put(fullDoc);
-            console.log(`✅ [getDocument] Updated cache from backend: ${id}, content: ${fullDoc.content?.length || 0} chars`);
             return fullDoc;
           } else {
-            console.log(`✅ [getDocument] Cache is newer, keeping local: ${id}`);
             return cachedDoc;
           }
-        } catch (error) {
-          console.warn(`⚠️ [getDocument] Failed to fetch from backend, using cache:`, error);
+        } catch {
           // Fall back to cache even if it has no content
           return cachedDoc || null;
         }
@@ -877,8 +844,7 @@ export class BackendWorkspaceService {
       
       // Offline or not authenticated - return cache (even if no content)
       return cachedDoc || null;
-    } catch (error) {
-      console.warn('⚠️ Failed to get document:', error);
+    } catch {
       return null;
     }
   }
@@ -905,19 +871,19 @@ export class BackendWorkspaceService {
       folderId: input.folderId || null,
       title: input.title,
       type: input.type,
-      content: input.content || '',  // 🔥 CRITICAL: Store initial content
+      content: input.content || '',
       starred: false,
       tags: [],
       createdAt: now,
       updatedAt: now,
-      syncStatus: 'local', // ✅ LOCAL-FIRST: Always 'local' until user explicitly syncs
+      syncMode: 'local-only', // Start as local until synced
+      syncStatus: 'local', // LOCAL-FIRST: Always 'local' until user explicitly syncs
       version: 1,
     };
 
     // Save to IndexedDB cache (local storage)
     await cacheDb.documents.add(localDoc);
     
-    console.log('✅ Document created locally:', localDoc.title, `(syncStatus: ${localDoc.syncStatus})`);
     return localDoc;
   }
 
@@ -944,13 +910,12 @@ export class BackendWorkspaceService {
       ...existing,
       ...input,
       updatedAt: new Date().toISOString(),
-      syncStatus, // ✅ LOCAL-FIRST: Never auto-sync
+      syncStatus, // LOCAL-FIRST: Never auto-sync
     };
 
     // Update cache immediately (local save is mandatory per local_first.md)
     await cacheDb.documents.put(updated);
 
-    console.log('✅ Document updated locally:', id, `(syncStatus: ${syncStatus})`);
     return updated;
   }
 
@@ -974,7 +939,7 @@ export class BackendWorkspaceService {
   /**
    * Delete document
    * 
-   * 🔥 FIX: Backend-first deletion with proper ID handling
+   * Backend-first deletion with proper ID handling
    * - Local-only documents (doc_ prefix): Delete from cache only
    * - Backend documents: Delete from backend FIRST, then cache
    */
@@ -986,34 +951,26 @@ export class BackendWorkspaceService {
     
     if (isLocalOnly) {
       // Local-only document: Just delete from cache (no backend call needed)
-      console.log(`🗑️ [BackendService] Deleting local-only document: ${id}`);
       await cacheDb.documents.delete(id);
-      console.log(`✅ [BackendService] Local document deleted from cache: ${id}`);
       return;
     }
     
     // Backend document: Delete from backend FIRST, then cache
     if (this.isOnline) {
       try {
-        // 🔥 FIX: Backend expects bare UUID, strip any prefix if present
+        // Backend expects bare UUID, strip any prefix if present
         const backendId = id.startsWith('doc_') ? id.slice(4) : id;
         
-        console.log(`🗑️ [BackendService] Deleting from backend: ${backendId}`);
         await documentService.deleteDocument(backendId);
-        console.log(`✅ [BackendService] Document deleted from backend: ${backendId}`);
         
         // Only delete from cache AFTER successful backend deletion
         await cacheDb.documents.delete(id);
-        console.log(`✅ [BackendService] Document deleted from cache: ${id}`);
       } catch (error) {
-        console.error(`❌ [BackendService] Failed to delete document on backend:`, error);
-        // 🔥 FIX: Don't delete from cache if backend fails - throw error to caller
+        // Don't delete from cache if backend fails - throw error to caller
         throw error;
       }
     } else {
       // Offline: Queue for later sync (for now, just delete from cache)
-      // TODO: Implement offline deletion queue
-      console.warn(`⚠️ [BackendService] Offline - document will be deleted from cache only: ${id}`);
       await cacheDb.documents.delete(id);
     }
   }
@@ -1030,8 +987,6 @@ export class BackendWorkspaceService {
       throw new Error('Cannot sync: offline');
     }
 
-    console.log('🔄 Starting manual sync...');
-    
     // Sync workspaces
     await this.syncWorkspaces();
     
@@ -1044,8 +999,6 @@ export class BackendWorkspaceService {
     if (this.currentWorkspaceId) {
       await this.syncDocuments(this.currentWorkspaceId);
     }
-    
-    console.log('✅ Manual sync complete');
   }
 
   /**
@@ -1053,16 +1006,18 @@ export class BackendWorkspaceService {
    */
   private async syncFolders(workspaceId: string): Promise<void> {
     try {
-      const apiFolders = await folderService.listFolders(workspaceId);
-      const folders: Folder[] = apiFolders.map(f => this.mapApiFolder(f));
+      // API returns { items: [...], total: X } - extract items array
+      const response = await folderService.listFolders(workspaceId) as any;
+      const apiFolders = Array.isArray(response) ? response : (response?.items || []);
+      
+      const folders: Folder[] = apiFolders.map((f: any) => this.mapApiFolder(f));
       
       // Update cache (delete old, add new)
       await cacheDb.folders.where('workspaceId').equals(workspaceId).delete();
-      await cacheDb.folders.bulkAdd(folders);
-      
-      console.log(`✅ Synced ${folders.length} folder(s) from backend`);
+      if (folders.length > 0) {
+        await cacheDb.folders.bulkAdd(folders);
+      }
     } catch (error) {
-      console.error('❌ Failed to sync folders:', error);
       throw error;
     }
   }
@@ -1079,13 +1034,6 @@ export class BackendWorkspaceService {
     try {
       const apiDocs = await documentService.listDocuments(workspaceId);
       
-      // 🔥 DEBUG: Log what API returns
-      console.log(`📥 [syncDocuments] Received ${apiDocs.length} documents from API`);
-      if (apiDocs.length > 0) {
-        const firstDoc = apiDocs[0] as any;
-        console.log(`📥 [syncDocuments] First doc has content field?`, 'content' in firstDoc, firstDoc.content?.substring(0, 50));
-      }
-      
       const backendDocuments: DocumentMeta[] = apiDocs.map(d => this.mapApiDocument(d));
       
       // Get existing local documents for this workspace
@@ -1093,9 +1041,6 @@ export class BackendWorkspaceService {
         .where('workspaceId')
         .equals(workspaceId)
         .toArray();
-      
-      // Create a map of backend documents by ID
-      const backendDocMap = new Map(backendDocuments.map(d => [d.id, d]));
       
       // Keep local-only documents (not synced yet)
       const localOnlyDocs = localDocuments.filter(d => d.syncStatus === 'local');
@@ -1134,7 +1079,6 @@ export class BackendWorkspaceService {
       );
       
       if (docsToDelete.length > 0) {
-        console.log(`🗑️ Deleting ${docsToDelete.length} document(s) that no longer exist on backend (but keeping ${localOnlyDocs.length} local-only)`);
         await cacheDb.documents.bulkDelete(docsToDelete.map(d => d.id));
       }
       
@@ -1147,20 +1091,7 @@ export class BackendWorkspaceService {
       if (documentsToAdd.length > 0) {
         await cacheDb.documents.bulkAdd(documentsToAdd);
       }
-      
-      // 🔥 CRITICAL: Ensure local-only documents are preserved (they're already in cache, but verify)
-      // Local-only documents are NOT deleted, NOT updated, and NOT added - they just stay as-is
-      const finalDocs = await cacheDb.documents.where('workspaceId').equals(workspaceId).toArray();
-      const finalLocalOnly = finalDocs.filter(d => d.syncStatus === 'local');
-      
-      if (finalLocalOnly.length !== localOnlyDocs.length) {
-        console.warn(`⚠️ Local-only document count mismatch: expected ${localOnlyDocs.length}, found ${finalLocalOnly.length}`);
-      }
-      
-      const totalDocs = finalDocs.length;
-      console.log(`✅ Synced documents: ${documentsToUpdate.length} updated, ${documentsToAdd.length} added, ${localOnlyDocs.length} local-only preserved (total: ${totalDocs})`);
     } catch (error) {
-      console.error('❌ Failed to sync documents:', error);
       throw error;
     }
   }

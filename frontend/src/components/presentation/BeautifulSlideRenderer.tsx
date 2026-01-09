@@ -86,12 +86,7 @@ export function BeautifulSlideRenderer({
                 layoutConfig.positioning.horizontal === 'right' ? 'flex-end' : 'flex-start',
   };
 
-  console.log('🎨 BeautifulSlideRenderer rendering:', {
-    themeId: theme.id,
-    themeName: theme.name,
-    slideLayout: slide.layout,
-    slideTitle: slide.content.title,
-  });
+
 
   return (
     <div

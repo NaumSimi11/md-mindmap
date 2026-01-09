@@ -62,7 +62,6 @@ class TauriWorkspaceService {
    * Initialize service with workspace path
    */
   init(workspacePath: string): void {
-    console.log('🖥️ TauriWorkspaceService.init():', workspacePath);
     
     this.workspacePath = workspacePath;
     this.metadataPath = `${workspacePath}/.mdreader`;
@@ -129,11 +128,6 @@ class TauriWorkspaceService {
         updatedAt: f.modified,
       }));
 
-      console.log('✅ Loaded from file system:', {
-        folders: this.folders.length,
-        documents: this.documents.length,
-      });
-
     } catch (error) {
       console.error('❌ Failed to load from file system:', error);
     }
@@ -187,7 +181,6 @@ class TauriWorkspaceService {
     };
     
     this.folders.push(folder);
-    console.log('✅ Folder created:', folder.name);
     
     return folder;
   }
@@ -212,11 +205,9 @@ class TauriWorkspaceService {
       });
       
       folder.path = newPath;
-      console.log('✅ Directory renamed:', folder.name, '→', updates.name);
     }
 
     Object.assign(folder, updates, { updatedAt: new Date().toISOString() });
-    console.log('✅ Folder updated:', folder.name);
   }
 
   /**
@@ -242,7 +233,6 @@ class TauriWorkspaceService {
       this.documents = this.documents.filter(d => d.folderId !== folderId);
     }
     
-    console.log('✅ Folder deleted:', folder.name);
   }
 
   /**
@@ -294,7 +284,6 @@ class TauriWorkspaceService {
     };
 
     this.documents.push(document);
-    console.log('✅ Document created:', document.title, 'at', filePath);
 
     return document;
   }
@@ -315,7 +304,6 @@ class TauriWorkspaceService {
     });
 
     document.updatedAt = new Date().toISOString();
-    console.log('💾 Document saved:', document.title);
   }
 
   /**
@@ -339,11 +327,9 @@ class TauriWorkspaceService {
       });
       
       document.path = newPath;
-      console.log('✅ File renamed:', document.title, '→', updates.title);
     }
 
     Object.assign(document, updates, { updatedAt: new Date().toISOString() });
-    console.log('✅ Document metadata updated:', document.title);
   }
 
   /**
@@ -359,7 +345,6 @@ class TauriWorkspaceService {
     await invoke('delete_file', { file_path: document.path });
 
     this.documents = this.documents.filter(d => d.id !== documentId);
-    console.log('🗑️ Document deleted:', document.title);
   }
 
   /**

@@ -75,7 +75,6 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
         const layout = layoutMatch ? layoutMatch[1] : undefined;
 
         if (theme || layout) {
-          console.log('🎨 Config detected:', { theme, layout });
           setDetectedConfig({ theme, layout });
 
           // Set selectors to detected values
@@ -199,7 +198,6 @@ export const DiagramInsertMenu: React.FC<DiagramInsertMenuProps> = ({
 
         const initBlock = `%%{init: ${JSON.stringify(initConfig)}}%%`;
         finalCode = `${initBlock}\n${editableCode}`;
-        console.log('✅ Applying config:', initConfig);
       }
 
       onInsert(finalCode);

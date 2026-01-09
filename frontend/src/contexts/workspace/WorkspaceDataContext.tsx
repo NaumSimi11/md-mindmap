@@ -11,7 +11,6 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 import { useSync } from './SyncContext';
 import { backendWorkspaceService, guestWorkspaceService } from '@/services/workspace';
 import type { Workspace as WorkspaceType } from '@/services/workspace/types';
-import { getCanonicalWorkspaceKey } from '@/utils/identity';
 
 // Type alias for consistency
 type Workspace = WorkspaceType;
@@ -41,6 +40,16 @@ interface WorkspaceDataContextType {
     icon: string;
   }) => Promise<Workspace>;
   
+  /** Update workspace */
+  updateWorkspace: (workspaceId: string, data: Partial<{
+    name: string;
+    description: string;
+    icon: string;
+  }>) => Promise<void>;
+  
+  /** Delete workspace */
+  deleteWorkspace: (workspaceId: string) => Promise<void>;
+  
   /** Force reload workspaces */
   reloadWorkspaces: () => Promise<void>;
 }
@@ -62,6 +71,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     description: ws.description,
     createdAt: typeof ws.createdAt === 'string' ? ws.createdAt : ws.createdAt.toISOString(),
     updatedAt: typeof ws.updatedAt === 'string' ? ws.updatedAt : ws.updatedAt.toISOString(),
+    syncMode: ws.syncMode || (ws.syncStatus === 'local' ? 'local' : 'cloud'),
     syncStatus: ws.syncStatus || 'synced',
     cloudId: ws.cloudId,
     lastSyncedAt: ws.lastSyncedAt,
@@ -77,7 +87,6 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       // Load from appropriate service
       if (!shouldUseBackendService) {
         // Guest mode: Load only guest workspaces
-        console.log('🌐 [WorkspaceData] Loading guest workspaces...');
         const guestWorkspaces = await guestWorkspaceService.getAllWorkspaces();
         const mapped = guestWorkspaces.map(ws => ({
           ...mapWorkspace(ws),
@@ -92,26 +101,21 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           localStorage.setItem(LAST_WORKSPACE_KEY, currentWs.id);
         }
         
-        console.log(`✅ [WorkspaceData] Loaded ${mapped.length} guest workspace(s)`);
         return;
       }
 
       // Authenticated mode: Load and merge guest + backend workspaces
-      console.log('🔐 [WorkspaceData] Loading authenticated workspaces...');
       
       // Wait for backend to be initialized
       if (!isBackendInitialized) {
-        console.log('⏳ [WorkspaceData] Waiting for backend init...');
         return;
       }
 
       // 1. Load guest workspaces (local IndexedDB)
       const guestWorkspaces = await guestWorkspaceService.getAllWorkspaces();
-      console.log(`📦 [WorkspaceData] Loaded ${guestWorkspaces.length} guest workspace(s)`);
       
       // 2. Load backend workspaces (cloud/cache)
       const backendWorkspaces = await backendWorkspaceService.getAllWorkspaces();
-      console.log(`☁️ [WorkspaceData] Loaded ${backendWorkspaces.length} backend workspace(s)`);
       
       // 3. Merge workspaces - prioritize cloud, add ONE local workspace
       const backendMapped = backendWorkspaces.map(mapWorkspace);
@@ -147,7 +151,6 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
 
       setWorkspaces(allWorkspaces);
       
-      console.log(`✅ [WorkspaceData] Loaded: ${backendMapped.length} cloud + ${primaryLocalWorkspace ? 1 : 0} local = ${allWorkspaces.length} total`);
 
       // 4. Load current workspace (prefer last used, or first available)
       const lastWorkspaceId = localStorage.getItem(LAST_WORKSPACE_KEY);
@@ -156,7 +159,6 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       if (workspace) {
         setCurrentWorkspace(workspace);
         localStorage.setItem(LAST_WORKSPACE_KEY, workspace.id);
-        console.log('✅ [WorkspaceData] Current workspace:', workspace.name);
       }
     } catch (err: any) {
       console.error('❌ [WorkspaceData] Load failed:', err);
@@ -174,7 +176,6 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   // Switch workspace
   const switchWorkspace = useCallback(async (workspace: Workspace) => {
     try {
-      console.log('🔄 [WorkspaceData] Switching to:', workspace.name);
       setIsLoading(true);
       
       const isLocalOnly = workspace.syncStatus === 'local';
@@ -182,10 +183,8 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       // Switch in appropriate service
       if (!shouldUseBackendService || isLocalOnly) {
         await guestWorkspaceService.switchWorkspace(workspace.id);
-        console.log('✅ [WorkspaceData] Switched (guest service)');
       } else {
         await backendWorkspaceService.switchWorkspace(workspace.id);
-        console.log('✅ [WorkspaceData] Switched (backend service)');
       }
       
       setCurrentWorkspace(workspace);
@@ -209,7 +208,6 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     description: string; 
     icon: string;
   }): Promise<Workspace> => {
-    console.log('🆕 [WorkspaceData] Creating workspace:', data.name);
     
     // Guest mode: Use guest service
     if (!shouldUseBackendService) {
@@ -234,7 +232,6 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       setCurrentWorkspace(mappedNew);
       localStorage.setItem(LAST_WORKSPACE_KEY, newWorkspace.id);
       
-      console.log('✅ [WorkspaceData] Guest workspace created:', newWorkspace.name);
       
       // Emit event for DocumentDataContext
       window.dispatchEvent(new CustomEvent('workspace:created', {
@@ -259,7 +256,6 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     setCurrentWorkspace(mappedNew);
     localStorage.setItem(LAST_WORKSPACE_KEY, newWorkspace.id);
     
-    console.log('✅ [WorkspaceData] Backend workspace created:', newWorkspace.name);
     
     // Emit event for DocumentDataContext
     window.dispatchEvent(new CustomEvent('workspace:created', {
@@ -273,6 +269,92 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     await loadWorkspaces();
   }, [loadWorkspaces]);
 
+  // Update workspace
+  const updateWorkspace = useCallback(async (
+    workspaceId: string, 
+    data: Partial<{ name: string; description: string; icon: string }>
+  ) => {
+    const workspace = workspaces.find(w => w.id === workspaceId);
+    if (!workspace) {
+      throw new Error('Workspace not found');
+    }
+
+    const isLocalOnly = workspace.syncStatus === 'local';
+
+    if (!shouldUseBackendService || isLocalOnly) {
+      // Update in guest service (IndexedDB)
+      await guestWorkspaceService.updateWorkspace(workspaceId, data);
+    } else {
+      // Update in backend service (API + cache)
+      await backendWorkspaceService.updateWorkspace(workspaceId, data);
+    }
+
+    // Update local state
+    setWorkspaces(prev => prev.map(w => 
+      w.id === workspaceId 
+        ? { ...w, ...data, updatedAt: new Date().toISOString() }
+        : w
+    ));
+
+    // Update current workspace if it's the one being updated
+    if (currentWorkspace?.id === workspaceId) {
+      setCurrentWorkspace(prev => prev ? { ...prev, ...data, updatedAt: new Date().toISOString() } : null);
+    }
+
+    // Emit event
+    window.dispatchEvent(new CustomEvent('workspace:updated', {
+      detail: { workspaceId, data }
+    }));
+  }, [workspaces, currentWorkspace, shouldUseBackendService]);
+
+  // Delete workspace
+  const deleteWorkspace = useCallback(async (workspaceId: string) => {
+    // Prevent deleting last workspace
+    if (workspaces.length <= 1) {
+      throw new Error('Cannot delete the last workspace');
+    }
+
+    const workspace = workspaces.find(w => w.id === workspaceId);
+    if (!workspace) {
+      throw new Error('Workspace not found');
+    }
+
+    const isLocalOnly = workspace.syncStatus === 'local';
+
+    if (!shouldUseBackendService || isLocalOnly) {
+      // Delete from guest service (IndexedDB)
+      await guestWorkspaceService.deleteWorkspace(workspaceId);
+    } else {
+      // Delete from backend service (API + cache)
+      await backendWorkspaceService.deleteWorkspace(workspaceId);
+    }
+
+    // Update local state
+    const remainingWorkspaces = workspaces.filter(w => w.id !== workspaceId);
+    setWorkspaces(remainingWorkspaces);
+
+    // If deleted workspace was current, switch to first available
+    if (currentWorkspace?.id === workspaceId) {
+      const newCurrent = remainingWorkspaces[0];
+      if (newCurrent) {
+        setCurrentWorkspace(newCurrent);
+        localStorage.setItem(LAST_WORKSPACE_KEY, newCurrent.id);
+        
+        // Switch in the service as well
+        if (!shouldUseBackendService || newCurrent.syncStatus === 'local') {
+          await guestWorkspaceService.switchWorkspace(newCurrent.id);
+        } else {
+          await backendWorkspaceService.switchWorkspace(newCurrent.id);
+        }
+      }
+    }
+
+    // Emit event
+    window.dispatchEvent(new CustomEvent('workspace:deleted', {
+      detail: { workspaceId }
+    }));
+  }, [workspaces, currentWorkspace, shouldUseBackendService]);
+
   return (
     <WorkspaceDataContext.Provider
       value={{
@@ -282,6 +364,8 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         error,
         switchWorkspace,
         createWorkspace,
+        updateWorkspace,
+        deleteWorkspace,
         reloadWorkspaces,
       }}
     >

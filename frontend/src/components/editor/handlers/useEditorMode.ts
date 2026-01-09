@@ -34,52 +34,31 @@ export const useEditorMode = ({
             return;
         }
 
-        console.log('📥 INPUT:');
-        console.log('  Length:', markdown.length);
-        console.log('  Full content:', markdown);
+        
 
         // CRITICAL FIX: Strip outer markdown code fence if present
         if (markdown.startsWith('```markdown\n')) {
-            console.log('  ⚠️  Content wrapped in ```markdown fence, stripping...');
             markdown = markdown
                 .replace(/^```markdown\n/, '')  // Remove opening
                 .replace(/\n```$/, '');           // Remove closing
-            console.log('  ✅ After stripping, length:', markdown.length);
-            console.log('  ✅ After stripping:', markdown);
         }
-
-        console.log('  Contains ```mermaid?', markdown.includes('```mermaid'));
 
         // Set flag to prevent onUpdate from firing
         isProgrammaticUpdateRef.current = true;
-        console.log('🚫 isProgrammaticUpdate set to TRUE');
-
         // Split content by mermaid blocks (capture group keeps the delimiter)
         // More flexible regex to handle different newline styles
         const regex = /(\s*```\s*mermaid[\s\S]*?```)/g;
-        console.log('\n📦 SPLITTING by regex:', regex);
         const parts = markdown.split(regex);
-        console.log('  Split into', parts.length, 'parts');
 
-        parts.forEach((part, index) => {
-            console.log(`\n  ━━━ Part ${index} ━━━`);
-            console.log('  Length:', part.length);
-            console.log('  Content:', part);
-            console.log('  Starts with ```mermaid?', part.startsWith('```mermaid'));
-        });
+     
 
         // Clear editor FIRST before building content
-        console.log('\n🗑️  CLEARING EDITOR FIRST');
         editor.commands.clearContent();
-        console.log('✅ Editor cleared\n');
 
         // Now insert each part directly (NO intermediate building)
-        console.log('🔄 INSERTING PARTS DIRECTLY:');
         parts.forEach((part, index) => {
-            console.log(`\n━━━ Part ${index} ━━━`);
 
             if (!part.trim()) {
-                console.log('⏭️  Empty, skipping');
                 return;
             }
 
@@ -89,8 +68,6 @@ export const useEditorMode = ({
                 const code = m ? m[1].trim() : '';
 
                 if (code) {
-                    console.log('🎨 MERMAID:', code.substring(0, 50) + '...');
-                    console.log('📍 Cursor before:', editor.state.selection.from);
 
                     // Insert as array in a single call (chaining doesn't work for mermaid nodes)
                     const success = editor.commands.insertContent([
@@ -99,11 +76,8 @@ export const useEditorMode = ({
                         { type: 'paragraph' }
                     ]);
 
-                    console.log('📍 Cursor after:', editor.state.selection.from);
-                    console.log('🔍 Insert success?', success);
                 }
             } else {
-                console.log('📄 MARKDOWN:', part.substring(0, 40) + '...');
                 const html = markdownToHtml(part);
                 // 🔥 FIX: Parse HTML properly
                 editor.chain().insertContent(html, {
@@ -111,11 +85,6 @@ export const useEditorMode = ({
                 }).run();
             }
         });
-
-        console.log('\n🔍 FINAL CHECK:');
-        console.log('  Editor HTML length:', editor.getHTML().length);
-        console.log('  Editor HTML:', editor.getHTML().substring(0, 300));
-        console.log('  Editor JSON:', JSON.stringify(editor.getJSON(), null, 2).substring(0, 500));
 
         // Restore cursor position after content is inserted
         if (savedCursorTextRef.current !== null) {
@@ -148,34 +117,26 @@ export const useEditorMode = ({
                     }
                 }
                 isProgrammaticUpdateRef.current = false;
-                console.log('✅ isProgrammaticUpdate set to FALSE');
             }, 100);
         } else {
             isProgrammaticUpdateRef.current = false;
-            console.log('✅ isProgrammaticUpdate set to FALSE');
         }
     };
 
     const toggleEditorMode = () => {
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('🔀 TOGGLE MODE CALLED');
-        console.log('  Current mode:', editorMode);
+       
 
         if (editorMode === 'wysiwyg') {
             if (!editor) return;
 
             // Switching to Markdown - save text before cursor and convert content
-            console.log('  ➡️  WYSIWYG → Markdown');
 
             // Save text content before cursor for better position mapping
             const cursorPos = editor.state.selection.from;
             const textBeforeCursor = editor.state.doc.textBetween(0, cursorPos);
             savedCursorTextRef.current = textBeforeCursor;
-            console.log('  📍 Saved text before cursor:', textBeforeCursor.substring(Math.max(0, textBeforeCursor.length - 50)));
 
             const markdown = htmlToMarkdown('', editor);
-            console.log('  📝 Converted to markdown, length:', markdown.length);
-            console.log('  📝 Preview:', markdown.substring(0, 200));
             setMarkdownContent(markdown);
             setEditorMode('markdown');
 
@@ -195,29 +156,22 @@ export const useEditorMode = ({
                     }
                     markdownTextareaRef.current.setSelectionRange(markdownPos, markdownPos);
                     markdownTextareaRef.current.focus();
-                    console.log('  📍 Set markdown cursor position:', markdownPos);
                 }
             }, 50);
         } else {
             // Switching to WYSIWYG - save text before cursor in markdown and restore in WYSIWYG
-            console.log('  ➡️  Markdown → WYSIWYG');
 
             // Save text content before cursor in markdown mode
             if (markdownTextareaRef.current) {
                 const cursorPos = markdownTextareaRef.current.selectionStart;
                 savedCursorTextRef.current = markdownContent.substring(0, cursorPos);
-                console.log('  📍 Saved markdown text before cursor:', savedCursorTextRef.current.substring(Math.max(0, savedCursorTextRef.current.length - 50)));
             }
 
-            console.log('  📝 markdownContent length:', markdownContent.length);
-            console.log('  📝 markdownContent preview:', markdownContent.substring(0, 200));
-            console.log('  🔍 Contains mermaid?', markdownContent.includes('```mermaid'));
-
+            
             parseAndInsertMarkdown(markdownContent);
             setEditorMode('wysiwyg');
             // DON'T call onContentChange here - content hasn't changed, just the view mode
         }
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     };
 
     return { toggleEditorMode };

@@ -57,12 +57,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     
     setShouldUseBackendService(shouldUseBackend);
     
-    console.log('🔄 [SyncContext] Service selection:', {
-      'React isAuthenticated': isAuthenticated,
-      'Direct auth check': authCheck,
-      'Using': shouldUseBackend ? 'backend (cloud)' : 'guest (local)',
-      'Has user': !!user,
-    });
+   
   }, [isAuthenticated, user]);
 
   // Initialize backend service when authenticated
@@ -74,10 +69,8 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       }
       
       try {
-        console.log('🔐 [SyncContext] Initializing backend service...');
         await backendWorkspaceService.init();
         setIsBackendInitialized(true);
-        console.log('✅ [SyncContext] Backend service initialized');
       } catch (error) {
         console.error('❌ [SyncContext] Backend init failed:', error);
         setIsBackendInitialized(false);
@@ -92,21 +85,16 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     const handleLoginSuccess = async (event: Event) => {
       const customEvent = event as CustomEvent;
       const loginUser = customEvent.detail?.user;
-      console.log('🔔 [SyncContext] Login event detected:', loginUser?.username || loginUser?.email);
       
       // Trust the event data - auth:login is only dispatched after successful login
       // No timeout needed - the event itself is the signal that auth is ready
       const authCheck = authService.isAuthenticated();
-      console.log('🔍 [SyncContext] Post-login auth check:', {
-        'Direct auth check': authCheck,
-        'Has login user': !!loginUser,
-      });
+    
       
       if (authCheck || loginUser) {
         // Force re-init by incrementing counter
         // The auth event is authoritative - if we received it, login succeeded
         setInitCounter(prev => prev + 1);
-        console.log('✅ [SyncContext] Forcing re-init after login');
         
         // Trigger batch sync after backend service is initialized
         // Listen for the init complete event instead of using a timeout
@@ -114,7 +102,6 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           window.removeEventListener('sync:backend-ready', handleBackendReady);
           
           try {
-            console.log('🔄 [SyncContext] Starting batch sync after login...');
             const { batchSyncService } = await import('@/services/sync/BatchSyncService');
             const results = await batchSyncService.syncAllWorkspaces();
             
@@ -130,7 +117,6 @@ export function SyncProvider({ children }: { children: ReactNode }) {
             }
             
             if (totalOps > 0) {
-              console.log(`✅ [SyncContext] Batch sync complete: ${totalSuccessful}/${totalOps} successful`);
               
               // Refresh documents to show updated sync status
               window.dispatchEvent(new CustomEvent('batch-sync-complete', {

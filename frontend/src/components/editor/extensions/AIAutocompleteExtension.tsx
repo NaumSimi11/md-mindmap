@@ -148,7 +148,6 @@ export const AIAutocompleteExtension = Extension.create<AIAutocompleteOptions>({
             // Cooldown period after accepting a suggestion (3 seconds)
             const timeSinceAccept = Date.now() - lastAcceptedTime;
             if (timeSinceAccept < 3000) {
-              console.log('⏸️ AI Autocomplete: Cooldown active, skipping...');
               return;
             }
 
@@ -174,7 +173,6 @@ export const AIAutocompleteExtension = Extension.create<AIAutocompleteOptions>({
             // Debounce AI call
             debounceTimer = setTimeout(async () => {
               try {
-                console.log('🤖 AI Autocomplete: Generating suggestion...');
                 const suggestion = await options.onSuggestion(context);
 
                 // Avoid suggesting the same text again
@@ -187,9 +185,7 @@ export const AIAutocompleteExtension = Extension.create<AIAutocompleteOptions>({
                   tr.setMeta('updateSuggestion', true);
                   editorView.dispatch(tr);
 
-                  console.log('✨ AI Autocomplete: Suggestion ready:', suggestion.substring(0, 30) + '...');
                 } else if (suggestion === lastSuggestionText) {
-                  console.log('⏭️ AI Autocomplete: Skipping duplicate suggestion');
                 }
               } catch (error) {
                 console.error('❌ AI Autocomplete error:', error);

@@ -28,7 +28,6 @@ export function useNetworkStatus() {
   
   // Handle online event
   const handleOnline = useCallback(() => {
-    console.log('🌐 Network: Online');
     
     setState(prev => ({
       ...prev,
@@ -50,7 +49,6 @@ export function useNetworkStatus() {
   
   // Handle offline event
   const handleOffline = useCallback(() => {
-    console.log('📴 Network: Offline');
     
     setState(prev => ({
       ...prev,
@@ -65,7 +63,6 @@ export function useNetworkStatus() {
   const handleVisibilityChange = useCallback(() => {
     if (!document.hidden && navigator.onLine) {
       // App came to foreground and we're online - check connection
-      console.log('👁️ App visible, checking connection...');
       
       // Force check by pinging a known endpoint (optional)
       // This helps detect "fake online" states (connected to WiFi but no internet)

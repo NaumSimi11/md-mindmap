@@ -71,13 +71,10 @@ export function VersionHistory({
 
       if (isAuthenticated) {
         // AUTHENTICATED MODE: Load from backend API
-        console.log('🔐 Loading versions from backend:', normalizedId);
         const response = await documentVersionService.getVersions(normalizedId);
         setVersions(response.versions);
-        console.log(`✅ Loaded ${response.versions.length} versions from backend`);
       } else {
         // GUEST MODE: Load from GuestVersionManager (uses original ID)
-        console.log('👤 Loading versions from guest storage:', documentId);
         const guestVersions = guestVersionManager.getVersions(documentId);
 
         // Convert to DocumentVersion format
@@ -94,7 +91,6 @@ export function VersionHistory({
         }));
 
         setVersions(converted);
-        console.log(`✅ Loaded ${converted.length} guest versions`);
       }
     } catch (error: any) {
       console.error('Failed to load versions:', error);
@@ -129,7 +125,6 @@ export function VersionHistory({
     
     try {
       if (!isAuthenticated && !version.content) {
-        console.log('👤 Loading guest version content:', version.version_number);
         const content = await guestVersionManager.getVersionContent(documentId, version.version_number);
         
         if (content) {

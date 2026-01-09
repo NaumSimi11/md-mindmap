@@ -37,7 +37,6 @@ class YjsDocumentManager {
   private static CLEANUP_INTERVAL_MS = 60 * 1000; // Check every minute
 
   private constructor() {
-    console.log('🔧 YjsDocumentManager initialized');
     this.startCleanupTimer();
     this.setupLogoutCleanup();
   }
@@ -48,7 +47,6 @@ class YjsDocumentManager {
    */
   private setupLogoutCleanup(): void {
     window.addEventListener('auth:logout', () => {
-      console.log('🚪 [YjsDocumentManager] Logout detected, cleaning up all documents...');
       this.destroyAll();
       // Restart cleanup timer for next session
       this.startCleanupTimer();
@@ -94,11 +92,9 @@ class YjsDocumentManager {
       const instance = this.documents.get(documentId)!;
       instance.refCount++;
       instance.lastAccessed = Date.now();
-      console.log(`♻️ Reusing existing Yjs document: ${documentId} (refCount: ${instance.refCount})`);
       
       // 🔥 UPGRADE FIX: If document exists but WebSocket is needed and missing, add it now!
       if (enableWebSocket && isAuthenticated && !instance.websocketProvider) {
-        console.log(`🔄 [UPGRADE] Adding WebSocket to existing document: ${documentId}`);
         
         try {
           const authToken = safeStorage.getItem(StorageKeys.AUTH_TOKEN);
@@ -106,28 +102,21 @@ class YjsDocumentManager {
           if (!authToken) {
             console.warn(`⚠️ No auth token found for WebSocket upgrade`);
           } else {
-            console.log(`🔥 [UPGRADE DEBUG] Creating Hocuspocus provider with:`, {
-              websocketUrl,
-              documentId,
-              documentIdType: typeof documentId,
-              documentIdLength: documentId ? documentId.length : 0,
-              documentIdValue: JSON.stringify(documentId),
-            });
+           
             
             // Check for share token (guest access)
             const shareToken = sessionStorage.getItem('share_token');
+            // Append share token to URL if present
+            const wsUrl = shareToken ? `${websocketUrl}?share_token=${shareToken}` : websocketUrl;
             
             const websocketProvider = new HocuspocusProvider({
-              url: websocketUrl,
+              url: wsUrl,
               name: documentId,
               document: instance.ydoc,
               token: authToken || '',
-              // Pass share token via requestHeaders (NOT token parameter)
-              requestHeaders: shareToken ? { 'x-share-token': shareToken } : undefined,
               // 🔥 FIX: Handle auth failures - refresh token and recreate provider
               onAuthenticationFailed: async ({ reason }) => {
                 console.warn(`🔐 [Auth Failed - Upgrade] ${documentId}: ${reason}`);
-                console.log(`🔄 Attempting token refresh and reconnect...`);
                 
                 try {
                   const { authService } = await import('@/services/api/AuthService');
@@ -135,19 +124,16 @@ class YjsDocumentManager {
                   
                   const newToken = safeStorage.getItem(StorageKeys.AUTH_TOKEN);
                   if (newToken && instance.websocketProvider) {
-                    console.log(`✅ Token refreshed, recreating WebSocket provider...`);
                     instance.websocketProvider.destroy();
                     
                     const newProvider = new HocuspocusProvider({
-                      url: websocketUrl,
+                      url: wsUrl,
                       name: documentId,
                       document: instance.ydoc,
                       token: newToken,
-                      requestHeaders: shareToken ? { 'x-share-token': shareToken } : undefined,
                     });
                     
                     instance.websocketProvider = newProvider;
-                    console.log(`✅ WebSocket provider recreated with new token`);
                   }
                 } catch (refreshError) {
                   console.error(`❌ Token refresh failed:`, refreshError);
@@ -158,19 +144,7 @@ class YjsDocumentManager {
               },
             });
             
-            console.log(`🔥 [UPGRADE DEBUG] Hocuspocus provider created:`, {
-              url: websocketProvider.configuration.url,
-              name: websocketProvider.configuration.name,
-            });
-            
-            websocketProvider.on('status', (event: { status: string }) => {
-              console.log(`🌐 WebSocket status for ${documentId}:`, event.status);
-            });
-            
-            websocketProvider.on('sync', (isSynced: boolean) => {
-              console.log(`🔄 WebSocket sync for ${documentId}:`, isSynced);
-            });
-            
+           
             websocketProvider.on('connection-error', (error: any) => {
               console.error(`❌ WebSocket connection error for ${documentId}:`, error);
             });
@@ -183,10 +157,8 @@ class YjsDocumentManager {
                 name: currentUser.name,
                 color: currentUser.color,
               });
-              console.log(`👤 [UPGRADE] Awareness set for user: ${currentUser.name}`);
             }
             
-            console.log(`✅ [UPGRADE] WebSocket added successfully for ${documentId} (with auth: true) - Room: ${(websocketProvider as any).roomname}`);
           }
         } catch (wsError) {
           console.error(`❌ [UPGRADE] WebSocket creation failed for ${documentId}:`, wsError);
@@ -197,7 +169,6 @@ class YjsDocumentManager {
     }
 
     // Create new document instance
-    console.log(`🆕 Creating new Yjs document: ${documentId}`);
     
     try {
       const ydoc = new Y.Doc();
@@ -205,13 +176,11 @@ class YjsDocumentManager {
       // 🔥 EXPERT-LEVEL: Yjs document created empty
       // Content initialization is handled by WorkspaceContext using proper ProseMirror structure
       // NO localStorage hacks, NO timing issues, NO race conditions
-      console.log(`📄 [EXPERT] Creating empty Yjs document (content initialized separately)`);
       
       // 1. Setup IndexedDB persistence (ALWAYS)
       const indexeddbProvider = new IndexeddbPersistence(`mdreader-${documentId}`, ydoc);
       
       indexeddbProvider.on('synced', () => {
-        console.log(`💾 IndexedDB synced for ${documentId}`);
         if (instance) {
           instance.isInitialized = true;
         }
@@ -233,35 +202,23 @@ class YjsDocumentManager {
             console.warn(`⚠️ No auth token found, WebSocket will connect as guest`);
           }
           
-          console.log(`🌐 [WEBSOCKET DEBUG] Creating WebSocket provider with:`, {
-            websocketUrl,
-            documentId,
-            documentIdType: typeof documentId,
-            documentIdLength: documentId.length,
-            authToken: authToken ? `${authToken.substring(0, 20)}...` : 'none'
-          });
+        
           
-          console.log(`🔥 [DEBUG] RAW VALUES:`, {
-            'arg1 (serverUrl)': websocketUrl,
-            'arg2 (roomname)': documentId,
-            'arg3': 'ydoc',
-            'arg4': { connect: true, params: { token: authToken || '' } }
-          });
+         
           
           // Check for share token (guest access)
           const shareToken = sessionStorage.getItem('share_token');
+          // Append share token to URL if present
+          const wsUrl = shareToken ? `${websocketUrl}?share_token=${shareToken}` : websocketUrl;
           
           websocketProvider = new HocuspocusProvider({
-            url: websocketUrl,
+            url: wsUrl,
             name: documentId,
             document: ydoc,
             token: authToken || '',
-            // Pass share token via requestHeaders (NOT token parameter)
-            requestHeaders: shareToken ? { 'x-share-token': shareToken } : undefined,
             // 🔥 FIX: Handle auth failures - refresh token and recreate provider
             onAuthenticationFailed: async ({ reason }) => {
               console.warn(`🔐 [Auth Failed] ${documentId}: ${reason}`);
-              console.log(`🔄 Attempting token refresh and reconnect...`);
               
               try {
                 // Dynamic import to avoid circular dependency
@@ -271,7 +228,6 @@ class YjsDocumentManager {
                 // Get new token
                 const newToken = safeStorage.getItem(StorageKeys.AUTH_TOKEN);
                 if (newToken) {
-                  console.log(`✅ Token refreshed, recreating WebSocket provider...`);
                   
                   // Get the document instance
                   const instance = this.documents.get(documentId);
@@ -281,22 +237,19 @@ class YjsDocumentManager {
                     
                     // Create new provider with fresh token
                     const newProvider = new HocuspocusProvider({
-                      url: websocketUrl,
+                      url: wsUrl,
                       name: documentId,
                       document: ydoc,
                       token: newToken,
-                      requestHeaders: shareToken ? { 'x-share-token': shareToken } : undefined,
                     });
                     
                     // Update instance
                     instance.websocketProvider = newProvider;
                     
                     newProvider.on('status', (event: { status: string }) => {
-                      console.log(`🌐 WebSocket status for ${documentId}:`, event.status);
                     });
                     
                     newProvider.on('sync', (isSynced: boolean) => {
-                      console.log(`🔄 WebSocket sync for ${documentId}:`, isSynced);
                     });
                     
                     // 🔥 Re-set awareness on new provider
@@ -305,10 +258,8 @@ class YjsDocumentManager {
                         name: currentUser.name,
                         color: currentUser.color,
                       });
-                      console.log(`👤 Awareness re-set after token refresh: ${currentUser.name}`);
                     }
                     
-                    console.log(`✅ WebSocket provider recreated with new token`);
                   }
                 }
               } catch (refreshError) {
@@ -321,17 +272,12 @@ class YjsDocumentManager {
             },
           });
           
-          console.log(`🔥 [DEBUG] Hocuspocus provider created:`, {
-            url: websocketProvider.configuration.url,
-            name: websocketProvider.configuration.name,
-          });
+        
           
           websocketProvider.on('status', (event: { status: string }) => {
-            console.log(`🌐 WebSocket status for ${documentId}:`, event.status);
           });
           
           websocketProvider.on('sync', (isSynced: boolean) => {
-            console.log(`🔄 WebSocket sync for ${documentId}:`, isSynced);
           });
           
           websocketProvider.on('connection-error', (error: any) => {
@@ -344,16 +290,13 @@ class YjsDocumentManager {
               name: currentUser.name,
               color: currentUser.color,
             });
-            console.log(`👤 Awareness set for user: ${currentUser.name}`);
           }
           
-          console.log(`🌐 WebSocket enabled for ${documentId} (with auth: ${!!authToken})`);
         } catch (wsError) {
           console.error(`❌ WebSocket creation failed for ${documentId}:`, wsError);
           // Continue without WebSocket - local-only mode
         }
       } else {
-        console.log(`📴 WebSocket disabled for ${documentId} (guest mode or offline)`);
       }
 
       // 3. Setup Snapshot Manager (STEP 5: Cloud snapshots)
@@ -367,9 +310,7 @@ class YjsDocumentManager {
           debounceMs: 3000, // 3 seconds
           isAuthenticated: true,
         });
-        console.log(`📸 [STEP 5] Snapshot manager enabled for ${documentId}`);
       } else {
-        console.log(`📴 [STEP 5] Snapshot manager disabled (guest mode) for ${documentId}`);
       }
 
       // Create instance
@@ -384,7 +325,6 @@ class YjsDocumentManager {
       };
 
       this.documents.set(documentId, instance);
-      console.log(`✅ Yjs document created: ${documentId}`);
       
       return instance;
     } catch (error) {
@@ -413,7 +353,6 @@ class YjsDocumentManager {
     instance.refCount--;
     instance.lastAccessed = Date.now(); // Update last accessed for cleanup timer
     
-    console.log(`📉 Released document ${documentId} (refCount: ${instance.refCount})`);
 
     // Don't destroy immediately - let cleanup timer handle it
     // This allows for quick re-access without re-initialization
@@ -463,7 +402,6 @@ class YjsDocumentManager {
       return;
     }
 
-    console.log(`🧹 Destroying Yjs document: ${documentId}`);
     
     try {
       // Destroy snapshot manager (STEP 5)
@@ -479,7 +417,6 @@ class YjsDocumentManager {
       // Remove from map
       this.documents.delete(documentId);
       
-      console.log(`✅ Document destroyed: ${documentId}`);
     } catch (error) {
       console.error(`❌ Error destroying document ${documentId}:`, error);
       // Force remove from map even if cleanup failed
@@ -499,7 +436,6 @@ class YjsDocumentManager {
    * @param documentId - Document ID to clear
    */
   public async clearDocumentStorage(documentId: string): Promise<void> {
-    console.log(`🧹 [YjsDocumentManager] Clearing storage for: ${documentId}`);
     
     try {
       // 1. Destroy in-memory instance if it exists
@@ -511,8 +447,6 @@ class YjsDocumentManager {
       const dbName = `mdreader-${documentId}`;
       await indexedDB.deleteDatabase(dbName);
       
-      console.log(`✅ [YjsDocumentManager] Storage cleared: ${documentId}`);
-      console.log(`   Next open will hydrate from cloud yjs_state_b64`);
     } catch (error) {
       console.error(`❌ [YjsDocumentManager] Failed to clear storage for ${documentId}:`, error);
       throw error;
@@ -556,7 +490,6 @@ class YjsDocumentManager {
     });
 
     if (toDestroy.length > 0) {
-      console.log(`🧹 Cleaning up ${toDestroy.length} unused documents`);
       toDestroy.forEach(docId => this.destroyDocument(docId));
     }
   }
@@ -565,7 +498,6 @@ class YjsDocumentManager {
    * Destroy all documents (for testing or reset)
    */
   public destroyAll(): void {
-    console.log('🧹 Destroying all Yjs documents');
     const documentIds = Array.from(this.documents.keys());
     documentIds.forEach(docId => this.destroyDocument(docId));
     

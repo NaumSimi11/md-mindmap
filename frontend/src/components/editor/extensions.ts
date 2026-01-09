@@ -159,7 +159,6 @@ export function getExtensions(options: GetExtensionsOptions) {
   // 🔥 STEP 3: Enable Yjs Collaboration (MANDATORY if ydoc exists)
   // Note: ydoc may be undefined initially (during Yjs loading), then defined on re-init
   if (ydoc) {
-    console.log('✅ [STEP 3] Yjs Collaboration enabled');
     
     // ✅ MANDATORY: Bind TipTap to Yjs document
     baseExtensions.push(
@@ -175,7 +174,6 @@ export function getExtensions(options: GetExtensionsOptions) {
       const userName = currentUser?.name || 'Anonymous';
       const userColor = currentUser?.color || generateUserColor(userName);
       
-      console.log('✅ [STEP 3] Collaboration cursors enabled:', { userName, userColor });
       baseExtensions.push(
         CollaborationCaret.configure({
           provider,
@@ -185,7 +183,6 @@ export function getExtensions(options: GetExtensionsOptions) {
           },
           // 🔥 Custom render: Avatar circle with initials at cursor position
           render: (user: { name: string; color: string }) => {
-            console.log('🎨 [Collaboration] Rendering cursor for:', user);
             
             // Create cursor container (matches TipTap's default class names)
             const cursor = document.createElement('span');

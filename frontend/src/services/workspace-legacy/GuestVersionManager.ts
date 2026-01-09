@@ -125,7 +125,6 @@ class GuestVersionManager {
       const newVersionNumber = versions.currentVersion + 1;
       const newYjsDocId = `${documentId}-v${newVersionNumber}`;
       
-      console.log(`🔧 Creating version ${newVersionNumber} for ${documentId}`);
       
       // Step 1: Calculate content hash
       const contentHash = await getContentHash(content);
@@ -166,7 +165,6 @@ class GuestVersionManager {
         return null;
       }
       
-      console.log(`✅ Created version ${newVersionNumber} for ${documentId}`);
       return newVersionNumber;
     } catch (error) {
       console.error('❌ Failed to create version:', error);
@@ -239,7 +237,6 @@ class GuestVersionManager {
       };
       
       this.saveVersions(versions);
-      console.log(`✅ Initialized version tracking for ${documentId}`);
     } catch (error) {
       console.error('❌ Failed to initialize version tracking:', error);
       // Non-fatal - document creation continues
@@ -305,7 +302,6 @@ class GuestVersionManager {
    */
   async restoreVersion(documentId: string, versionNumber: number): Promise<boolean> {
     try {
-      console.log(`🔄 Restoring version ${versionNumber} for ${documentId}`);
       
       // Get version content
       const content = await this.getVersionContent(documentId, versionNumber);
@@ -345,7 +341,6 @@ class GuestVersionManager {
       versions.currentVersion = newVersionNumber;
       this.saveVersions(versions);
       
-      console.log(`✅ Restored version ${versionNumber} as new version ${newVersionNumber}`);
       return true;
     } catch (error) {
       console.error('❌ Failed to restore version:', error);
@@ -367,7 +362,6 @@ class GuestVersionManager {
     newDocumentId: string
   ): Promise<boolean> {
     try {
-      console.log(`📄 Creating new document ${newDocumentId} from version ${versionNumber}`);
       
       // Get version content
       const content = await this.getVersionContent(documentId, versionNumber);
@@ -397,7 +391,6 @@ class GuestVersionManager {
       // Release the document reference
       yjsDocumentManager.releaseDocument(newDocumentId);
       
-      console.log(`✅ Created new document ${newDocumentId} from version ${versionNumber}`);
       return true;
     } catch (error) {
       console.error('❌ Failed to restore version as new:', error);
@@ -430,7 +423,6 @@ class GuestVersionManager {
           // Release from manager
           yjsDocumentManager.releaseDocument(version.yjsDocId);
           
-          console.log(`✅ Deleted Yjs doc: ${version.yjsDocId}`);
         } catch (error) {
           console.warn(`⚠️ Failed to delete Yjs doc ${version.yjsDocId}:`, error);
         }
@@ -440,7 +432,6 @@ class GuestVersionManager {
       const key = this.getStorageKey(documentId);
       localStorage.removeItem(key);
       
-      console.log(`✅ Deleted version history for ${documentId}`);
     } catch (error) {
       console.error('❌ Failed to delete version history:', error);
     }

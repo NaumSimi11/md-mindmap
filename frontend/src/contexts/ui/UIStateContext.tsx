@@ -160,11 +160,7 @@ export function UIStateProvider({ children }: { children: ReactNode }) {
           categories.total = categories.pureLocal + categories.modifiedOffline;
           
           if (categories.total > 0) {
-            console.log(`📋 [UIState] Found documents after login:`, {
-              pureLocal: categories.pureLocal,
-              modifiedOffline: categories.modifiedOffline,
-              total: categories.total,
-            });
+         
             
             setGuestDocumentPrompt({
               categories,
@@ -203,10 +199,7 @@ export function UIStateProvider({ children }: { children: ReactNode }) {
     
     try {
       const { categories } = guestDocumentPrompt;
-      console.log(`🚀 [UIState] Pushing ${categories.total} documents...`, {
-        pureLocal: categories.pureLocal,
-        modifiedOffline: categories.modifiedOffline,
-      });
+     
       
       const { selectiveSyncService } = await import('@/services/sync/SelectiveSyncService');
       
@@ -219,7 +212,6 @@ export function UIStateProvider({ children }: { children: ReactNode }) {
           const result = await selectiveSyncService.pushDocument(doc.id);
           if (result.success) {
             successCount++;
-            console.log(`✅ [UIState] Pushed ${doc.title} (${doc.category})`);
           } else {
             failCount++;
             console.warn(`⚠️ [UIState] Failed to push ${doc.title}:`, result.error);
@@ -230,7 +222,6 @@ export function UIStateProvider({ children }: { children: ReactNode }) {
         }
       }
       
-      console.log(`✅ [UIState] Push complete: ${successCount} succeeded, ${failCount} failed`);
       
       // Close prompt
       setGuestDocumentPrompt(null);

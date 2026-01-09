@@ -7,7 +7,6 @@
 
 ```javascript
 const code = "test";
-console.log(code);
 ```
 
 **Bold** and *italic* text.

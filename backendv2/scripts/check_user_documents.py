@@ -105,8 +105,6 @@ async def check_user_documents(email: str):
 (async () => {
   const db = await new Dexie('MDReaderBackendCache').open();
   const docs = await db.documents.toArray();
-  console.log('📦 Backend Cache Documents:', docs.length);
-  docs.forEach(d => console.log(`   - ${d.title} (${d.id}) [${d.syncStatus}]`));
   db.close();
 })();
 
@@ -114,8 +112,6 @@ async def check_user_documents(email: str):
 (async () => {
   const db = await new Dexie('MDReaderGuest').open();
   const docs = await db.documents.toArray();
-  console.log('📦 Guest Cache Documents:', docs.length);
-  docs.forEach(d => console.log(`   - ${d.title} (${d.id}) [${d.syncStatus}]`));
   db.close();
 })();
             """)

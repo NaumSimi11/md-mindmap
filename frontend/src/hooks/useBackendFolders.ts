@@ -55,26 +55,17 @@ export function useBackendFolders() {
       setError(null);
 
       // ✅ LOCAL-FIRST: Check workspace sync status to determine which service to use
-      const isLocalOnly = currentWorkspace.sync?.status === 'local';
+      const isLocalOnly = currentWorkspace.syncStatus === 'local';
       const authCheck = authService.isAuthenticated();
       const shouldUseBackend = authCheck || isAuthenticated;
       
-      console.log('🔵 loadFolders called:', {
-        'React isAuthenticated': isAuthenticated,
-        'Direct auth check': authCheck,
-        'Workspace sync status': currentWorkspace.sync?.status,
-        'Is local-only': isLocalOnly,
-        'Using': isLocalOnly ? 'guest (local)' : shouldUseBackend ? 'backend (cloud)' : 'guest',
-        'Workspace ID': currentWorkspace.id
-      });
+     
 
       // Guest mode OR local-only workspace: Load from GuestWorkspaceService
       if (!shouldUseBackend || isLocalOnly) {
-        console.log('📂 Loading folders from local IndexedDB:', isLocalOnly ? '(local workspace)' : '(guest mode)');
         
         // Get folders for current workspace
         const guestFolders = await guestWorkspaceService.getFolders(currentWorkspace.id);
-        console.log(`✅ Loaded ${guestFolders.length} local folder(s) for workspace ${currentWorkspace.id}`);
         
         // Convert to backend folder format and build tree
         const folders: Folder[] = guestFolders.map(gf => ({
@@ -94,7 +85,6 @@ export function useBackendFolders() {
         const tree = buildTreeFromFolders(folders);
         setFolderTree(tree);
         
-        console.log(`✅ Built folder tree with ${tree.length} root folder(s)`);
         setIsLoading(false);
         return;
       }
@@ -103,18 +93,29 @@ export function useBackendFolders() {
       try {
         // Check if workspace ID is a temp ID (starts with "temp_")
         if (currentWorkspace.id.startsWith('temp_')) {
-          console.warn('⚠️ Workspace has temp ID, waiting for sync...', currentWorkspace.id);
-          // Set empty state - folders will be created when workspace syncs
+          // Workspace has temp ID, waiting for sync - set empty state
           setFolders([]);
           setFolderTree([]);
           setIsLoading(false);
           return;
         }
 
-        console.log('☁️ Loading folders from cloud/cache:', currentWorkspace.name);
         // Load folders from BackendWorkspaceService (uses IndexedDB cache internally)
         const { backendWorkspaceService } = await import('@/services/workspace');
-        const backendFolders = await backendWorkspaceService.getFolders(currentWorkspace.id);
+        
+        // 🔥 FIX: Check for cloud workspace ID mapping (local ID → cloud ID)
+        let workspaceIdToUse = currentWorkspace.id;
+        try {
+          const { selectiveSyncService } = await import('@/services/sync/SelectiveSyncService');
+          const cloudWorkspaceId = await selectiveSyncService.getCloudWorkspaceId(currentWorkspace.id);
+          if (cloudWorkspaceId && cloudWorkspaceId !== currentWorkspace.id) {
+            workspaceIdToUse = cloudWorkspaceId;
+          }
+        } catch {
+          // Ignore mapping errors, use original ID
+        }
+        
+        const backendFolders = await backendWorkspaceService.getFolders(workspaceIdToUse);
         
         // Convert to Folder format (snake_case for compatibility)
         const folders: Folder[] = backendFolders.map(bf => ({
@@ -134,86 +135,16 @@ export function useBackendFolders() {
         const tree = buildTreeFromFolders(folders);
         setFolderTree(tree);
         
-        console.log(`✅ Loaded ${folders.length} folder(s) from BackendWorkspaceService`);
         setIsLoading(false);
         return;
-      } catch (error: any) {
-        console.error('❌ Failed to load folders from BackendWorkspaceService:', error);
+      } catch {
         // Set empty state on error
         setFolders([]);
         setFolderTree([]);
         setIsLoading(false);
         return;
       }
-
-      // Guest mode: Try to load from backend first (legacy path)
-      try {
-        const tree = await folderService.getFolderTree(currentWorkspace.id);
-        setFolderTree(tree);
-
-        // Flatten tree for easy access
-        const flatFolders = flattenTree(tree);
-        setFolders(flatFolders);
-
-        // 🔥 CRITICAL FIX: Cache folders in IndexedDB
-        console.log('💾 Caching folders in IndexedDB...');
-        await offlineDB.folders.clear(); // Clear old data
-        for (const folder of flatFolders) {
-          await offlineDB.folders.put({
-            id: folder.id,
-            workspace_id: folder.workspace_id,
-            parent_id: folder.parent_id || null,
-            name: folder.name,
-            icon: folder.icon,
-            position: folder.position,
-            created_at: folder.created_at,
-            updated_at: folder.updated_at,
-            last_synced: new Date().toISOString(),
-            pending_changes: false
-          });
-        }
-
-        console.log('✅ Loaded folders from backend:', flatFolders.length);
-        return;
-      } catch (fetchError: any) {
-        // If offline or network error, try IndexedDB cache
-        console.warn('⚠️ Failed to load folders from backend, trying IndexedDB cache...');
-        
-        const cachedFolders = await offlineDB.folders
-          .where('workspace_id').equals(currentWorkspace.id)
-          .toArray();
-        
-        if (cachedFolders.length > 0) {
-          // Map to Folder type and rebuild tree
-          const folders: Folder[] = cachedFolders.map(cf => ({
-            id: cf.id,
-            workspace_id: cf.workspace_id,
-            parent_id: cf.parent_id,
-            name: cf.name,
-            icon: cf.icon,
-            position: cf.position,
-            created_at: cf.created_at,
-            updated_at: cf.updated_at
-          }));
-          
-          setFolders(folders);
-          
-          // Rebuild tree from flat list
-          const tree = buildTreeFromFolders(folders);
-          setFolderTree(tree);
-          
-          console.log('✅ Loaded folders from IndexedDB cache:', folders.length);
-          return;
-        } else {
-          console.warn('⚠️ No cached folders in IndexedDB');
-          // Set empty state
-          setFolders([]);
-          setFolderTree([]);
-          throw fetchError; // Re-throw original error
-        }
-      }
     } catch (err: any) {
-      console.error('❌ Failed to load folders:', err);
       setError(err.message || 'Failed to load folders');
       // Don't clear state on error - keep existing folders visible
     } finally {
@@ -241,7 +172,6 @@ export function useBackendFolders() {
       const customEvent = event as CustomEvent;
       const { oldId, newId, folder } = customEvent.detail;
       
-      console.log(`🔄 Folder synced: ${oldId} → ${newId}`);
       
       // Update local state: replace old temp ID with new real ID
       setFolders(prev => {
@@ -272,7 +202,6 @@ export function useBackendFolders() {
   // Load folders when workspace changes
   useEffect(() => {
     if (currentWorkspace) {
-      console.log('🔄 Folders: workspace changed, loading folders for:', currentWorkspace.id);
       loadFolders();
     } else {
       setFolders([]);
@@ -291,17 +220,10 @@ export function useBackendFolders() {
     const authCheck = authService.isAuthenticated();
     const shouldUseBackend = authCheck || isAuthenticated;
     
-    console.log(`🔵 createFolder() called:`, {
-      'React isAuthenticated': isAuthenticated,
-      'Direct auth check': authCheck,
-      'Workspace sync status': currentWorkspace.sync?.status,
-      'Is local-only': isLocalOnly,
-      'Using': isLocalOnly ? 'guest (local)' : shouldUseBackend ? 'backend (cloud)' : 'guest'
-    });
+
 
     // Guest mode OR local-only workspace: Use guest service
     if (!shouldUseBackend || isLocalOnly) {
-      console.log('📂 Creating folder in local IndexedDB:', isLocalOnly ? '(local workspace)' : '(guest mode)');
       const folder = await guestWorkspaceService.createFolder({
         workspaceId: currentWorkspace.id,
         name: data.name,
@@ -312,7 +234,6 @@ export function useBackendFolders() {
       // Refresh folder list
       await loadFolders();
       
-      console.log('✅ Local folder created:', folder.name);
       return folder as any;
     }
 
@@ -344,16 +265,13 @@ export function useBackendFolders() {
         // Reload folders to get updated tree (will load from BackendWorkspaceService cache)
         await loadFolders();
         
-        console.log('✅ Folder created online:', folder.name);
         return folder;
-      } catch (err) {
-        console.warn('⚠️ Online creation failed, falling through to offline mode:', err);
+      } catch {
         // Fall through to offline mode
       }
     }
 
     // Offline mode: Create locally with temp ID
-    console.log('📴 Creating folder offline...');
     
     const tempId = `temp-folder-${uuidv4()}`;
     const now = new Date().toISOString();
@@ -399,15 +317,12 @@ export function useBackendFolders() {
     const newTree = buildTreeFromFolders([...folders, folder]);
     setFolderTree(newTree);
 
-    console.log('📴 Folder created offline, queued for sync:', folder.name);
     return folder;
   }, [currentWorkspace?.id, isAuthenticated, isOnline, loadFolders, folders]);
 
   // Update folder - Works offline!
   const updateFolder = useCallback(async (folderId: string, data: UpdateFolderData): Promise<void> => {
     if (!currentWorkspace) return;
-
-    console.log(`🔄 updateFolder(${folderId}), isOnline: ${isOnline}`);
 
     // Update IndexedDB first (optimistic)
     try {
@@ -419,8 +334,8 @@ export function useBackendFolders() {
           pending_changes: true
         });
       }
-    } catch (err) {
-      console.warn('⚠️ Could not update IndexedDB:', err);
+    } catch {
+      // Could not update IndexedDB
     }
 
     if (isOnline) {
@@ -438,16 +353,13 @@ export function useBackendFolders() {
           await loadFolders();
         }
         
-        console.log('✅ Folder updated online:', folderId);
         return;
-      } catch (err) {
-        console.warn('⚠️ Online update failed, queuing for sync:', err);
+      } catch {
         // Fall through to queue
       }
     }
 
     // Offline or failed: Queue for sync
-    console.log('📴 Queuing folder update for sync...');
     
     await syncManager.queueChange({
       entity_type: 'folder',
@@ -472,7 +384,6 @@ export function useBackendFolders() {
       setFolderTree(newTree);
     }
 
-    console.log('📴 Folder update queued for sync');
   }, [currentWorkspace?.id, isOnline, loadFolders, folders]);
 
   // Delete folder - Works offline!
@@ -484,17 +395,14 @@ export function useBackendFolders() {
     const authCheck = authService.isAuthenticated();
     const shouldUseBackend = authCheck || isAuthenticated;
 
-    console.log(`🗑️ deleteFolder(${folderId}), isOnline: ${isOnline}, Workspace sync: ${currentWorkspace.sync?.status}, Using: ${isLocalOnly ? 'guest (local)' : shouldUseBackend ? 'backend (cloud)' : 'guest'}`);
 
     // Guest mode OR local-only workspace: Use guest service
     if (!shouldUseBackend || isLocalOnly) {
-      console.log('📂 Deleting folder from local IndexedDB:', isLocalOnly ? '(local workspace)' : '(guest mode)');
       await guestWorkspaceService.deleteFolder(folderId);
       
       // Refresh folder list
       await loadFolders();
       
-      console.log('✅ Local folder deleted:', folderId);
       return;
     }
 
@@ -517,10 +425,8 @@ export function useBackendFolders() {
         // Reload folders to ensure consistency (will load from BackendWorkspaceService cache)
         await loadFolders();
         
-        console.log('✅ Folder deleted online:', folderId);
         return;
       } catch (err) {
-        console.error('❌ Failed to delete folder:', err);
         // Revert optimistic update on error
         await loadFolders();
         throw err;
@@ -541,16 +447,13 @@ export function useBackendFolders() {
         // Reload tree
         await loadFolders();
         
-        console.log('✅ Folder deleted online:', folderId);
         return;
-      } catch (err) {
-        console.warn('⚠️ Online deletion failed, queuing for sync:', err);
+      } catch {
         // Fall through to queue
       }
     }
 
     // Offline or failed: Queue for sync
-    console.log('📴 Queuing folder deletion for sync...');
     
     // Delete from IndexedDB
     await offlineDB.folders.delete(folderId);
@@ -572,14 +475,12 @@ export function useBackendFolders() {
     const newTree = buildTreeFromFolders(updatedFolders);
     setFolderTree(newTree);
 
-    console.log('📴 Folder deletion queued for sync');
   }, [currentWorkspace?.id, isOnline, loadFolders, folders]);
 
   // Move folder - Works offline!
   const moveFolder = useCallback(async (folderId: string, parentId: string | null, position?: number): Promise<void> => {
     if (!currentWorkspace) return;
 
-    console.log(`🔄 moveFolder(${folderId}), isOnline: ${isOnline}`);
 
     // This is just an updateFolder with parent_id and position
     await updateFolder(folderId, { parent_id: parentId, position });

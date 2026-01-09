@@ -92,7 +92,6 @@ export function ImageSearchModal({
 
   const handleInsert = () => {
     if (selectedImage) {
-      console.log('✅ Inserting image:', selectedImage);
       onImageSelect(selectedImage);
       onOpenChange(false);
       setSelectedImage(null);

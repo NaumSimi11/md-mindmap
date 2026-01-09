@@ -27,9 +27,12 @@ export interface UseDocumentManagerReturn {
   
   // Statistics
   getStats: () => {
-    totalDocuments: number;
-    activeDocuments: number;
-    memoryUsage: number;
+    autoSaveActive: number;
+    total: number;
+    referenced: number;
+    unreferenced: number;
+    states: { loaded: number; loading: number; saving: number; error: number };
+    totalMemory: number;
   };
 }
 
@@ -47,14 +50,12 @@ export function useDocumentManager(): UseDocumentManagerReturn {
   useEffect(() => {
     let mounted = true;
     
-    const init = async () => {
+    const initManager = async () => {
       try {
-        console.log('🔷 useDocumentManager: Initializing...');
-        await manager.initialize();
+        await manager.init();
         
         if (mounted) {
           setInitialized(true);
-          console.log('✅ useDocumentManager: Initialized');
         }
       } catch (err) {
         console.error('❌ useDocumentManager: Initialization failed:', err);
@@ -64,7 +65,7 @@ export function useDocumentManager(): UseDocumentManagerReturn {
       }
     };
     
-    init();
+    initManager();
     
     return () => {
       mounted = false;
@@ -77,16 +78,11 @@ export function useDocumentManager(): UseDocumentManagerReturn {
       forceUpdate({});
     };
     
-    manager.on('document:created', handleDocumentEvent);
-    manager.on('document:loaded', handleDocumentEvent);
-    manager.on('document:saved', handleDocumentEvent);
-    manager.on('document:closed', handleDocumentEvent);
+    // Subscribe to all document events
+    const unsubscribe = manager.subscribe(handleDocumentEvent);
     
     return () => {
-      manager.off('document:created', handleDocumentEvent);
-      manager.off('document:loaded', handleDocumentEvent);
-      manager.off('document:saved', handleDocumentEvent);
-      manager.off('document:closed', handleDocumentEvent);
+      unsubscribe();
     };
   }, [manager]);
   
@@ -95,12 +91,7 @@ export function useDocumentManager(): UseDocumentManagerReturn {
     metadata: Omit<DocumentMetadata, 'id' | 'createdAt' | 'updatedAt'>
   ): Promise<DocumentInstance> => {
     try {
-      console.log('📝 Creating document:', metadata.title);
-      const instance = await manager.createDocument({
-        ...metadata,
-        content: metadata.content || '',
-      });
-      console.log('✅ Document created:', instance.metadata.id);
+      const instance = await manager.createDocument(metadata as any);
       return instance;
     } catch (err) {
       console.error('❌ Failed to create document:', err);
@@ -111,9 +102,7 @@ export function useDocumentManager(): UseDocumentManagerReturn {
   // Load document
   const loadDocument = useCallback(async (documentId: string): Promise<DocumentInstance> => {
     try {
-      console.log('📖 Loading document:', documentId);
       const instance = await manager.loadDocument({ documentId });
-      console.log('✅ Document loaded:', documentId);
       return instance;
     } catch (err) {
       console.error('❌ Failed to load document:', err);
@@ -124,9 +113,7 @@ export function useDocumentManager(): UseDocumentManagerReturn {
   // Save document
   const saveDocument = useCallback(async (documentId: string): Promise<void> => {
     try {
-      console.log('💾 Saving document:', documentId);
       await manager.saveDocument(documentId);
-      console.log('✅ Document saved:', documentId);
     } catch (err) {
       console.error('❌ Failed to save document:', err);
       throw err;
@@ -139,9 +126,7 @@ export function useDocumentManager(): UseDocumentManagerReturn {
     options?: { saveBeforeClose?: boolean }
   ): Promise<void> => {
     try {
-      console.log('🔒 Closing document:', documentId);
       await manager.closeDocument(documentId, options);
-      console.log('✅ Document closed:', documentId);
     } catch (err) {
       console.error('❌ Failed to close document:', err);
       throw err;
@@ -155,17 +140,17 @@ export function useDocumentManager(): UseDocumentManagerReturn {
   
   // Check if document is open
   const isDocumentOpen = useCallback((documentId: string): boolean => {
-    return manager.isDocumentOpen(documentId);
+    return manager.isDocumentLoaded(documentId);
   }, [manager]);
   
   // Get all open documents
   const getOpenDocuments = useCallback((): string[] => {
-    return manager.getOpenDocuments();
+    return manager.getAllDocuments().map(d => d.id);
   }, [manager]);
   
   // Get statistics
   const getStats = useCallback(() => {
-    return manager.getStatistics();
+    return manager.getStats();
   }, [manager]);
   
   return {

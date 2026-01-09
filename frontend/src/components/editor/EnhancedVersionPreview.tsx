@@ -251,11 +251,6 @@ export function EnhancedVersionPreview({
   const diff = useMemo(() => {
     // currentContent is already plain text from editor.getText()
     // versionPlainText is extracted from the HTML preview
-    console.log('📊 [Diff] Comparing VERSION (old) → CURRENT (new)');
-    console.log('📊 [Diff] Version plain text length:', versionPlainText?.length || 0);
-    console.log('📊 [Diff] Current content length:', currentContent?.length || 0);
-    console.log('📊 [Diff] Version plain text:', JSON.stringify(versionPlainText?.substring(0, 200)));
-    console.log('📊 [Diff] Current content:', JSON.stringify(currentContent?.substring(0, 200)));
     return diffLines(versionPlainText || '', currentContent || '');
   }, [currentContent, versionPlainText]);
 
