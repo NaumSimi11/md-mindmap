@@ -5,15 +5,8 @@ echo "║      CRITICAL E2E TESTS - PRE-COMMIT          ║"
 echo "╚════════════════════════════════════════════════╝"
 echo ""
 
-# Check if server is running
-echo "🔍 Checking if dev server is running..."
-if ! curl -s http://localhost:5174 > /dev/null; then
-    echo "❌ Dev server not running on http://localhost:5174"
-    echo "   Run: npm run dev"
-    exit 1
-fi
-echo "✅ Dev server is running"
-echo ""
+# Note: Playwright will auto-start a dev server on port 5174 via webServer config
+# No need to check manually - Playwright handles this
 
 # Run critical tests from root (uses root playwright.config.ts)
 echo "🧪 Running critical tests (paste + import)..."

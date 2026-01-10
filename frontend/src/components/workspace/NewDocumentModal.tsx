@@ -239,14 +239,14 @@ export function NewDocumentModal({
           </div>
 
           {/* Quick Create Buttons */}
-          <div className="hidden sm:flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <button
               data-testid="create-blank-markdown"
               onClick={() => handleCreateBlank('markdown')}
               className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 hover:bg-blue-500/10 border border-border hover:border-blue-500/30 transition-all group"
             >
               <FileText className="h-4 w-4 text-blue-500" />
-              <span className="text-xs text-muted-foreground group-hover:text-foreground">Blank Doc</span>
+              <span className="hidden sm:inline text-xs text-muted-foreground group-hover:text-foreground">Blank Doc</span>
             </button>
             <button
               data-testid="create-blank-mindmap"
@@ -254,7 +254,7 @@ export function NewDocumentModal({
               className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 hover:bg-purple-500/10 border border-border hover:border-purple-500/30 transition-all group"
             >
               <Brain className="h-4 w-4 text-purple-500" />
-              <span className="text-xs text-muted-foreground group-hover:text-foreground">Mindmap</span>
+              <span className="hidden sm:inline text-xs text-muted-foreground group-hover:text-foreground">Mindmap</span>
             </button>
             <button
               data-testid="create-blank-presentation"
@@ -262,7 +262,7 @@ export function NewDocumentModal({
               className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 hover:bg-pink-500/10 border border-border hover:border-pink-500/30 transition-all group"
             >
               <Presentation className="h-4 w-4 text-pink-500" />
-              <span className="text-xs text-muted-foreground group-hover:text-foreground">Slides</span>
+              <span className="hidden sm:inline text-xs text-muted-foreground group-hover:text-foreground">Slides</span>
             </button>
           </div>
 

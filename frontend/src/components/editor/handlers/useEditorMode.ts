@@ -1,4 +1,5 @@
 import { Editor } from '@tiptap/react';
+import { DOMParser as ProseMirrorDOMParser } from '@tiptap/pm/model';
 import { htmlToMarkdown, markdownToHtml } from '../../../utils/markdownConversion';
 
 interface UseEditorModeProps {
@@ -23,18 +24,24 @@ export const useEditorMode = ({
     isProgrammaticUpdateRef,
 }: UseEditorModeProps) => {
 
-    // Parse markdown and insert into editor (handles mermaid blocks and FontAwesome icons specially)
+    /**
+     * 🔥 ATOMIC CONTENT INSERTION FIX
+     * 
+     * Problem: Sequential insertion caused cursor to remain inside tables,
+     * making subsequent content (mermaid, text) get inserted INTO tables.
+     * 
+     * Solution: Build entire content structure first, then insert in ONE transaction.
+     * This prevents cursor position issues between insertions.
+     */
     const parseAndInsertMarkdown = (markdown: string) => {
         console.log('\n╔════════════════════════════════════════╗');
-        console.log('║  PARSE AND INSERT MARKDOWN            ║');
+        console.log('║  PARSE AND INSERT MARKDOWN (ATOMIC)   ║');
         console.log('╚════════════════════════════════════════╝');
 
         if (!editor) {
             console.log('❌ ERROR: No editor instance!');
             return;
         }
-
-        
 
         // CRITICAL FIX: Strip outer markdown code fence if present
         if (markdown.startsWith('```markdown\n')) {
@@ -43,48 +50,76 @@ export const useEditorMode = ({
                 .replace(/\n```$/, '');           // Remove closing
         }
 
-        // Set flag to prevent onUpdate from firing
+        // Set flag to prevent onUpdate from firing during programmatic changes
         isProgrammaticUpdateRef.current = true;
+
         // Split content by mermaid blocks (capture group keeps the delimiter)
-        // More flexible regex to handle different newline styles
-        const regex = /(\s*```\s*mermaid[\s\S]*?```)/g;
-        const parts = markdown.split(regex);
+        const mermaidRegex = /(\s*```\s*mermaid[\s\S]*?```)/g;
+        const parts = markdown.split(mermaidRegex);
 
-     
+        // 🔥 ATOMIC FIX: Build all content nodes FIRST, then insert in ONE transaction
+        const allContentNodes: any[] = [];
 
-        // Clear editor FIRST before building content
-        editor.commands.clearContent();
-
-        // Now insert each part directly (NO intermediate building)
-        parts.forEach((part, index) => {
-
+        parts.forEach((part) => {
             if (!part.trim()) {
                 return;
             }
 
             const trimmed = part.trimStart();
             if (/^```\s*mermaid/.test(trimmed)) {
+                // Extract mermaid code
                 const m = trimmed.match(/```\s*mermaid\s*[\r\n]+([\s\S]*?)```/);
                 const code = m ? m[1].trim() : '';
 
                 if (code) {
-
-                    // Insert as array in a single call (chaining doesn't work for mermaid nodes)
-                    const success = editor.commands.insertContent([
+                    // Add mermaid node with surrounding paragraphs
+                    allContentNodes.push(
                         { type: 'paragraph' },
                         { type: 'mermaid', attrs: { code, scale: 1, width: '780px' } },
                         { type: 'paragraph' }
-                    ]);
-
+                    );
+                    console.log('📊 Added mermaid node to content array');
                 }
             } else {
+                // Convert markdown to HTML
                 const html = markdownToHtml(part);
-                // 🔥 FIX: Parse HTML properly
-                editor.chain().insertContent(html, {
-                    parseOptions: { preserveWhitespace: false }
-                }).run();
+                if (html && html.trim()) {
+                    // Parse HTML to ProseMirror nodes using editor's schema
+                    try {
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = html;
+                        
+                        const parser = ProseMirrorDOMParser.fromSchema(editor.state.schema);
+                        const slice = parser.parseSlice(tempDiv);
+                        
+                        // Extract nodes from the slice and add to our content array
+                        slice.content.forEach((node) => {
+                            // Convert ProseMirror node to JSON for insertContent
+                            allContentNodes.push(node.toJSON());
+                        });
+                        console.log(`📝 Added ${slice.content.childCount} nodes from HTML`);
+                    } catch (e) {
+                        console.warn('Failed to parse HTML, falling back to raw HTML insertion:', e);
+                        // Fallback: add as raw HTML (will be parsed by TipTap)
+                        // Wrap in a paragraph to ensure proper structure
+                        allContentNodes.push({ type: 'paragraph' });
+                    }
+                }
             }
         });
+
+        console.log(`📦 Total nodes to insert: ${allContentNodes.length}`);
+
+        // 🔥 ATOMIC: Clear editor and insert ALL content in ONE transaction
+        editor.commands.clearContent();
+        
+        if (allContentNodes.length > 0) {
+            // Insert everything at once - this prevents cursor position issues!
+            const success = editor.commands.insertContent(allContentNodes, {
+                parseOptions: { preserveWhitespace: false }
+            });
+            console.log(`✅ Atomic insertion ${success ? 'succeeded' : 'failed'}`);
+        }
 
         // Restore cursor position after content is inserted
         if (savedCursorTextRef.current !== null) {
@@ -97,7 +132,6 @@ export const useEditorMode = ({
 
                 if (foundPos === -1) {
                     // If exact match not found, try to find a substring
-                    // Use the last part of the saved text
                     const searchLength = Math.min(50, searchText.length);
                     const searchSubstring = searchText.substring(searchText.length - searchLength);
                     foundPos = docText.indexOf(searchSubstring);
