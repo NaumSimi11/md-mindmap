@@ -26,7 +26,8 @@ import {
   Lock,
   Save,
   Loader2,
-  Trash2
+  Trash2,
+  Download
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,6 +40,7 @@ import { useWorkspacePermissions } from '@/hooks/useWorkspacePermissions';
 import { WorkspaceMembersList } from './WorkspaceMembersList';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TransferOwnershipDialog } from './TransferOwnershipDialog';
+import { WorkspaceDownloadTab } from './WorkspaceDownloadTab';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -198,10 +200,14 @@ export function WorkspaceSettingsPage() {
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-4 mb-6">
+          <TabsList className="grid w-full grid-cols-5 mb-6">
             <TabsTrigger value="general" className="gap-2">
               <Settings className="h-4 w-4" />
               General
+            </TabsTrigger>
+            <TabsTrigger value="download" className="gap-2">
+              <Download className="h-4 w-4" />
+              Download
             </TabsTrigger>
             <TabsTrigger 
               value="members" 
@@ -346,6 +352,11 @@ export function WorkspaceSettingsPage() {
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          {/* Download Tab - Available to all */}
+          <TabsContent value="download" className="space-y-4">
+            <WorkspaceDownloadTab />
           </TabsContent>
 
           {/* Members Tab - Cloud only */}

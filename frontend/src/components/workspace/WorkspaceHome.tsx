@@ -31,7 +31,8 @@ import {
 } from 'lucide-react';
 import type { Document } from '@/services/workspace-legacy/BackendWorkspaceService';
 import { QuickSwitcher } from './QuickSwitcher';
-import { documentTemplates_service, type DocumentTemplate } from '@/services/workspace-legacy/DocumentTemplates';
+import { documentTemplates_service, type DocumentTemplate, type TemplateCollection } from '@/services/workspace-legacy/DocumentTemplates';
+import { TemplatePreview, TemplateCard } from '@/components/templates/TemplatePreview';
 
 interface WorkspaceHomeProps {
   onDocumentSelect: (documentId: string) => void;
@@ -93,10 +94,16 @@ export function WorkspaceHome({
   };
 
   const allTemplates = documentTemplates_service.getAll();
-  const featuredTemplates: DocumentTemplate[] = allTemplates.slice(0, 10);
+  const featuredTemplates: DocumentTemplate[] = documentTemplates_service.getFeatured();
   const [featuredIndex, setFeaturedIndex] = useState(0);
   const featured = featuredTemplates[featuredIndex] || allTemplates[0];
-  const galleryTemplates: DocumentTemplate[] = allTemplates.slice(0, 18);
+  const collections = documentTemplates_service.getFeaturedCollections();
+  const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
+  
+  // Get templates for gallery - either from collection or all
+  const galleryTemplates: DocumentTemplate[] = selectedCollection 
+    ? documentTemplates_service.getByCollection(selectedCollection)
+    : allTemplates.slice(0, 12);
 
   const handlePrev = () => {
     if (featuredTemplates.length === 0) return;
@@ -352,15 +359,48 @@ export function WorkspaceHome({
             <div className="text-center mb-8">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20 mb-4">
                 <Palette className="h-4 w-4 text-purple-500" />
-                <span className="text-sm font-medium text-purple-700 dark:text-purple-300">Beautiful Templates</span>
+                <span className="text-sm font-medium text-purple-700 dark:text-purple-300">{allTemplates.length}+ Premium Templates</span>
                 <Lightbulb className="h-4 w-4 text-pink-500" />
               </div>
               <h2 className="text-3xl font-bold bg-gradient-to-r from-slate-900 via-purple-900 to-slate-800 dark:from-white dark:via-purple-100 dark:to-slate-200 bg-clip-text text-transparent mb-2">
                 Start with Inspiration
               </h2>
               <p className="text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
-                Choose from professionally designed templates to jumpstart your creativity and productivity.
+                Choose from professionally designed templates across 6 collections to jumpstart your creativity.
               </p>
+            </div>
+
+            {/* Collection Pills */}
+            <div className="flex flex-wrap justify-center gap-2 mb-8">
+              <button
+                onClick={() => setSelectedCollection(null)}
+                className={`
+                  inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all
+                  ${!selectedCollection
+                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/30'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }
+                `}
+              >
+                <Star className="h-4 w-4" />
+                Featured
+              </button>
+              {collections.map(col => (
+                <button
+                  key={col.id}
+                  onClick={() => setSelectedCollection(col.id)}
+                  className={`
+                    inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all
+                    ${selectedCollection === col.id
+                      ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/30'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                    }
+                  `}
+                >
+                  <span>{col.icon}</span>
+                  {col.name}
+                </button>
+              ))}
             </div>
 
             {/* Featured Template Hero */}
@@ -429,11 +469,13 @@ export function WorkspaceHome({
                     </div>
                   </div>
 
-                  {/* Preview Panel */}
-                  <div className="w-full lg:w-96">
+                  {/* Preview Panel - Rich Template Preview */}
+                  <div className="w-full lg:w-[420px]">
                     <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl border border-slate-200/50 dark:border-slate-700/50 overflow-hidden shadow-[0_15px_35px_rgba(0,0,0,0.1)]">
                       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200/50 dark:border-slate-700/50">
-                        <h4 className="font-semibold text-slate-900 dark:text-white">Preview</h4>
+                        <h4 className="font-semibold text-slate-900 dark:text-white">
+                          Live Preview
+                        </h4>
                         <div className="flex items-center gap-1">
                           <button
                             onClick={handlePrev}
@@ -442,6 +484,9 @@ export function WorkspaceHome({
                           >
                             <ChevronLeft className="h-4 w-4" />
                           </button>
+                          <span className="text-xs text-slate-500 dark:text-slate-400 px-2">
+                            {featuredIndex + 1} / {featuredTemplates.length}
+                          </span>
                           <button
                             onClick={handleNext}
                             className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex items-center justify-center"
@@ -451,13 +496,11 @@ export function WorkspaceHome({
                           </button>
                         </div>
                       </div>
-                      <div className="p-6">
-                        <div className="max-h-64 overflow-y-auto">
-                          <pre className="text-sm whitespace-pre-wrap leading-relaxed text-slate-700 dark:text-slate-300 font-mono text-xs">
-                            {getPreviewSnippet(featured)}
-                          </pre>
-                        </div>
-                      </div>
+                      <TemplatePreview
+                        template={featured}
+                        maxLength={400}
+                        className="border-0 rounded-none"
+                      />
                     </div>
                   </div>
                 </div>
@@ -469,14 +512,20 @@ export function WorkspaceHome({
               <div className="space-y-6">
                 <div className="text-center">
                   <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
-                    More Templates
+                    {selectedCollection 
+                      ? `${collections.find(c => c.id === selectedCollection)?.name || 'Collection'} Templates`
+                      : 'All Templates'
+                    }
                   </h3>
                   <p className="text-slate-600 dark:text-slate-400">
-                    Explore our collection of professionally designed templates
+                    {selectedCollection
+                      ? collections.find(c => c.id === selectedCollection)?.description
+                      : `Explore ${allTemplates.length}+ professionally designed templates`
+                    }
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                   {galleryTemplates.map((template, index) => {
                     const idx = featuredTemplates.findIndex((ft) => ft.id === template.id);
                     const isActive = idx === featuredIndex;

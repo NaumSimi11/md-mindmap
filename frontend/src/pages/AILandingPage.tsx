@@ -32,6 +32,7 @@ import { aiService } from '@/services/ai/AIService';
 import { MDFileDropZone, type FileAnalysisResult } from '@/components/landing/MDFileDropZone';
 import { FileAnalysisResults } from '@/components/landing/FileAnalysisResults';
 import { mdFileAnalyzerService, type AnalysisInsights } from '@/services/landing/MDFileAnalyzerService';
+import { documentTemplates_service, type DocumentTemplate } from '@/services/workspace-legacy/DocumentTemplates';
 
 type DocumentType = 'markdown' | 'mindmap' | 'presentation';
 type InputMode = 'file' | 'text';
@@ -820,6 +821,82 @@ Create 5-8 slides with varied layouts: title, content, bullets, diagram.`,
             </div>
             <h4 className="font-semibold mb-1 text-white">Collaborate</h4>
             <p className="text-sm text-slate-400">Share and work together</p>
+          </div>
+        </div>
+
+        {/* Premium Template Showcase */}
+        <div className="mt-20">
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 mb-4">
+              <Sparkles className="h-4 w-4 text-purple-400" />
+              <span className="text-sm font-medium text-purple-300">{documentTemplates_service.getCount()}+ Premium Templates</span>
+            </div>
+            <h2 className="text-3xl font-bold bg-gradient-to-r from-white via-purple-100 to-pink-200 bg-clip-text text-transparent mb-3">
+              Start with Beautiful Templates
+            </h2>
+            <p className="text-slate-400 max-w-2xl mx-auto">
+              Skip the blank page. Choose from professionally designed templates for meetings, projects, journals, and more.
+            </p>
+          </div>
+
+          {/* Template Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {documentTemplates_service.getFeatured().slice(0, 8).map((template) => (
+              <button
+                key={template.id}
+                onClick={() => {
+                  documentTemplates_service.trackUsage(template.id);
+                  navigate('/workspace');
+                }}
+                className="group relative overflow-hidden rounded-xl p-4 text-left transition-all duration-300 bg-slate-800/50 backdrop-blur border border-slate-700/50 hover:border-purple-500/50 hover:bg-slate-800/80 hover:shadow-[0_15px_30px_rgba(168,85,247,0.15)] hover:-translate-y-1"
+              >
+                {/* Featured badge */}
+                {template.featured && (
+                  <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-lg">
+                    <Sparkles className="w-3 h-3 text-white" />
+                  </div>
+                )}
+
+                {/* Icon */}
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform border border-purple-500/20">
+                  <span className="text-2xl">{template.icon}</span>
+                </div>
+
+                {/* Title */}
+                <h4 className="font-semibold text-sm text-white mb-1 truncate group-hover:text-purple-300 transition-colors">
+                  {template.name}
+                </h4>
+
+                {/* Description */}
+                <p className="text-xs text-slate-400 line-clamp-2 mb-2">
+                  {template.description}
+                </p>
+
+                {/* Type badge */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-300">
+                    {template.type === 'markdown' ? 'Document' : template.type === 'mindmap' ? 'Mindmap' : 'Presentation'}
+                  </span>
+                </div>
+
+                {/* Hover shine effect */}
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 pointer-events-none" />
+              </button>
+            ))}
+          </div>
+
+          {/* View All Button */}
+          <div className="text-center mt-8">
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => navigate('/workspace')}
+              className="border-purple-500/30 hover:bg-purple-500/10 hover:border-purple-500/50 text-white"
+            >
+              <Sparkles className="h-5 w-5 mr-2 text-purple-400" />
+              View All {documentTemplates_service.getCount()}+ Templates
+              <ArrowRight className="h-5 w-5 ml-2" />
+            </Button>
           </div>
         </div>
       </main>

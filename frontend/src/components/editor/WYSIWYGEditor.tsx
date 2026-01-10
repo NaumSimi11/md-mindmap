@@ -845,7 +845,7 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
                       <FileText className="h-4 w-4 mr-3 text-slate-600 dark:text-slate-400" />
                       <span className="font-medium">Format</span>
                     </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-2xl rounded-2xl p-2 min-w-[200px]">
+                    <DropdownMenuSubContent className="z-[9999] bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-2xl rounded-2xl p-2 min-w-[200px]">
                       <DropdownMenuItem onClick={handleAutoFormat} className="rounded-xl px-3 py-2">
                         Auto Format Selection
                       </DropdownMenuItem>
@@ -1245,7 +1245,7 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
                     <span className="font-medium flex-1">Save Options</span>
                     <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">Ctrl+S</span>
                   </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-2xl rounded-2xl p-2 min-w-[220px]">
+                  <DropdownMenuSubContent className="z-[9999] bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-2xl rounded-2xl p-2 min-w-[220px]">
                     {isAuthenticated && (
                       <DropdownMenuItem
                         onClick={handleSaveToCloud}
