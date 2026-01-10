@@ -4,32 +4,16 @@ import { Separator } from '@/components/ui/separator';
 import { ToolbarButton } from './ToolbarButton';
 import { useEditorToolbar } from '@/hooks/useEditorToolbar';
 import { Button } from '@/components/ui/button';
-import {
-  Bold,
-  Italic,
-  Underline,
-  Strikethrough,
-  Heading1,
-  Heading2,
-  Heading3,
-  List,
-  ListOrdered,
-  Link,
-  Network,
-  Sparkles,
-  Wand2,
-  MessageSquare,
-  ChevronDown
-} from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import { useCommentStore } from '@/stores/commentStore';
-import { useEditorUIStore } from '@/stores/editorUIStore';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu';
+
+/**
+ * FixedToolbar - Text formatting toolbar
+ * 
+ * NOTE: Diagram, Mindmap, and AI pills were removed to avoid duplication.
+ * These features are available in the Action Bar (top) and Side Toolbar (right).
+ * This toolbar focuses on text formatting: Bold, Italic, Headings, Lists, Link.
+ */
 
 interface FixedToolbarProps {
   editor: Editor | null;
@@ -38,11 +22,6 @@ interface FixedToolbarProps {
 export const FixedToolbar: React.FC<FixedToolbarProps> = ({ editor }) => {
   const { formatActions, headingActions, listActions, insertActions } = useEditorToolbar(editor);
   const { toggleCommentSidebar, comments } = useCommentStore();
-  const {
-    setShowAIModal,
-    setShowDiagramMenu,
-    setShowMindmapChoiceModal,
-  } = useEditorUIStore();
 
   if (!editor) {
     return null;
@@ -83,63 +62,8 @@ export const FixedToolbar: React.FC<FixedToolbarProps> = ({ editor }) => {
         <ToolbarButton action={insertActions.find(a => a.label === 'Link')!} />
       </div>
 
-      {/* Right: Feature Pills + Preview Toggle */}
+      {/* Right: Comments button only (Diagram/AI moved to Action Bar & Side Toolbar) */}
       <div className="flex items-center gap-2">
-        {/* Feature Pills */}
-        <div className="flex items-center gap-1 px-2 py-1 bg-slate-50 dark:bg-slate-800 rounded-full border border-slate-200/50 dark:border-slate-700/50">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowDiagramMenu(true)}
-            className="h-7 px-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white"
-          >
-            <Network className="h-3.5 w-3.5 mr-1" />
-            Diagram
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowMindmapChoiceModal(true)}
-            className="h-7 px-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white"
-          >
-            <Sparkles className="h-3.5 w-3.5 mr-1" />
-            Mindmap
-          </Button>
-
-          {/* AI Assistant Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white"
-              >
-                <Wand2 className="h-3.5 w-3.5 mr-1" />
-                AI Assistant
-                <ChevronDown className="h-3 w-3 ml-1" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={() => setShowAIModal(true)}>
-                <Sparkles className="h-4 w-4 mr-2" />
-                Generate Content
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowAIModal(true)}>
-                <Wand2 className="h-4 w-4 mr-2" />
-                Rewrite Text
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setShowAIModal(true)}>
-                <MessageSquare className="h-4 w-4 mr-2" />
-                Ask AI
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        <Separator orientation="vertical" className="h-6 mx-1 dark:bg-slate-700" />
-
         {/* Comments */}
         <Button
           variant="ghost"

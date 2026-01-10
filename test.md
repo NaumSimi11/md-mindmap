@@ -14,6 +14,8 @@ things tha tneed to be done :
 
  - ✅ DONE: wired settings page to global Zustand store (userPreferencesStore) - theme, font size, toolbar style, spellcheck, auto-save, AI settings now apply globally and persist
  - ✅ DONE: added toolbar visibility controls in Settings > Appearance - can now show/hide Action Bar, Formatting Toolbar, and Side Toolbar
+ - ✅ DONE: fixed toolbar duplication - removed Format expandable from Side Toolbar, removed Diagram/AI pills from Formatting Toolbar
+ - ✅ DONE: unified toolbar settings UI - consolidated into visual preview cards (Action Bar, Formatting, Side Bar) in one section
 
  - the createion document dialog to be redesigned - now it's nice ui, but bad UX i think. 
  - ✅ DONE: updated UnifiedAIModal with premium glassmorphism styling (tabs, quick actions, buttons)
@@ -23,7 +25,8 @@ things tha tneed to be done :
  - the chat ai to be fixes - and implemented SIMPLE chat - ( we can let this for later, we will implement cli )
  - llm cli to be think about. this is relarted with the chat
 
- - to add  more fast text comands in the toolbar tiptap
+ - ✅ DONE: to add  more fast text comands in the toolbar tiptap (Basic formatting added: Bold, Italic, Underline, Headings, Lists, Link)
+ - TODO: Add more text formatting commands to toolbar - need to research competitors (Notion, Linear, Cursor, etc.) and add most-used formatting options for fast access. Should include: Highlight, Strikethrough, Code, Quote, Alignment, Text Color, Background Color, and other commonly used formatting options. Make them easily accessible in the Formatting Toolbar with expand/collapse option if needed.
 
  - the size - we should take care do not have initial size ( whole height ) if the editor scollable - we have problem sometimes with the scroll , this need to be redefined and taking care for it. 
 
@@ -84,4 +87,11 @@ limit na document length vo sidebar  - +3 more items are not in the preview
 
 
 
-i can see this logs here : 
+- Person setting http://localhost:5173/settings
+
+here we have Apperience / editor preferences. 
+ - ✅ DONE: I need plan here, we have few toolbars. what toolbar to show . which one to be freeze, witch one to be movable, - do not duplicate the same toolbars ( examplle, top toolbar and lofaring right toolbar are the same ) .. and stuffs like that. 
+
+ - ✅ DONE: right click - paste - is not working. we need to make check on all right click menu functionalities. (Fixed: replaced document.execCommand with Clipboard API for copy/cut/paste) 
+
+ 

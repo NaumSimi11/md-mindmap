@@ -736,13 +736,89 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
     }
   };
 
-  const handleContextBasicAction = (action: string) => {
+  /**
+   * 🔥 FIX: Use modern Clipboard API instead of deprecated document.execCommand
+   * 
+   * document.execCommand('paste') is blocked by modern browsers for security reasons.
+   * We now use navigator.clipboard API which is supported in all modern browsers.
+   */
+  const handleContextBasicAction = async (action: string) => {
     if (!editor) return;
+    
     switch (action) {
-      case 'copy': document.execCommand('copy'); break;
-      case 'cut': document.execCommand('cut'); break;
-      case 'paste': document.execCommand('paste'); break;
-      case 'delete': editor.chain().focus().deleteSelection().run(); break;
+      case 'copy': {
+        // Get selected text from editor
+        const { from, to } = editor.state.selection;
+        const selectedText = editor.state.doc.textBetween(from, to, '\n');
+        
+        if (selectedText) {
+          try {
+            await navigator.clipboard.writeText(selectedText);
+            toast({ title: 'Copied', description: 'Text copied to clipboard' });
+          } catch (err) {
+            console.error('Copy failed:', err);
+            // Fallback: try execCommand (works in some contexts)
+            document.execCommand('copy');
+          }
+        }
+        break;
+      }
+      
+      case 'cut': {
+        // Get selected text, copy it, then delete selection
+        const { from, to } = editor.state.selection;
+        const selectedText = editor.state.doc.textBetween(from, to, '\n');
+        
+        if (selectedText) {
+          try {
+            await navigator.clipboard.writeText(selectedText);
+            editor.chain().focus().deleteSelection().run();
+            toast({ title: 'Cut', description: 'Text cut to clipboard' });
+          } catch (err) {
+            console.error('Cut failed:', err);
+            // Fallback
+            document.execCommand('cut');
+          }
+        }
+        break;
+      }
+      
+      case 'paste': {
+        try {
+          // Read text from clipboard using modern Clipboard API
+          const text = await navigator.clipboard.readText();
+          
+          if (text && editor) {
+            // Check if it looks like markdown and convert if so
+            const mdLike = /(^#\s)|(^-{3,}$)|(^\*\s)|(^\d+\.\s)|(```[\s\S]*?```)/m.test(text);
+            
+            if (mdLike) {
+              // Use already-imported markdownToHtml
+              const html = markdownToHtml(text);
+              editor.chain().focus().insertContent(html, {
+                parseOptions: { preserveWhitespace: false }
+              }).run();
+            } else {
+              // Insert as plain text
+              editor.chain().focus().insertContent(text).run();
+            }
+          }
+        } catch (err) {
+          console.error('Paste failed:', err);
+          // Show helpful error message
+          toast({ 
+            title: 'Paste failed', 
+            description: 'Please use Ctrl+V or allow clipboard permissions',
+            variant: 'destructive'
+          });
+        }
+        break;
+      }
+      
+      case 'delete': {
+        editor.chain().focus().deleteSelection().run();
+        break;
+      }
     }
   };
 

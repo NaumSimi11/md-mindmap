@@ -389,46 +389,67 @@ export function UserSettings() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {/* Toolbar Style */}
+                  {/* Toolbar Visibility - Visual Preview Cards */}
                   <div className="space-y-3">
-                    <Label>Toolbar Style</Label>
-                    <RadioGroup
-                      value={preferences.toolbarStyle}
-                      onValueChange={(value: ToolbarStyle) => 
-                        preferences.setToolbarStyle(value)
-                      }
-                      className="grid grid-cols-2 gap-4"
-                    >
-                      <Label
-                        htmlFor="toolbar-fixed"
-                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                          preferences.toolbarStyle === 'fixed'
+                    <Label>Toolbars</Label>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">
+                      Choose which toolbars to show in the editor
+                    </p>
+                    <div className="grid grid-cols-3 gap-3">
+                      {/* Action Bar (Top) */}
+                      <button
+                        type="button"
+                        onClick={() => preferences.setShowActionBar(!preferences.showActionBar)}
+                        className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                          preferences.showActionBar
                             ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20'
-                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 opacity-60'
                         }`}
                       >
-                        <RadioGroupItem value="fixed" id="toolbar-fixed" className="sr-only" />
-                        <div className="w-full h-12 bg-slate-200 dark:bg-slate-700 rounded-lg flex flex-col">
-                          <div className="h-3 bg-slate-400 dark:bg-slate-500 rounded-t-lg" />
+                        <div className="w-full h-10 bg-slate-200 dark:bg-slate-700 rounded-lg flex flex-col overflow-hidden">
+                          <div className={`h-2.5 ${preferences.showActionBar ? 'bg-blue-400 dark:bg-blue-500' : 'bg-slate-400 dark:bg-slate-500'} rounded-t-lg`} />
+                          <div className="flex-1 flex items-start justify-center pt-1">
+                            <div className="w-6 h-1 bg-slate-300 dark:bg-slate-600 rounded-full" />
+                          </div>
+                        </div>
+                        <span className="text-xs font-medium">Action Bar</span>
+                      </button>
+
+                      {/* Formatting Toolbar (Below Top) */}
+                      <button
+                        type="button"
+                        onClick={() => preferences.setShowFormattingToolbar(!preferences.showFormattingToolbar)}
+                        className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                          preferences.showFormattingToolbar
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20'
+                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 opacity-60'
+                        }`}
+                      >
+                        <div className="w-full h-10 bg-slate-200 dark:bg-slate-700 rounded-lg flex flex-col overflow-hidden">
+                          <div className="h-1.5 bg-slate-300 dark:bg-slate-600" />
+                          <div className={`h-2 ${preferences.showFormattingToolbar ? 'bg-purple-400 dark:bg-purple-500' : 'bg-slate-400 dark:bg-slate-500'}`} />
                           <div className="flex-1" />
                         </div>
-                        <span className="text-sm font-medium">Fixed Top</span>
-                      </Label>
-                      <Label
-                        htmlFor="toolbar-floating"
-                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                          preferences.toolbarStyle === 'floating'
+                        <span className="text-xs font-medium">Formatting</span>
+                      </button>
+
+                      {/* Side Toolbar (Right) */}
+                      <button
+                        type="button"
+                        onClick={() => preferences.setShowSideToolbar(!preferences.showSideToolbar)}
+                        className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                          preferences.showSideToolbar
                             ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20'
-                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 opacity-60'
                         }`}
                       >
-                        <RadioGroupItem value="floating" id="toolbar-floating" className="sr-only" />
-                        <div className="w-full h-12 bg-slate-200 dark:bg-slate-700 rounded-lg flex items-center justify-center">
-                          <div className="w-20 h-3 bg-slate-400 dark:bg-slate-500 rounded-full" />
+                        <div className="w-full h-10 bg-slate-200 dark:bg-slate-700 rounded-lg flex overflow-hidden">
+                          <div className="flex-1" />
+                          <div className={`w-2 ${preferences.showSideToolbar ? 'bg-orange-400 dark:bg-orange-500' : 'bg-slate-400 dark:bg-slate-500'} rounded-r-lg`} />
                         </div>
-                        <span className="text-sm font-medium">Floating</span>
-                      </Label>
-                    </RadioGroup>
+                        <span className="text-xs font-medium">Side Bar</span>
+                      </button>
+                    </div>
                   </div>
 
                   <Separator />
@@ -556,68 +577,6 @@ export function UserSettings() {
                 </CardContent>
               </Card>
 
-              {/* Toolbar Visibility Card */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Settings className="h-5 w-5" />
-                    Toolbar Visibility
-                  </CardTitle>
-                  <CardDescription>
-                    Choose which toolbars to show in the editor
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Action Bar</Label>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Top bar with Format, Diagram, AI Assistant, Share, History
-                      </p>
-                    </div>
-                    <Switch
-                      checked={preferences.showActionBar}
-                      onCheckedChange={(checked) => 
-                        preferences.setShowActionBar(checked)
-                      }
-                    />
-                  </div>
-                  
-                  <Separator />
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Formatting Toolbar</Label>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Shortcuts bar with Bold, Italic, Headings, Lists, etc.
-                      </p>
-                    </div>
-                    <Switch
-                      checked={preferences.showFormattingToolbar}
-                      onCheckedChange={(checked) => 
-                        preferences.setShowFormattingToolbar(checked)
-                      }
-                    />
-                  </div>
-                  
-                  <Separator />
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Side Toolbar</Label>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Floating right bar with quick action icons
-                      </p>
-                    </div>
-                    <Switch
-                      checked={preferences.showSideToolbar}
-                      onCheckedChange={(checked) => 
-                        preferences.setShowSideToolbar(checked)
-                      }
-                    />
-                  </div>
-                </CardContent>
-              </Card>
             </TabsContent>
 
             {/* AI & API Tab */}
