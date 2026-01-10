@@ -57,7 +57,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useEditorUIStore } from '@/stores/editorUIStore';
-import { useSpellCheck, useFontSize, useShowActionBar, useShowFormattingToolbar, useShowSideToolbar } from '@/stores/userPreferencesStore';
+import { useSpellCheck, useFontSize, useShowActionBar, useShowFormattingToolbar, useShowSideToolbar, useFreezeActionBar, useFreezeFormattingToolbar } from '@/stores/userPreferencesStore';
 import { UnifiedAIModal } from '@/components/modals/UnifiedAIModal';
 import UnifiedDiagramModal from '@/components/modals/UnifiedDiagramModal';
 import { useAuth } from '@/hooks/useAuth';
@@ -177,6 +177,8 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
   const showActionBar = useShowActionBar();
   const showFormattingToolbar = useShowFormattingToolbar();
   const showSideToolbar = useShowSideToolbar();
+  const freezeActionBar = useFreezeActionBar();
+  const freezeFormattingToolbar = useFreezeFormattingToolbar();
 
   // Local State
   const [aiSuggestionsEnabled, setAiSuggestionsEnabled] = useState(false);
@@ -886,6 +888,7 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
       )}
 
       {/* Premium Top Bar - Matching Homepage Style - RESPONSIVE - Controlled by user preferences */}
+      {/* Note: Action Bar is outside scrollable container, so it never scrolls away - no sticky needed */}
       {showActionBar && (
       <div className="relative flex-shrink-0 px-3 sm:px-4 lg:px-6 py-2.5 sm:py-3 lg:py-4 bg-white dark:bg-slate-900">
         {/* Premium background with gradients and glassmorphism */}
@@ -1353,11 +1356,21 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
       </div>
       )}
 
-      <div className="flex-1 overflow-y-auto bg-background" data-testid="editor-container">
+      <div 
+        className="flex-1 overflow-y-auto bg-background" 
+        data-testid="editor-container"
+      >
         {editorMode === 'wysiwyg' ? (
           <>
             {/* Formatting Toolbar - Controlled by user preferences */}
-            {viewReady && showFormattingToolbar && <FixedToolbar editor={editor} />}
+            {/* Formatting Toolbar - sticky keeps it visible when scrolling if frozen */}
+            {viewReady && showFormattingToolbar && (
+              <div 
+                className={freezeFormattingToolbar ? 'sticky top-0 z-40 bg-white dark:bg-slate-900' : ''}
+              >
+                <FixedToolbar editor={editor} />
+              </div>
+            )}
             <EditorContent editor={editor} data-testid="wysiwyg-editor" />
             {viewReady && editor && <FloatingToolbar editor={editor} />}
             {viewReady && editor && <LinkHoverToolbar editor={editor} />}

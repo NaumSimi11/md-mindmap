@@ -36,6 +36,10 @@ export interface UserPreferences {
   showFormattingToolbar: boolean; // SHORTCUTS BAR: B, I, U, H1, H2, etc.
   showSideToolbar: boolean;       // FLOATING RIGHT BAR: Quick action icons
   
+  // Toolbar Freeze Settings (sticky when scrolling)
+  freezeActionBar: boolean;      // Keep Action Bar visible when scrolling
+  freezeFormattingToolbar: boolean; // Keep Formatting Toolbar visible when scrolling
+  
   // Editor Settings
   showLineNumbers: boolean;
   autoSave: boolean;
@@ -65,6 +69,10 @@ interface UserPreferencesState extends UserPreferences {
   setShowActionBar: (show: boolean) => void;
   setShowFormattingToolbar: (show: boolean) => void;
   setShowSideToolbar: (show: boolean) => void;
+  
+  // Actions - Toolbar Freeze
+  setFreezeActionBar: (freeze: boolean) => void;
+  setFreezeFormattingToolbar: (freeze: boolean) => void;
   
   // Actions - Editor
   setShowLineNumbers: (show: boolean) => void;
@@ -103,6 +111,10 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   showActionBar: true,
   showFormattingToolbar: true,
   showSideToolbar: true,
+  
+  // Toolbar Freeze (sticky when scrolling)
+  freezeActionBar: true,        // Default: frozen (sticky)
+  freezeFormattingToolbar: true, // Default: frozen (sticky)
   
   // Editor
   showLineNumbers: false,
@@ -218,6 +230,10 @@ export const useUserPreferencesStore = create<UserPreferencesState>()(
         setShowFormattingToolbar: (showFormattingToolbar) => set({ showFormattingToolbar }),
         setShowSideToolbar: (showSideToolbar) => set({ showSideToolbar }),
 
+        // Actions - Toolbar Freeze
+        setFreezeActionBar: (freezeActionBar) => set({ freezeActionBar }),
+        setFreezeFormattingToolbar: (freezeFormattingToolbar) => set({ freezeFormattingToolbar }),
+
         // Actions - Editor
         setShowLineNumbers: (showLineNumbers) => {
           document.documentElement.setAttribute('data-line-numbers', showLineNumbers.toString());
@@ -330,6 +346,9 @@ export const useToolbarStyle = () => useUserPreferencesStore((s) => s.toolbarSty
 export const useShowActionBar = () => useUserPreferencesStore((s) => s.showActionBar);
 export const useShowFormattingToolbar = () => useUserPreferencesStore((s) => s.showFormattingToolbar);
 export const useShowSideToolbar = () => useUserPreferencesStore((s) => s.showSideToolbar);
+
+export const useFreezeActionBar = () => useUserPreferencesStore((s) => s.freezeActionBar);
+export const useFreezeFormattingToolbar = () => useUserPreferencesStore((s) => s.freezeFormattingToolbar);
 export const useAutoSave = () => useUserPreferencesStore((s) => ({ enabled: s.autoSave, interval: s.autoSaveInterval }));
 export const useSpellCheck = () => useUserPreferencesStore((s) => s.spellCheck);
 export const useShowLineNumbers = () => useUserPreferencesStore((s) => s.showLineNumbers);

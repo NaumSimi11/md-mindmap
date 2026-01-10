@@ -64,6 +64,8 @@ import {
   Wand2,
   Brain,
   CreditCard,
+  Pin,
+  PinOff,
 } from 'lucide-react';
 import { 
   useUserPreferencesStore,
@@ -397,41 +399,79 @@ export function UserSettings() {
                     </p>
                     <div className="grid grid-cols-3 gap-3">
                       {/* Action Bar (Top) */}
-                      <button
-                        type="button"
-                        onClick={() => preferences.setShowActionBar(!preferences.showActionBar)}
-                        className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                          preferences.showActionBar
-                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20'
-                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 opacity-60'
-                        }`}
-                      >
-                        <div className="w-full h-10 bg-slate-200 dark:bg-slate-700 rounded-lg flex flex-col overflow-hidden">
-                          <div className={`h-2.5 ${preferences.showActionBar ? 'bg-blue-400 dark:bg-blue-500' : 'bg-slate-400 dark:bg-slate-500'} rounded-t-lg`} />
-                          <div className="flex-1 flex items-start justify-center pt-1">
-                            <div className="w-6 h-1 bg-slate-300 dark:bg-slate-600 rounded-full" />
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => preferences.setShowActionBar(!preferences.showActionBar)}
+                          className={`w-full flex flex-col items-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                            preferences.showActionBar
+                              ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20'
+                              : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 opacity-60'
+                          }`}
+                        >
+                          <div className="w-full h-10 bg-slate-200 dark:bg-slate-700 rounded-lg flex flex-col overflow-hidden">
+                            <div className={`h-2.5 ${preferences.showActionBar ? 'bg-blue-400 dark:bg-blue-500' : 'bg-slate-400 dark:bg-slate-500'} rounded-t-lg`} />
+                            <div className="flex-1 flex items-start justify-center pt-1">
+                              <div className="w-6 h-1 bg-slate-300 dark:bg-slate-600 rounded-full" />
+                            </div>
                           </div>
-                        </div>
-                        <span className="text-xs font-medium">Action Bar</span>
-                      </button>
+                          <span className="text-xs font-medium">Action Bar</span>
+                        </button>
+                        {preferences.showActionBar && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              preferences.setFreezeActionBar(!preferences.freezeActionBar);
+                            }}
+                            className="absolute top-2 right-2 p-1.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                            title={preferences.freezeActionBar ? 'Unfreeze (hide on scroll)' : 'Freeze (keep visible on scroll)'}
+                          >
+                            {preferences.freezeActionBar ? (
+                              <Pin className="h-3.5 w-3.5 text-blue-500" />
+                            ) : (
+                              <PinOff className="h-3.5 w-3.5 text-slate-400" />
+                            )}
+                          </button>
+                        )}
+                      </div>
 
                       {/* Formatting Toolbar (Below Top) */}
-                      <button
-                        type="button"
-                        onClick={() => preferences.setShowFormattingToolbar(!preferences.showFormattingToolbar)}
-                        className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                          preferences.showFormattingToolbar
-                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20'
-                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 opacity-60'
-                        }`}
-                      >
-                        <div className="w-full h-10 bg-slate-200 dark:bg-slate-700 rounded-lg flex flex-col overflow-hidden">
-                          <div className="h-1.5 bg-slate-300 dark:bg-slate-600" />
-                          <div className={`h-2 ${preferences.showFormattingToolbar ? 'bg-purple-400 dark:bg-purple-500' : 'bg-slate-400 dark:bg-slate-500'}`} />
-                          <div className="flex-1" />
-                        </div>
-                        <span className="text-xs font-medium">Formatting</span>
-                      </button>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => preferences.setShowFormattingToolbar(!preferences.showFormattingToolbar)}
+                          className={`w-full flex flex-col items-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                            preferences.showFormattingToolbar
+                              ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20'
+                              : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 opacity-60'
+                          }`}
+                        >
+                          <div className="w-full h-10 bg-slate-200 dark:bg-slate-700 rounded-lg flex flex-col overflow-hidden">
+                            <div className="h-1.5 bg-slate-300 dark:bg-slate-600" />
+                            <div className={`h-2 ${preferences.showFormattingToolbar ? 'bg-purple-400 dark:bg-purple-500' : 'bg-slate-400 dark:bg-slate-500'}`} />
+                            <div className="flex-1" />
+                          </div>
+                          <span className="text-xs font-medium">Formatting</span>
+                        </button>
+                        {preferences.showFormattingToolbar && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              preferences.setFreezeFormattingToolbar(!preferences.freezeFormattingToolbar);
+                            }}
+                            className="absolute top-2 right-2 p-1.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                            title={preferences.freezeFormattingToolbar ? 'Unfreeze (hide on scroll)' : 'Freeze (keep visible on scroll)'}
+                          >
+                            {preferences.freezeFormattingToolbar ? (
+                              <Pin className="h-3.5 w-3.5 text-blue-500" />
+                            ) : (
+                              <PinOff className="h-3.5 w-3.5 text-slate-400" />
+                            )}
+                          </button>
+                        )}
+                      </div>
 
                       {/* Side Toolbar (Right) */}
                       <button
