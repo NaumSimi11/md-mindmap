@@ -72,7 +72,7 @@ class StorageService {
 
     try {
       return await this.invoke<FileMetadata[]>('list_workspace_files', {
-        workspacePath: this.workspacePath,
+        workspace_path: this.workspacePath,  // snake_case for Rust
       });
     } catch (error) {
       console.error('Failed to list workspace files:', error);
@@ -96,7 +96,7 @@ class StorageService {
       
       try {
         await this.invoke('save_document_to_file', {
-          filePath,
+          file_path: filePath,  // snake_case for Rust
           content,
         });
         
@@ -132,7 +132,7 @@ class StorageService {
 
       try {
         const content = await this.invoke<string>('load_document_from_file', {
-          filePath: metadata.filePath,
+          file_path: metadata.filePath,  // snake_case for Rust
         });
 
         return {
@@ -169,7 +169,7 @@ class StorageService {
 
     try {
       const content = await this.invoke<string>('load_document_from_file', {
-        filePath,
+        file_path: filePath,  // snake_case for Rust
       });
       return content;
     } catch (error) {
@@ -185,7 +185,7 @@ class StorageService {
       if (metadata && metadata.filePath) {
         try {
           await this.invoke('delete_file', {
-            filePath: metadata.filePath,
+            file_path: metadata.filePath,  // snake_case for Rust
           });
           this.deleteDocumentMetadata(id);
         } catch (error) {
@@ -209,8 +209,8 @@ class StorageService {
       
       try {
         const filePath = await this.invoke<string>('create_new_file', {
-          workspacePath: this.workspacePath,
-          fileName,
+          workspace_path: this.workspacePath,  // snake_case for Rust
+          file_name: fileName,  // snake_case for Rust
         });
 
         this.saveDocumentMetadata(id, {

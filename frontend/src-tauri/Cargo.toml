@@ -27,3 +27,28 @@ rfd = "0.15"
 dirs = "6.0"
 notify = "6.1"
 chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+tempfile = "3.10"  # For creating test directories
+
+# ============================================================================
+# RELEASE BUILD OPTIMIZATIONS
+# ============================================================================
+[profile.release]
+# Enable Link-Time Optimization for smaller, faster binaries
+lto = "thin"
+
+# Use single codegen unit for better optimization (slower compile, faster runtime)
+codegen-units = 1
+
+# Abort on panic for smaller binary size (no unwinding)
+panic = "abort"
+
+# Strip debug symbols for smaller binary
+strip = true
+
+# Maximum optimization level
+opt-level = 3
+
+# Enable overflow checks in release builds for safety
+overflow-checks = true

@@ -16,11 +16,26 @@
         "width": 1400,
         "height": 900,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "center": true
       }
     ],
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": "'self' ipc: asset:",
+        "script-src": "'self' 'unsafe-inline' 'unsafe-eval'",
+        "style-src": "'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src": "'self' https://fonts.gstatic.com data:",
+        "img-src": "'self' asset: data: blob: https:",
+        "connect-src": "'self' ipc: http://localhost:* https://localhost:* ws://localhost:* wss://localhost:* https://*.amazonaws.com https://*.cloudfront.net https://*.execute-api.*.amazonaws.com wss://*.execute-api.*.amazonaws.com",
+        "media-src": "'self' asset: data: blob:",
+        "frame-src": "'self'",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'self'"
+      },
+      "freezePrototype": false,
+      "dangerousDisableAssetCspModification": false
     }
   },
   "bundle": {
@@ -32,6 +47,12 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "category": "Productivity",
+    "shortDescription": "AI-Powered Markdown Editor",
+    "longDescription": "MDReader is a collaborative markdown editor with real-time sync, workspace management, and version control.",
+    "copyright": "Copyright © 2024-2026 MDReader",
+    "publisher": "MDReader",
+    "resources": []
   }
 }
