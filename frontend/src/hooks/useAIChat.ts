@@ -9,6 +9,8 @@ import { PromptTemplates, PromptContext } from '@/services/ai/PromptTemplates';
 import { ResponseProcessor } from '@/services/ai/ResponseProcessor';
 import { DocumentAnalyzer } from '@/services/ai/DocumentAnalyzer';
 import { SmartFormatDetector } from '@/services/ai/SmartFormatDetector';
+import { createStreamingParser, getFunctionDescription } from '@/services/ai/StreamingParser';
+import { formatErrorForChat, formatErrorForToast } from '@/services/ai/AIErrorHandler';
 import { useAIStagingStore, StagedSection } from '@/stores/aiStagingStore';
 import { 
     showInlinePreview, 
@@ -132,7 +134,11 @@ export const useAIChat = ({ editor, documentContent, documentTitle = 'Document' 
         localStorage.setItem('ai-preferences', JSON.stringify(newPreferences));
     }, []);
 
-    const sendMessage = useCallback(async (input: string, model: string = 'gemini-flash') => {
+    const sendMessage = useCallback(async (
+        input: string, 
+        model: string = 'gemini-flash',
+        mentionedDocuments?: Array<{ id: string; title: string; content?: string }>
+    ) => {
         if (!input.trim() || !editor || isGenerating) return;
 
         const userMessage: ChatMessage = {
@@ -163,6 +169,21 @@ export const useAIChat = ({ editor, documentContent, documentTitle = 'Document' 
             const editTools = new DocumentEditTools(editor);
             const functionSchemas = DocumentEditTools.getFunctionSchemas();
             const context = getDocumentContext(editor, documentContent);
+            
+            // Build additional context from mentioned documents
+            let mentionedContext = '';
+            if (mentionedDocuments && mentionedDocuments.length > 0) {
+                mentionedContext = '\n\n# 📎 REFERENCED DOCUMENTS:\n\n';
+                for (const doc of mentionedDocuments) {
+                    mentionedContext += `## @${doc.title}\n`;
+                    if (doc.content) {
+                        mentionedContext += `${doc.content.substring(0, 2000)}${doc.content.length > 2000 ? '...(truncated)' : ''}\n\n`;
+                    } else {
+                        mentionedContext += `(Content not available)\n\n`;
+                    }
+                }
+                mentionedContext += 'Consider the above referenced documents when responding to the user.\n';
+            }
 
             // 🧠 DEEP DOCUMENT ANALYSIS
             const docAnalysis = DocumentAnalyzer.analyzeDocument(documentContent, documentTitle);
@@ -224,7 +245,8 @@ Use this intelligence to make the PERFECT decision about formatting!
 `;
 
             // Add function schemas for AI function calling
-            const fullPrompt = `${enhancedPrompt}\n\nAVAILABLE FUNCTIONS:\n${JSON.stringify(functionSchemas, null, 2)}`;
+            // Include mentioned documents context if any
+            const fullPrompt = `${enhancedPrompt}${mentionedContext}\n\nAVAILABLE FUNCTIONS:\n${JSON.stringify(functionSchemas, null, 2)}`;
 
             const assistantMessageId = (Date.now() + 1).toString();
             
@@ -250,23 +272,15 @@ Use this intelligence to make the PERFECT decision about formatting!
                 )
             );
 
-            let fullResponse = '';
+            // 🎯 Use StreamingParser for natural response handling
+            const streamParser = createStreamingParser();
             let friendlyContent = '';
 
             await aiService.generateContentStream(fullPrompt, (chunk) => {
-                fullResponse += chunk;
+                const parsed = streamParser.processChunk(chunk);
                 
-                // Extract friendly message (text before JSON)
-                const jsonStart = fullResponse.indexOf('{\n  "function"');
-                let rawContent = '';
-                if (jsonStart > 0) {
-                    rawContent = fullResponse.substring(0, jsonStart).trim();
-                } else {
-                    rawContent = fullResponse;
-                }
-
-                // 🎨 Post-process response for better formatting
-                const processed = ResponseProcessor.process(rawContent);
+                // Post-process for better formatting
+                const processed = ResponseProcessor.process(parsed.displayContent);
                 friendlyContent = processed.content;
 
                 setMessages((prev) =>
@@ -287,6 +301,10 @@ Use this intelligence to make the PERFECT decision about formatting!
                 model: model
             });
 
+            // Finalize parsing
+            const finalParsed = streamParser.finalize();
+            const fullResponse = streamParser.getRawBuffer();
+
             setMessages((prev) =>
                 prev.map((msg) =>
                     msg.id === assistantMessageId
@@ -295,260 +313,131 @@ Use this intelligence to make the PERFECT decision about formatting!
                 )
             );
 
-            // Parse function call
-            const jsonMatch = fullResponse.match(/\{[\s\S]*"function"[\s\S]*\}/);
+            // Check for function call from parser
+            if (finalParsed.functionCall) {
+                const { name: funcName, arguments: funcArgs } = finalParsed.functionCall;
+                const friendlyMessage = finalParsed.displayContent;
+                
+                // Generate friendly description
+                const actionDescription = getFunctionDescription(funcName, funcArgs);
 
-            if (jsonMatch) {
-                try {
-                    const functionCall = JSON.parse(jsonMatch[0]);
-                    const { function: funcName, arguments: funcArgs } = functionCall;
-
-
-                    // Extract friendly message (text before the JSON)
-                    let friendlyMessage = fullResponse.substring(0, jsonMatch.index).trim();
-                    
-                    // Generate friendly description based on function
-                    let actionDescription = '';
-                    if (funcName === 'multi_edit') {
-                        const editCount = funcArgs.edits?.length || 0;
-                        actionDescription = `Making ${editCount} improvements to your document`;
-                    } else if (funcName === 'create_section') {
-                        actionDescription = `Adding new section: "${funcArgs.title}"`;
-                    } else if (funcName === 'edit_document') {
-                        actionDescription = `Updating "${funcArgs.target}"`;
-                    }
-
-                    // 🎯 NEW STAGING WORKFLOW
-                    // Generate preview content (markdown representation)
-                    let previewContent = '';
-                    const sections: StagedSection[] = [];
-                    
-                    if (funcName === 'create_section') {
-                        previewContent = `## ${funcArgs.title}\n\n${funcArgs.content}`;
-                        sections.push({
-                            title: funcArgs.title,
-                            content: funcArgs.content,
-                            position: funcArgs.position,
-                        });
-                    } else if (funcName === 'multi_edit') {
-                        // Build preview from all edits
-                        const edits = funcArgs.edits || [];
-                        previewContent = edits.map((edit: any) => {
-                            if (edit.action === 'insert_after' || edit.action === 'insert_before') {
-                                return edit.newContent;
-                            }
-                            return `### ${edit.target}\n\n${edit.newContent || ''}`;
-                        }).join('\n\n');
-                        
-                        // Extract sections
-                        edits.forEach((edit: any) => {
-                            if (edit.newContent) {
-                                const titleMatch = edit.newContent.match(/^##\s+(.+)/m);
-                                sections.push({
-                                    title: titleMatch ? titleMatch[1] : edit.target,
-                                    content: edit.newContent,
-                                });
-                            }
-                        });
-                    } else if (funcName === 'edit_document') {
-                        previewContent = `### ${funcArgs.target}\n\n${funcArgs.newContent || ''}`;
-                        sections.push({
-                            title: funcArgs.target,
-                            content: funcArgs.newContent || '',
-                        });
-                    }
-
-                    // 🎯 STAGE CONTENT (don't apply yet!)
-                    const stagedContentInput = {
-                        type: funcName as any,
-                        originalRequest: input,
-                        generatedContent: previewContent,
-                        sections,
-                        functionCall: {
-                            name: funcName,
-                            arguments: funcArgs,
-                        },
-                        description: actionDescription,
-                    };
-                    
-                    stagingStore.stageContent(stagedContentInput);
-                    
-                    // Get the full staged content from the store (now has id, timestamp, wordCount, etc.)
-                    const fullStagedContent = stagingStore.currentStaged;
-
-                   
-
-                    // 🎨 SHOW INLINE PREVIEW IN DOCUMENT!
-                    if (editor && fullStagedContent) {
-                        const position = calculateInsertionPosition(editor, funcArgs.position || 'end');
-                        const availablePositions = getAvailablePositions(editor);
-                        const currentPositionLabel = formatPositionLabel(funcArgs.position || 'end');
-                        
-                        
-                        showInlinePreview(editor, {
-                            stagedContent: fullStagedContent,  // ✅ Use the FULL staged content from store!
-                            position,
-                            currentPosition: currentPositionLabel,
-                            availablePositions,
-                            onAccept: () => {
-                                acceptStaged();
-                            },
-                            onReject: () => {
-                                rejectStaged();
-                            },
-                            onChangePosition: (newPosition) => {
-                                // TODO: Update position and re-render preview
-                            },
-                        });
-                    }
-
-                    // Show preview in message
-                    setMessages((prev) =>
-                        prev.map((msg) =>
-                            msg.id === assistantMessageId
-                                ? {
-                                    ...msg,
-                                    content: friendlyMessage,
-                                    functionCall: { 
-                                        name: funcName, 
-                                        args: funcArgs, 
-                                        status: 'pending',
-                                        requiresConfirmation: true,
-                                        friendlyDescription: actionDescription
-                                    },
-                                }
-                                : msg
-                        )
-                    );
-
-                    // ❌ OLD AUTO-EXECUTE CODE (commented out for now)
-                    // Only auto-execute if user explicitly confirmed
-                    const shouldAutoExecute = false; // Disabled - always show preview first
-                    // const shouldAutoExecute = isExecuteCommand || isFrustrated;
-
-                    if (shouldAutoExecute) {
-                        // This branch is now handled by acceptStaged() function below
-                        // Show thinking -> applying transition
-                        setMessages((prev) =>
-                            prev.map((msg) =>
-                                msg.id === assistantMessageId
-                                    ? {
-                                        ...msg,
-                                        content: friendlyMessage,
-                                        thinkingPhase: 'writing' as const,
-                                        isThinking: true,
-                                        functionCall: { 
-                                            name: funcName, 
-                                            args: funcArgs, 
-                                            status: 'pending',
-                                            friendlyDescription: actionDescription
-                                        },
-                                    }
-                                    : msg
-                            )
-                        );
-
-                        // Small delay for smooth UX
-                        await new Promise(resolve => setTimeout(resolve, 200));
-
-                        // Execute function
-                        let result;
-                        switch (funcName) {
-                            case 'edit_document':
-                                result = await editTools.editDocument(funcArgs);
-                                break;
-                            case 'create_section':
-                                result = await editTools.createSection(funcArgs);
-                                break;
-                            case 'multi_edit':
-                                result = await editTools.multiEdit(funcArgs);
-                                break;
-                            default:
-                                result = { success: false, message: `Unknown function: ${funcName}` };
-                        }
-
-                        // Update with friendly result
-                        setMessages((prev) =>
-                            prev.map((msg) =>
-                                msg.id === assistantMessageId
-                                    ? {
-                                        ...msg,
-                                        content: friendlyMessage,
-                                        isThinking: false,
-                                        functionCall: {
-                                            name: funcName,
-                                            args: funcArgs,
-                                            result,
-                                            status: result.success ? 'success' : 'error',
-                                            friendlyDescription: result.message
-                                        },
-                                    }
-                                    : msg
-                            )
-                        );
-
-                        toast({
-                            title: result.success ? '✅ Changes Applied' : '❌ Edit Failed',
-                            description: result.message,
-                            variant: result.success ? 'default' : 'destructive',
-                        });
-                    } else {
-                        // Show suggestion requiring confirmation
-                        setMessages((prev) =>
-                            prev.map((msg) =>
-                                msg.id === assistantMessageId
-                                    ? {
-                                        ...msg,
-                                        content: friendlyMessage || 'I can help improve your document.',
-                                        isThinking: false,
-                                        functionCall: { 
-                                            name: funcName, 
-                                            args: funcArgs, 
-                                            status: 'pending',
-                                            requiresConfirmation: true,
-                                            friendlyDescription: actionDescription
-                                        },
-                                    }
-                                    : msg
-                            )
-                        );
-                    }
-
-                } catch (error) {
-                    console.error('❌ Function call parsing failed:', error);
-                    console.error('Raw response:', fullResponse);
-                    console.error('Matched JSON:', jsonMatch[0]);
-                    
-                    // Don't show error toast if we're in dev mode and can debug
-                    // The AI still generated content, just couldn't parse the function call
-                    toast({
-                        title: '⚠️ Parsing Warning',
-                        description: 'Could not parse function call, but content was generated. Check console for details.',
-                        variant: 'default',
+                // 🎯 STAGING WORKFLOW
+                // Generate preview content (markdown representation)
+                let previewContent = '';
+                const sections: StagedSection[] = [];
+                
+                if (funcName === 'create_section') {
+                    previewContent = `## ${funcArgs.title}\n\n${funcArgs.content}`;
+                    sections.push({
+                        title: funcArgs.title,
+                        content: funcArgs.content,
+                        position: funcArgs.position,
                     });
+                } else if (funcName === 'multi_edit') {
+                    // Build preview from all edits
+                    const edits = funcArgs.edits || [];
+                    previewContent = edits.map((edit: any) => {
+                        if (edit.action === 'insert_after' || edit.action === 'insert_before') {
+                            return edit.newContent;
+                        }
+                        return `### ${edit.target}\n\n${edit.newContent || ''}`;
+                    }).join('\n\n');
                     
-                    // Still show the response content even if function parsing failed
-                    setMessages((prev) =>
-                        prev.map((msg) =>
-                            msg.id === assistantMessageId
-                                ? { ...msg, content: friendlyContent || fullResponse }
-                                : msg
-                        )
-                    );
+                    // Extract sections
+                    edits.forEach((edit: any) => {
+                        if (edit.newContent) {
+                            const titleMatch = edit.newContent.match(/^##\s+(.+)/m);
+                            sections.push({
+                                title: titleMatch ? titleMatch[1] : edit.target,
+                                content: edit.newContent,
+                            });
+                        }
+                    });
+                } else if (funcName === 'edit_document') {
+                    previewContent = `### ${funcArgs.target}\n\n${funcArgs.newContent || ''}`;
+                    sections.push({
+                        title: funcArgs.target,
+                        content: funcArgs.newContent || '',
+                    });
                 }
+
+                // 🎯 STAGE CONTENT (don't apply yet!)
+                const stagedContentInput = {
+                    type: funcName as any,
+                    originalRequest: input,
+                    generatedContent: previewContent,
+                    sections,
+                    functionCall: {
+                        name: funcName,
+                        arguments: funcArgs,
+                    },
+                    description: actionDescription,
+                };
+                
+                stagingStore.stageContent(stagedContentInput);
+                
+                // Get the full staged content from the store
+                const fullStagedContent = stagingStore.currentStaged;
+
+                // 🎨 SHOW INLINE PREVIEW IN DOCUMENT!
+                if (editor && fullStagedContent) {
+                    const position = calculateInsertionPosition(editor, funcArgs.position || 'end');
+                    const availablePositions = getAvailablePositions(editor);
+                    const currentPositionLabel = formatPositionLabel(funcArgs.position || 'end');
+                    
+                    showInlinePreview(editor, {
+                        stagedContent: fullStagedContent,
+                        position,
+                        currentPosition: currentPositionLabel,
+                        availablePositions,
+                        onAccept: () => {
+                            acceptStaged();
+                        },
+                        onReject: () => {
+                            rejectStaged();
+                        },
+                        onChangePosition: () => {
+                            // Position change handled elsewhere
+                        },
+                    });
+                }
+
+                // Show preview in message with pending confirmation
+                setMessages((prev) =>
+                    prev.map((msg) =>
+                        msg.id === assistantMessageId
+                            ? {
+                                ...msg,
+                                content: friendlyMessage || 'I can help improve your document.',
+                                isThinking: false,
+                                functionCall: { 
+                                    name: funcName, 
+                                    args: funcArgs, 
+                                    status: 'pending',
+                                    requiresConfirmation: true,
+                                    friendlyDescription: actionDescription
+                                },
+                            }
+                            : msg
+                    )
+                );
             }
 
         } catch (error) {
+            // 🎨 Use friendly error handler
+            const friendlyError = formatErrorForChat(error);
+            const toastError = formatErrorForToast(error);
+            
             const errorMessage: ChatMessage = {
                 id: (Date.now() + 1).toString(),
                 role: 'assistant',
-                content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                content: friendlyError,
                 timestamp: new Date(),
             };
             setMessages((prev) => [...prev, errorMessage]);
             toast({
-                title: 'Error',
-                description: 'Failed to generate response',
+                title: toastError.title,
+                description: toastError.description,
                 variant: 'destructive',
             });
         } finally {
@@ -663,6 +552,18 @@ Use this intelligence to make the PERFECT decision about formatting!
         setMessages((prev) => [...prev, cancelMsg]);
     }, [editor, stagingStore, toast]);
 
+    /**
+     * Add a message to the chat (for external use like agents)
+     */
+    const addMessage = useCallback((msg: Omit<ChatMessage, 'id' | 'timestamp'>) => {
+        const message: ChatMessage = {
+            ...msg,
+            id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, message]);
+    }, []);
+
     return {
         messages,
         isGenerating,
@@ -677,5 +578,8 @@ Use this intelligence to make the PERFECT decision about formatting!
         currentStaged: stagingStore.currentStaged,
         isPreviewExpanded: stagingStore.isPreviewExpanded,
         setPreviewExpanded: stagingStore.setPreviewExpanded,
+        
+        // 🤖 For agent integration
+        addMessage,
     };
 };

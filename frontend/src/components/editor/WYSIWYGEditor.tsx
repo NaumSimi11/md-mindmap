@@ -192,7 +192,7 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
 
   // Auth & Workspace
   const { isAuthenticated, user } = useAuth();
-  const { refreshDocuments } = useWorkspace();
+  const { refreshDocuments, currentWorkspace } = useWorkspace();
   
   // Durability / backup status (used for inline badge)
   const syncStatus = useSyncStatus(documentId);
@@ -1464,8 +1464,17 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
         editor={editor}
         documentContent={viewReady ? (editor?.getText() || '') : ''}
         documentTitle={title}
+        workspaceId={currentWorkspace?.id || 'default'}
         isOpen={isSidebarOpen}
         onToggle={toggleSidebar}
+        onDocumentCreated={async () => {
+          // Refresh the document list after agent creates new documents
+          // Multiple refreshes with delays to catch all updates
+          console.log('🔄 Agent created documents, refreshing...');
+          await refreshDocuments?.();
+          setTimeout(() => refreshDocuments?.(), 500);
+          setTimeout(() => refreshDocuments?.(), 1500);
+        }}
       />
 
       {contextMenu.visible && viewReady && (

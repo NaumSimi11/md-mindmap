@@ -130,13 +130,20 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
 
   // Refresh documents when workspace switches
   const refreshDocuments = useCallback(async () => {
+    console.log('🔄 [DocumentData] refreshDocuments called', { 
+      workspaceId: currentWorkspace?.id,
+      workspaceName: currentWorkspace?.name 
+    });
+    
     if (!currentWorkspace) {
+      console.log('🔄 [DocumentData] No workspace, clearing documents');
       setDocuments([]);
       return;
     }
     
     try {
       const isLocalOnly = currentWorkspace.syncStatus === 'local';
+      console.log('🔄 [DocumentData] Fetching docs...', { isLocalOnly, shouldUseBackendService });
       
    
       
@@ -161,6 +168,11 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
           guestWorkspaceService.getDocuments(currentWorkspace.id),
         ]);
         
+        console.log('🔄 [DocumentData] Fetched docs:', {
+          backendCount: backendDocs?.length,
+          guestCount: guestDocs?.length,
+          backendDocs: backendDocs?.map((d: any) => ({ id: d.id, title: d.title })),
+        });
         
         if (backendDocs.length > 0 || guestDocs.length > 0) {
           const backendMapped = backendDocs.map(mapDocumentMetaToDocument);
@@ -353,16 +365,27 @@ export function DocumentDataProvider({ children }: { children: ReactNode }) {
       }
     };
     
+    // 🤖 Listen for agent-created documents
+    const handleDocumentsCreated = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { folders, documents } = customEvent.detail || {};
+      console.log('🤖 [DocumentData] Agent created items:', { folders, documents });
+      // Small delay to ensure backend has processed
+      setTimeout(() => refreshDocuments(), 500);
+    };
+    
     window.addEventListener('document-synced', handleDocumentSynced);
     window.addEventListener('document-sync-status-changed', handleSyncStatusChanged);
     window.addEventListener('offline-data-loaded', handleOfflineDataLoaded);
     window.addEventListener('batch-sync-complete', handleBatchSyncComplete);
+    window.addEventListener('documents:created', handleDocumentsCreated);
     
     return () => {
       window.removeEventListener('document-synced', handleDocumentSynced);
       window.removeEventListener('document-sync-status-changed', handleSyncStatusChanged);
       window.removeEventListener('offline-data-loaded', handleOfflineDataLoaded);
       window.removeEventListener('batch-sync-complete', handleBatchSyncComplete);
+      window.removeEventListener('documents:created', handleDocumentsCreated);
     };
   }, [currentWorkspace, refreshDocuments]);
 

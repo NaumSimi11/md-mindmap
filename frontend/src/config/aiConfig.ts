@@ -1,7 +1,7 @@
 /* AI configuration for the React app (mdreader-main).
    Loads values from Vite env and exposes a safe config object. */
 
-type ProviderName = 'openai' | 'anthropic' | 'gemini';
+type ProviderName = 'openai' | 'anthropic' | 'gemini' | 'openrouter';
 
 export interface AIProviderConfig {
   apiKey?: string;
@@ -41,6 +41,7 @@ const getNumber = (value: string | undefined, fallback: number): number => {
 const OPENAI_API_KEY = env.VITE_OPENAI_API_KEY;
 const ANTHROPIC_API_KEY = env.VITE_ANTHROPIC_API_KEY;
 const GEMINI_API_KEY = env.VITE_GEMINI_API_KEY;
+const OPENROUTER_API_KEY = env.VITE_OPENROUTER_API_KEY;
 
 export const AI_CONFIG: AIConfigShape = {
   enabled: getBoolean(env.VITE_AI_ENABLED, false),
@@ -67,6 +68,11 @@ export const AI_CONFIG: AIConfigShape = {
       baseUrl: env.VITE_GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta',
       defaultModel: env.VITE_GEMINI_MODEL || 'gemini-1.5-flash',
     },
+    openrouter: {
+      apiKey: OPENROUTER_API_KEY,
+      baseUrl: env.VITE_OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
+      defaultModel: env.VITE_OPENROUTER_MODEL || 'openai/gpt-3.5-turbo',
+    },
   },
   isValid() {
     if (!this.enabled) return { valid: true, reason: 'AI disabled' };
@@ -81,8 +87,18 @@ export const AI_CONFIG: AIConfigShape = {
     return this.providers[this.defaultProvider];
   },
   isProviderConfigured(name: ProviderName) {
+    // Check environment variable first
     const p = this.providers[name];
-    return !!(p && p.apiKey && !p.apiKey.includes('your_') && !p.apiKey.includes('_here'));
+    const envKeyValid = !!(p && p.apiKey && !p.apiKey.includes('your_') && !p.apiKey.includes('_here'));
+    if (envKeyValid) return true;
+    
+    // Also check localStorage (for runtime-configured keys)
+    if (typeof localStorage !== 'undefined') {
+      const localKey = localStorage.getItem(`api_key_${name}`);
+      return !!(localKey && localKey.trim().length > 10);
+    }
+    
+    return false;
   },
   getConfiguredProviders() {
     return (['openai', 'anthropic', 'gemini'] as ProviderName[]).filter((n) => this.isProviderConfigured(n));

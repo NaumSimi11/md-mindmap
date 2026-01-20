@@ -89,7 +89,7 @@ export function WorkspaceSidebar({
     deleteDocument: contextDeleteDocument,
     createDocument, // 🔥 ADD: Need this for document creation
   } = useWorkspace();
-  const { folderTree, createFolder, updateFolder, deleteFolder, isLoading: foldersLoading } = useBackendFolders();
+  const { folderTree, createFolder, updateFolder, deleteFolder, loadFolders, isLoading: foldersLoading } = useBackendFolders();
   
   // Force re-render on workspace change (controlled by state for rename)
   
@@ -513,6 +513,21 @@ export function WorkspaceSidebar({
                 onClick={handleCreateFolder}
               >
                 <FolderPlus className="h-4 w-4" />
+              </Button>
+              <Button
+                data-testid="refresh-sidebar"
+                size="sm"
+                variant="ghost"
+                onClick={async () => {
+                  console.log('🔄 [Sidebar] Manual refresh triggered');
+                  await Promise.all([
+                    refreshDocuments?.(),
+                    loadFolders?.(),
+                  ]);
+                }}
+                title="Refresh documents and folders"
+              >
+                <RefreshCw className="h-4 w-4" />
               </Button>
             </div>
           </div>

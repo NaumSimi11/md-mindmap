@@ -48,7 +48,13 @@ export function useBackendFolders() {
 
   // Load all folders for current workspace
   const loadFolders = useCallback(async () => {
-    if (!currentWorkspace) return;
+    console.log('🔄 [BackendFolders] loadFolders called', { 
+      workspaceId: currentWorkspace?.id 
+    });
+    if (!currentWorkspace) {
+      console.log('🔄 [BackendFolders] No workspace, skipping');
+      return;
+    }
 
     try {
       setIsLoading(true);
@@ -117,22 +123,34 @@ export function useBackendFolders() {
         
         const backendFolders = await backendWorkspaceService.getFolders(workspaceIdToUse);
         
+        console.log('🔄 [BackendFolders] Got folders from backend:', {
+          count: backendFolders?.length,
+          folders: backendFolders?.map((f: any) => ({ id: f.id, name: f.name }))
+        });
+        
+        // Handle array or object response
+        const folderArray = Array.isArray(backendFolders) 
+          ? backendFolders 
+          : (backendFolders as any)?.items || [];
+        
         // Convert to Folder format (snake_case for compatibility)
-        const folders: Folder[] = backendFolders.map(bf => ({
+        const folders: Folder[] = folderArray.map((bf: any) => ({
           id: bf.id,
-          workspace_id: bf.workspaceId,
-          parent_id: bf.parentId,
+          workspace_id: bf.workspaceId || bf.workspace_id,
+          parent_id: bf.parentId || bf.parent_id,
           name: bf.name,
           icon: bf.icon,
           position: bf.position,
-          created_at: bf.createdAt,
-          updated_at: bf.updatedAt
+          created_at: bf.createdAt || bf.created_at,
+          updated_at: bf.updatedAt || bf.updated_at
         }));
         
+        console.log('🔄 [BackendFolders] Setting folders:', folders.length);
         setFolders(folders);
         
         // Build tree from flat list
         const tree = buildTreeFromFolders(folders);
+        console.log('🔄 [BackendFolders] Built tree:', tree.length);
         setFolderTree(tree);
         
         setIsLoading(false);
@@ -192,10 +210,30 @@ export function useBackendFolders() {
       loadFolders();
     };
     
+    // 🤖 Listen for agent-created content (folders AND documents)
+    const handleDocumentsCreated = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { folders: folderCount, documents: docCount } = customEvent.detail || {};
+      console.log('🔄 [BackendFolders] 📣 Event received! Agent created content:', { folderCount, docCount });
+      // Always refresh - documents might need folder tree update
+      console.log('🔄 [BackendFolders] Scheduling folder refresh...');
+      loadFolders();
+      setTimeout(() => {
+        console.log('🔄 [BackendFolders] Refresh attempt #2 (500ms)');
+        loadFolders();
+      }, 500);
+      setTimeout(() => {
+        console.log('🔄 [BackendFolders] Refresh attempt #3 (1500ms)');
+        loadFolders();
+      }, 1500);
+    };
+    
     window.addEventListener('folder-synced', handleFolderSynced);
+    window.addEventListener('documents:created', handleDocumentsCreated);
     
     return () => {
       window.removeEventListener('folder-synced', handleFolderSynced);
+      window.removeEventListener('documents:created', handleDocumentsCreated);
     };
   }, [loadFolders]);
 

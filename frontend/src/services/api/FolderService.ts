@@ -4,6 +4,7 @@
  */
 
 import { apiClient } from './ApiClient';
+import { extractUUID } from '@/utils/id-generator';
 
 export interface Folder {
   id: string;
@@ -51,18 +52,22 @@ export class FolderService {
    * Create a new folder
    */
   async createFolder(workspaceId: string, data: CreateFolderData): Promise<Folder> {
-    return apiClient.post<Folder>(`/api/v1/folders?workspace_id=${workspaceId}`, data);
+    // Strip prefix from workspace ID before sending to backend
+    const wsId = extractUUID(workspaceId);
+    return apiClient.post<Folder>(`/api/v1/folders?workspace_id=${wsId}`, data);
   }
 
   /**
    * List folders in workspace (optionally filtered by parent)
    */
   async listFolders(workspaceId: string, parentId?: string | null): Promise<Folder[]> {
-    const params = new URLSearchParams({ workspace_id: workspaceId });
+    // Strip prefix from workspace ID before sending to backend
+    const wsId = extractUUID(workspaceId);
+    const params = new URLSearchParams({ workspace_id: wsId });
     if (parentId !== undefined) {
       params.append('parent_id', parentId || '');
     }
-    return apiClient.get<Folder[]>(`/api/v1/folders/workspace/${workspaceId}?${params}`);
+    return apiClient.get<Folder[]>(`/api/v1/folders/workspace/${wsId}?${params}`);
   }
 
   /**
@@ -70,8 +75,10 @@ export class FolderService {
    * Builds tree from flat list on frontend (better performance)
    */
   async getFolderTree(workspaceId: string): Promise<FolderTree[]> {
+    // Strip prefix from workspace ID
+    const wsId = extractUUID(workspaceId);
     // Get flat list from backend
-    const response = await apiClient.get<any>(`/api/v1/folders/workspace/${workspaceId}`);
+    const response = await apiClient.get<any>(`/api/v1/folders/workspace/${wsId}`);
     const folders = response.items || [];
     
     // Build tree structure
@@ -127,28 +134,36 @@ export class FolderService {
    * Get folder by ID
    */
   async getFolder(folderId: string, workspaceId: string): Promise<Folder> {
-    return apiClient.get<Folder>(`/api/v1/folders/${folderId}?workspace_id=${workspaceId}`);
+    const wsId = extractUUID(workspaceId);
+    const fId = extractUUID(folderId);
+    return apiClient.get<Folder>(`/api/v1/folders/${fId}?workspace_id=${wsId}`);
   }
 
   /**
    * Update folder
    */
   async updateFolder(folderId: string, workspaceId: string, data: UpdateFolderData): Promise<Folder> {
-    return apiClient.patch<Folder>(`/api/v1/folders/${folderId}?workspace_id=${workspaceId}`, data);
+    const wsId = extractUUID(workspaceId);
+    const fId = extractUUID(folderId);
+    return apiClient.patch<Folder>(`/api/v1/folders/${fId}?workspace_id=${wsId}`, data);
   }
 
   /**
    * Move folder to new parent
    */
   async moveFolder(folderId: string, workspaceId: string, data: MoveFolderData): Promise<Folder> {
-    return apiClient.post<Folder>(`/api/v1/folders/${folderId}/move?workspace_id=${workspaceId}`, data);
+    const wsId = extractUUID(workspaceId);
+    const fId = extractUUID(folderId);
+    return apiClient.post<Folder>(`/api/v1/folders/${fId}/move?workspace_id=${wsId}`, data);
   }
 
   /**
    * Delete folder
    */
   async deleteFolder(folderId: string, workspaceId: string, cascade: boolean = false): Promise<void> {
-    return apiClient.delete(`/api/v1/folders/${folderId}?workspace_id=${workspaceId}&cascade=${cascade}`);
+    const wsId = extractUUID(workspaceId);
+    const fId = extractUUID(folderId);
+    return apiClient.delete(`/api/v1/folders/${fId}?workspace_id=${wsId}&cascade=${cascade}`);
   }
 }
 
