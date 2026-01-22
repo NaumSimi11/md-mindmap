@@ -1,0 +1,163 @@
+name: Release MDReader
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+            name: 'MDReader-macOS-ARM64.dmg'
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
+            name: 'MDReader-macOS-x64.dmg'
+          - platform: 'ubuntu-22.04'
+            args: ''
+            name: 'MDReader-Linux.AppImage'
+          - platform: 'windows-latest'
+            args: ''
+            name: 'MDReader-Windows.msi'
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './frontend/src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Build application
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: frontend
+          args: ${{ matrix.args }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.platform }}-${{ matrix.name }}
+          path: |
+            frontend/src-tauri/target/release/bundle/**/*
+            frontend/src-tauri/target/**/release/bundle/**/*
+
+  create-release:
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -la artifacts/
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          body: |
+            ## MDReader ${{ github.ref_name }}
+
+            ### Downloads
+
+            **macOS (Intel):**
+            - [MDReader-macOS-x64.dmg](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/MDReader-macOS-x64.dmg)
+
+            **macOS (Apple Silicon):**
+            - [MDReader-macOS-ARM64.dmg](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/MDReader-macOS-ARM64.dmg)
+
+            **Windows:**
+            - [MDReader-Windows.msi](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/MDReader-Windows.msi)
+
+            **Linux:**
+            - [MDReader-Linux.AppImage](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/MDReader-Linux.AppImage)
+
+            ### What's New
+            - See changelog for details
+
+            ### Installation Instructions
+            Download the appropriate file for your operating system and run the installer.
+          draft: false
+          prerelease: false
+
+      - name: Upload macOS ARM64
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/artifacts-macos-latest-MDReader-macOS-ARM64.dmg/bundle/dmg/MDReader_*.dmg
+          asset_name: MDReader-macOS-ARM64.dmg
+          asset_content_type: application/x-apple-diskimage
+
+      - name: Upload macOS x64
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/artifacts-macos-latest-MDReader-macOS-x64.dmg/bundle/dmg/MDReader_*.dmg
+          asset_name: MDReader-macOS-x64.dmg
+          asset_content_type: application/x-apple-diskimage
+
+      - name: Upload Windows MSI
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/artifacts-windows-latest-MDReader-Windows.msi/bundle/msi/MDReader_*.msi
+          asset_name: MDReader-Windows.msi
+          asset_content_type: application/x-msi
+
+      - name: Upload Linux AppImage
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/artifacts-ubuntu-22.04-MDReader-Linux.AppImage/bundle/appimage/MDReader_*.AppImage
+          asset_name: MDReader-Linux.AppImage
+          asset_content_type: application/x-executable

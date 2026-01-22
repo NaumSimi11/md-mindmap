@@ -7,6 +7,7 @@
     "tauri:build:mac": "node ./scripts/tauri-build.mjs mac",
     "tauri:build:win": "node ./scripts/tauri-build.mjs win",
     "tauri:build:both": "node ./scripts/tauri-build.mjs both",
+    "release:create": "node ./scripts/create-release.mjs",
     "test:unit": "npm -C frontend run test:once",
     "test:coverage": "npm -C frontend run test:coverage",
     "test:e2e": "npx playwright test --workers=1 --retries=0",
